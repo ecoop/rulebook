@@ -14,11 +14,16 @@ by more metadata, do it there, not here.
 
 from __future__ import annotations
 
+import uuid
+from dataclasses import asdict
+from typing import Literal
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from ulty_goalty.config import settings
+from ulty_goalty.interaction_log import log_feedback, log_qa
 from ulty_goalty.pipeline import DEFAULT_SPORTS, ask
 from ulty_goalty.store import list_sports
 
@@ -55,12 +60,22 @@ class RetrievedChunkOut(BaseModel):
 
 
 class AskResponse(BaseModel):
+    qa_id: str = Field(..., description="Opaque id — pass this to POST /feedback to rate the answer.")
     question: str
     answer: str
     chunks: list[RetrievedChunkOut]
     input_tokens: int
     output_tokens: int
     model: str
+
+
+class FeedbackRequest(BaseModel):
+    qa_id: str = Field(..., description="The qa_id returned from a prior /ask response.")
+    rating: Literal["up", "down"] = Field(..., description="Thumbs-up or thumbs-down.")
+
+
+class FeedbackResponse(BaseModel):
+    ok: bool = True
 
 
 class MetaResponse(BaseModel):
@@ -90,22 +105,53 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
         # e.g. "no index" — build_index.py hasn't been run yet
         raise HTTPException(status_code=503, detail=str(e)) from e
 
-    return AskResponse(
+    qa_id = uuid.uuid4().hex
+    chunks_out = [
+        RetrievedChunkOut(
+            text=c.text,
+            source=c.source,
+            sport=c.sport,
+            rule_id=c.rule_id,
+            page_start=c.page_start,
+            page_end=c.page_end,
+            distance=c.distance,
+        )
+        for c in result.chunks
+    ]
+
+    # Persist the full interaction so we can later mine downvoted answers
+    # for corrections, upvoted ones for a "greatest hits" corpus, etc.
+    log_qa(
+        qa_id,
         question=result.question,
+        sport=req.sport,
+        k=req.k,
         answer=result.answer,
-        chunks=[
-            RetrievedChunkOut(
-                text=c.text,
-                source=c.source,
-                sport=c.sport,
-                rule_id=c.rule_id,
-                page_start=c.page_start,
-                page_end=c.page_end,
-                distance=c.distance,
-            )
-            for c in result.chunks
-        ],
+        chunks=[asdict(c) for c in result.chunks],
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         model=settings.claude_model,
     )
+
+    return AskResponse(
+        qa_id=qa_id,
+        question=result.question,
+        answer=result.answer,
+        chunks=chunks_out,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        model=settings.claude_model,
+    )
+
+
+@app.post("/feedback", response_model=FeedbackResponse)
+def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
+    """Record a thumbs-up / thumbs-down on a prior answer.
+
+    We don't validate that qa_id exists in the log — an unknown id just
+    ends up as an orphan feedback row. That's fine for HITL work: the
+    log is a data source to be joined and filtered, not a database with
+    referential integrity to enforce.
+    """
+    log_feedback(req.qa_id, rating=req.rating)
+    return FeedbackResponse()
