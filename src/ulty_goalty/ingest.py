@@ -1,9 +1,15 @@
-"""PDF -> a stream of (page_number, text) records.
+"""Source file -> a stream of (page_number, text) records.
 
-pypdf gives us per-page text extraction that's good enough for
-born-digital PDFs like these rulebooks. If we ever have to handle a
-scanned PDF, we'd swap in OCR (e.g. pytesseract) here — but the
-interface downstream stays the same, so nothing else has to change.
+Handles two source shapes:
+
+    * Born-digital PDFs (rulebooks) — pypdf per-page text extraction.
+    * Plain text / Markdown — read as a single "page". Used for content
+      that arrived outside a PDF (a hand-written note, a vision-extracted
+      diagram description from scripts/vision_extract.py, etc).
+
+For scanned or image-only PDFs (pypdf returns zero characters), pre-run
+scripts/vision_extract.py to produce a companion `.extracted.md` file
+and reference that file in build_index.SOURCES instead of the PDF.
 
 We preserve pagination because the chunker downstream needs page numbers
 to attach to each chunk. Citations in the final answer point back to the
@@ -24,9 +30,16 @@ class PageText:
     text: str
 
 
-def extract_pages(pdf_path: Path) -> list[PageText]:
-    """Return one PageText per non-empty page."""
-    reader = PdfReader(pdf_path)
+_TEXT_SUFFIXES = {".md", ".txt"}
+
+
+def extract_pages(source_path: Path) -> list[PageText]:
+    """Return one PageText per non-empty page (or one per text file)."""
+    if source_path.suffix.lower() in _TEXT_SUFFIXES:
+        cleaned = _clean(source_path.read_text(encoding="utf-8"))
+        return [PageText(page_number=1, text=cleaned)] if cleaned.strip() else []
+
+    reader = PdfReader(source_path)
     out: list[PageText] = []
     for idx, page in enumerate(reader.pages, start=1):
         raw = page.extract_text() or ""

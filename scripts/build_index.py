@@ -33,12 +33,17 @@ from ulty_goalty.store import write_store
 @dataclass
 class Source:
     sport: str
-    pdf: Path
+    # PDF (born-digital) or a Markdown/text file (e.g. output from
+    # scripts/vision_extract.py for image-only PDFs). Both are handled
+    # transparently by ingest.extract_pages.
+    path: Path
 
 
 SOURCES = [
-    Source(sport="ultimate", pdf=Path("Rules/2026-27-Official-Rules-of-Ultimate.pdf")),
-    Source(sport="goaltimate", pdf=Path("Rules/usag-rule-v-2-1-3.pdf")),
+    Source(sport="ultimate", path=Path("Rules/2026-27-Official-Rules-of-Ultimate.pdf")),
+    Source(sport="goaltimate", path=Path("Rules/usag-rule-v-2-1-3.pdf")),
+    # Image-only field diagram — text extracted by vision_extract.py.
+    Source(sport="goaltimate", path=Path("Rules/goaltimate-field-setupregulation2017.extracted.md")),
 ]
 
 # Embed in batches so we play nice with the embedder's request-size limits
@@ -52,15 +57,15 @@ def main() -> None:
 
     all_chunks: list[Chunk] = []
     for src in SOURCES:
-        pdf_path = src.pdf if src.pdf.is_absolute() else repo_root / src.pdf
-        if not pdf_path.exists():
-            raise FileNotFoundError(f"Missing rulebook: {pdf_path}")
+        src_path = src.path if src.path.is_absolute() else repo_root / src.path
+        if not src_path.exists():
+            raise FileNotFoundError(f"Missing source: {src_path}")
 
-        print(f"[ingest]  {src.sport}: reading {pdf_path.name}")
-        pages = extract_pages(pdf_path)
+        print(f"[ingest]  {src.sport}: reading {src_path.name}")
+        pages = extract_pages(src_path)
         print(f"          -> {len(pages)} pages of text")
 
-        chunks = chunk_pages(pages, source=pdf_path.name, sport=src.sport)
+        chunks = chunk_pages(pages, source=src_path.name, sport=src.sport)
         print(f"[chunk ]  {src.sport}: {len(chunks)} chunks "
               f"(avg {sum(len(c.text) for c in chunks) // max(len(chunks), 1)} chars)")
 
