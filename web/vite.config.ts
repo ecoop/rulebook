@@ -13,6 +13,7 @@ export default defineConfig({
     proxy: {
       '/ask': 'http://localhost:8000',
       '/meta': 'http://localhost:8000',
+      '/feedback': 'http://localhost:8000',
     },
   },
 })

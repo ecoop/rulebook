@@ -16,6 +16,7 @@ interface Chunk {
 }
 
 interface AskResponse {
+  qa_id: string
   question: string
   answer: string
   chunks: Chunk[]
@@ -23,6 +24,8 @@ interface AskResponse {
   output_tokens: number
   model: string
 }
+
+type Rating = 'up' | 'down'
 
 interface Meta {
   sports: string[]
@@ -45,6 +48,10 @@ export default function App() {
   const [result, setResult] = useState<AskResponse | null>(null)
   const [meta, setMeta] = useState<Meta | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(true)
+  // Rating state is scoped to the *current* result — clearing on new
+  // submissions so the UI never suggests a prior vote applies to a new answer.
+  const [rating, setRating] = useState<Rating | null>(null)
+  const [ratingError, setRatingError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/meta')
@@ -56,12 +63,35 @@ export default function App() {
       })
   }, [])
 
+  async function sendRating(next: Rating) {
+    if (!result) return
+    // Optimistic: reflect the click immediately, revert on error. This is
+    // a low-stakes personal-tool interaction — the fast feedback is worth
+    // more than waiting for the network round-trip.
+    const previous = rating
+    setRating(next)
+    setRatingError(null)
+    try {
+      const resp = await fetch('/feedback', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ qa_id: result.qa_id, rating: next }),
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+    } catch (err) {
+      setRating(previous)
+      setRatingError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!question.trim() || loading) return
     setLoading(true)
     setError(null)
     setResult(null)
+    setRating(null)
+    setRatingError(null)
     try {
       const resp = await fetch('/ask', {
         method: 'POST',
@@ -161,9 +191,50 @@ export default function App() {
               <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
                 {result.answer}
               </div>
-              <div className="mt-3 text-xs text-slate-400">
-                {result.input_tokens.toLocaleString()} in ·{' '}
-                {result.output_tokens.toLocaleString()} out tokens
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <div className="text-xs text-slate-400">
+                  {result.input_tokens.toLocaleString()} in ·{' '}
+                  {result.output_tokens.toLocaleString()} out tokens
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span>Was this helpful?</span>
+                  <button
+                    type="button"
+                    onClick={() => sendRating('up')}
+                    aria-pressed={rating === 'up'}
+                    aria-label="Thumbs up"
+                    className={
+                      'rounded border px-2 py-0.5 transition ' +
+                      (rating === 'up'
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-slate-300 hover:bg-slate-50')
+                    }
+                  >
+                    👍
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sendRating('down')}
+                    aria-pressed={rating === 'down'}
+                    aria-label="Thumbs down"
+                    className={
+                      'rounded border px-2 py-0.5 transition ' +
+                      (rating === 'down'
+                        ? 'border-red-500 bg-red-50 text-red-700'
+                        : 'border-slate-300 hover:bg-slate-50')
+                    }
+                  >
+                    👎
+                  </button>
+                  {rating && !ratingError && (
+                    <span className="text-slate-400">thanks — logged</span>
+                  )}
+                  {ratingError && (
+                    <span className="text-red-600" title={ratingError}>
+                      couldn't save
+                    </span>
+                  )}
+                </div>
               </div>
             </section>
 
