@@ -1,0 +1,93 @@
+"""Prompt Claude to answer using retrieved chunks, with citations forced.
+
+The generation step is often taken for granted in RAG walkthroughs —
+"we just call the LLM with context". In practice the prompt is doing
+several things at once:
+
+    1. Frames retrieved chunks as authoritative source material.
+    2. Forces citations back to rule ids so the frontend can display them
+       and the user can verify claims.
+    3. Prevents the model from inventing rules that aren't in context.
+       (The classic RAG failure mode: model falls back on general
+       training data and hallucinates a rule that sounds plausible.)
+    4. Handles "the rulebook doesn't say" gracefully rather than
+       pretending it does.
+
+The prompt is deliberately short. Long system prompts are not
+automatically better prompts, and each extra instruction is one the
+model might overweight. Iterate here when you have real failure modes to
+respond to — not in advance.
+"""
+
+from dataclasses import dataclass
+
+from anthropic import Anthropic
+
+from .config import settings
+from .retrieve import RetrievedChunk
+
+SYSTEM_PROMPT = """You are an assistant that answers questions about the rules of disc sports (ultimate, goaltimate) using ONLY the excerpts provided in the <context> block.
+
+Rules for your answer:
+- Cite the source of every specific claim inline, in the form [sport rule_id], using the sport and rule id from the context block that supports it. Example: [ultimate II.B.1].
+- If the context does not contain the answer, say so plainly. Do NOT fill in from general knowledge.
+- For questions that compare two sports, structure your answer by sport so the differences are obvious. If one sport's context doesn't address the topic, say that too.
+- Be concise. One or two short paragraphs is usually enough."""
+
+USER_TEMPLATE = """<context>
+{context}
+</context>
+
+<question>{question}</question>
+
+Answer using only the context above. Cite inline with [sport rule_id]."""
+
+
+@dataclass
+class GeneratedAnswer:
+    answer: str
+    input_tokens: int
+    output_tokens: int
+
+
+def format_context(chunks: list[RetrievedChunk]) -> str:
+    """Render retrieved chunks in a shape the model can cite from.
+
+    Each chunk gets a header like:
+        [ultimate II.B.1 — pp.12-13]
+    which is both the citation format we want back and enough context for
+    the model to pick the right chunk to attribute a claim to.
+    """
+    blocks = []
+    for c in chunks:
+        pages = (
+            f"p.{c.page_start}"
+            if c.page_start == c.page_end
+            else f"pp.{c.page_start}-{c.page_end}"
+        )
+        header = f"[{c.sport} {c.rule_id} — {pages}]"
+        blocks.append(f"{header}\n{c.text}")
+    return "\n\n---\n\n".join(blocks)
+
+
+def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAnswer:
+    """Call Claude with the retrieved chunks and return the answer + usage."""
+    client = Anthropic(api_key=settings.anthropic_api_key)
+    context = format_context(chunks)
+    resp = client.messages.create(
+        model=settings.claude_model,
+        max_tokens=1024,
+        system=SYSTEM_PROMPT,
+        messages=[
+            {
+                "role": "user",
+                "content": USER_TEMPLATE.format(context=context, question=question),
+            }
+        ],
+    )
+    text = "".join(block.text for block in resp.content if getattr(block, "type", None) == "text")
+    return GeneratedAnswer(
+        answer=text,
+        input_tokens=resp.usage.input_tokens,
+        output_tokens=resp.usage.output_tokens,
+    )

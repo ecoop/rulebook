@@ -1,0 +1,65 @@
+[project]
+name = "ulty-goalty"
+version = "0.1.0"
+description = "RAG prototype for disc sports rules — ultimate and goaltimate — with a FastAPI + React frontend. Built as an instructional example of retrieval-augmented generation over structured documents."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    # Generation: Claude via Anthropic's official SDK.
+    "anthropic>=0.40.0",
+
+    # Embeddings — one of these two is used at a time; both are installed so
+    # you can swap providers via the EMBEDDING_PROVIDER env var without a
+    # dependency change. See src/ulty_goalty/embeddings.py.
+    "voyageai>=0.3.0",
+    "openai>=1.55.0",
+
+    # Vector store: pure-numpy in-memory. For a corpus this size (~400
+    # chunks) a real vector DB is overkill — cosine similarity is a
+    # matrix multiplication and top-k is an argsort. Fewer moving parts,
+    # zero install pain across platforms, and more transparent than an
+    # opaque ANN index. Numpy is listed explicitly so we control the
+    # version rather than inheriting whatever voyageai pulls in.
+    "numpy>=1.26",
+
+    # PDF text extraction. pypdf is pure-Python — no system-level poppler
+    # install required. Layout fidelity is okay-not-great; for these rulebooks
+    # it's more than enough once we do our own section-aware chunking.
+    "pypdf>=5.0.0",
+
+    # HTTP surface.
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+
+    # Config + schemas.
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "python-dotenv>=1.0.0",
+
+    # Nice-to-have progress bars during ingest.
+    "tqdm>=4.66.0",
+]
+
+[dependency-groups]
+dev = [
+    # For the instructional notebook.
+    "jupyter>=1.1.0",
+    "ipykernel>=6.30.0",
+    # Linter / formatter.
+    "ruff>=0.7.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ulty_goalty"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # long lines are fine in comment-heavy teaching code
