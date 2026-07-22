@@ -337,6 +337,14 @@ export default function App() {
             {meta.build_dirty && '*'}
           </span>{' '}
           · started {formatStartedAt(meta.started_at)}
+          {import.meta.env.DEV && (
+            <span
+              className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800"
+              title="Vite dev server is running with HMR — the frontend may not match the reported build SHA"
+            >
+              dev
+            </span>
+          )}
         </footer>
       )}
     </div>
