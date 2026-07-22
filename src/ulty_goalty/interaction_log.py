@@ -28,11 +28,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any, Literal
+from typing import Any
 
 from .config import settings
-
-Rating = Literal["up", "down"]
 
 # Serialize appends so concurrent requests can't interleave partial writes.
 # JSONL requires one complete object per line — a raced write would corrupt
@@ -83,13 +81,19 @@ def log_qa(
     )
 
 
-def log_feedback(qa_id: str, *, rating: Rating) -> None:
-    """Record a thumbs-up / thumbs-down vote against a specific qa_id."""
+def log_feedback(qa_id: str, *, rating: int, comment: str | None = None) -> None:
+    """Record a 1-5 rating (and optional note) against a specific qa_id.
+
+    Multiple rows per qa_id are expected — refining a note or changing
+    the rating just appends a new event. Readers should take the last
+    row per qa_id as the "current" state.
+    """
     _append_jsonl(
         _log_dir() / "feedback.jsonl",
         {
             "qa_id": qa_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "rating": rating,
+            "comment": comment or None,
         },
     )

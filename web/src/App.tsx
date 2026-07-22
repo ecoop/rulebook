@@ -25,13 +25,38 @@ interface AskResponse {
   model: string
 }
 
-type Rating = 'up' | 'down'
+type Rating = 1 | 2 | 3 | 4 | 5
+
+const RATING_LABELS: Record<Rating, string> = {
+  1: 'very wrong',
+  2: 'mostly wrong',
+  3: 'mixed / missing key nuance',
+  4: 'mostly right',
+  5: 'perfect',
+}
 
 interface Meta {
   sports: string[]
   embedding_provider: string
   embedding_model: string
   claude_model: string
+  build_sha: string
+  build_dirty: boolean
+  started_at: string
+}
+
+// Format the ISO server-start timestamp for the footer. Uses the viewer's
+// locale so a bug reporter sees a time they can reason about.
+function formatStartedAt(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 // -----------------------------------------------------------------------------
@@ -48,9 +73,14 @@ export default function App() {
   const [result, setResult] = useState<AskResponse | null>(null)
   const [meta, setMeta] = useState<Meta | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(true)
-  // Rating state is scoped to the *current* result — clearing on new
-  // submissions so the UI never suggests a prior vote applies to a new answer.
+  // Rating + comment state is scoped to the *current* result — clearing on
+  // new submissions so a prior vote never bleeds onto a new answer.
   const [rating, setRating] = useState<Rating | null>(null)
+  const [comment, setComment] = useState('')
+  // The comment "state" we last successfully sent. Used to compute whether
+  // there are unsent edits so the Save-note button can hide when there's
+  // nothing to save.
+  const [savedComment, setSavedComment] = useState('')
   const [ratingError, setRatingError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -63,23 +93,30 @@ export default function App() {
       })
   }, [])
 
-  async function sendRating(next: Rating) {
+  async function sendFeedback(nextRating: Rating, commentToSend: string) {
     if (!result) return
     // Optimistic: reflect the click immediately, revert on error. This is
     // a low-stakes personal-tool interaction — the fast feedback is worth
     // more than waiting for the network round-trip.
-    const previous = rating
-    setRating(next)
+    const previousRating = rating
+    const previousSavedComment = savedComment
+    setRating(nextRating)
+    setSavedComment(commentToSend)
     setRatingError(null)
     try {
       const resp = await fetch('/feedback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ qa_id: result.qa_id, rating: next }),
+        body: JSON.stringify({
+          qa_id: result.qa_id,
+          rating: nextRating,
+          comment: commentToSend.trim() ? commentToSend : null,
+        }),
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
     } catch (err) {
-      setRating(previous)
+      setRating(previousRating)
+      setSavedComment(previousSavedComment)
       setRatingError(err instanceof Error ? err.message : String(err))
     }
   }
@@ -91,6 +128,8 @@ export default function App() {
     setError(null)
     setResult(null)
     setRating(null)
+    setComment('')
+    setSavedComment('')
     setRatingError(null)
     try {
       const resp = await fetch('/ask', {
@@ -191,50 +230,69 @@ export default function App() {
               <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
                 {result.answer}
               </div>
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <div className="text-xs text-slate-400">
-                  {result.input_tokens.toLocaleString()} in ·{' '}
-                  {result.output_tokens.toLocaleString()} out tokens
-                </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span>Was this helpful?</span>
-                  <button
-                    type="button"
-                    onClick={() => sendRating('up')}
-                    aria-pressed={rating === 'up'}
-                    aria-label="Thumbs up"
-                    className={
-                      'rounded border px-2 py-0.5 transition ' +
-                      (rating === 'up'
-                        ? 'border-green-500 bg-green-50 text-green-700'
-                        : 'border-slate-300 hover:bg-slate-50')
-                    }
-                  >
-                    👍
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => sendRating('down')}
-                    aria-pressed={rating === 'down'}
-                    aria-label="Thumbs down"
-                    className={
-                      'rounded border px-2 py-0.5 transition ' +
-                      (rating === 'down'
-                        ? 'border-red-500 bg-red-50 text-red-700'
-                        : 'border-slate-300 hover:bg-slate-50')
-                    }
-                  >
-                    👎
-                  </button>
-                  {rating && !ratingError && (
-                    <span className="text-slate-400">thanks — logged</span>
+              <div className="mt-3 text-xs text-slate-400">
+                {result.input_tokens.toLocaleString()} in ·{' '}
+                {result.output_tokens.toLocaleString()} out tokens
+              </div>
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <span>Rate this answer:</span>
+                  {([1, 2, 3, 4, 5] as Rating[]).map((n) => {
+                    const active = rating === n
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => sendFeedback(n, comment)}
+                        aria-pressed={active}
+                        title={`${n} — ${RATING_LABELS[n]}`}
+                        className={
+                          'w-7 rounded border py-0.5 font-mono transition ' +
+                          (active
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-slate-300 hover:bg-slate-50')
+                        }
+                      >
+                        {n}
+                      </button>
+                    )
+                  })}
+                  {rating != null && (
+                    <span className="text-slate-400">
+                      {RATING_LABELS[rating]}
+                    </span>
                   )}
                   {ratingError && (
-                    <span className="text-red-600" title={ratingError}>
+                    <span className="ml-auto text-red-600" title={ratingError}>
                       couldn't save
                     </span>
                   )}
                 </div>
+                {rating != null && (
+                  <div className="mt-2 space-y-2">
+                    <textarea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      placeholder="What was missing or wrong? (optional)"
+                      rows={2}
+                      className="w-full resize-y rounded-md border border-slate-300 bg-white p-2 text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">
+                        Rating saved automatically. Note saves when you click below.
+                      </span>
+                      {comment !== savedComment && (
+                        <button
+                          type="button"
+                          onClick={() => sendFeedback(rating, comment)}
+                          className="rounded-md bg-slate-700 px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-slate-800"
+                        >
+                          Save note
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -266,7 +324,19 @@ export default function App() {
       {meta && (
         <footer className="mx-auto max-w-4xl px-6 py-4 text-xs text-slate-400">
           embeddings: {meta.embedding_provider}/{meta.embedding_model} · gen:{' '}
-          {meta.claude_model}
+          {meta.claude_model} · build{' '}
+          <span
+            className="font-mono"
+            title={
+              meta.build_dirty
+                ? 'Uncommitted changes were present at server start'
+                : `Commit ${meta.build_sha}`
+            }
+          >
+            {meta.build_sha}
+            {meta.build_dirty && '*'}
+          </span>{' '}
+          · started {formatStartedAt(meta.started_at)}
         </footer>
       )}
     </div>
