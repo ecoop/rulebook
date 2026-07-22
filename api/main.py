@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import asdict
-from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from ulty_goalty.build_info import BUILD_INFO
 from ulty_goalty.config import settings
 from ulty_goalty.interaction_log import log_feedback, log_qa
 from ulty_goalty.pipeline import DEFAULT_SPORTS, ask
@@ -71,7 +71,12 @@ class AskResponse(BaseModel):
 
 class FeedbackRequest(BaseModel):
     qa_id: str = Field(..., description="The qa_id returned from a prior /ask response.")
-    rating: Literal["up", "down"] = Field(..., description="Thumbs-up or thumbs-down.")
+    rating: int = Field(..., ge=1, le=5, description="1 (very wrong) to 5 (perfect).")
+    comment: str | None = Field(
+        default=None,
+        max_length=4000,
+        description="Optional note — what was missing, wrong, or worth capturing.",
+    )
 
 
 class FeedbackResponse(BaseModel):
@@ -83,6 +88,9 @@ class MetaResponse(BaseModel):
     embedding_provider: str
     embedding_model: str
     claude_model: str
+    build_sha: str = Field(..., description="Short git SHA at server start.")
+    build_dirty: bool = Field(..., description="True if the working tree had uncommitted changes at start.")
+    started_at: str = Field(..., description="ISO 8601 UTC timestamp when the server process started.")
 
 
 @app.get("/meta", response_model=MetaResponse)
@@ -94,6 +102,9 @@ def meta() -> MetaResponse:
         embedding_provider=settings.embedding_provider,
         embedding_model=settings.embedding_model,
         claude_model=settings.claude_model,
+        build_sha=BUILD_INFO.sha,
+        build_dirty=BUILD_INFO.dirty,
+        started_at=BUILD_INFO.started_at,
     )
 
 
@@ -153,5 +164,5 @@ def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     log is a data source to be joined and filtered, not a database with
     referential integrity to enforce.
     """
-    log_feedback(req.qa_id, rating=req.rating)
+    log_feedback(req.qa_id, rating=req.rating, comment=req.comment)
     return FeedbackResponse()
