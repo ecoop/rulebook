@@ -36,6 +36,21 @@ const RATING_LABELS: Record<Rating, string> = {
   5: 'perfect',
 }
 
+// Issue tags — a small, action-oriented taxonomy. Multi-select. The
+// point isn't to fully classify every answer; it's to separate failure
+// modes that need different downstream fixes (correction vs corpus
+// augmentation vs retrieval tuning vs prompt tuning).
+type IssueTag = 'wrong' | 'incomplete' | 'retrieval' | 'format'
+
+const TAG_LABELS: Record<IssueTag, string> = {
+  wrong: 'wrong facts — needs correction',
+  incomplete: 'missing context — corpus needs more info',
+  retrieval: 'wrong sources retrieved — retrieval quality issue',
+  format: 'facts right, delivery off — prompt tuning',
+}
+
+const TAGS: IssueTag[] = ['wrong', 'incomplete', 'retrieval', 'format']
+
 interface Meta {
   sports: string[]
   embedding_provider: string
@@ -74,15 +89,22 @@ export default function App() {
   const [result, setResult] = useState<AskResponse | null>(null)
   const [meta, setMeta] = useState<Meta | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(true)
-  // Rating + comment state is scoped to the *current* result — clearing on
-  // new submissions so a prior vote never bleeds onto a new answer.
+  // Rating + tags + comment state is scoped to the *current* result — clearing
+  // on new submissions so a prior vote never bleeds onto a new answer.
   const [rating, setRating] = useState<Rating | null>(null)
+  const [tags, setTags] = useState<Set<IssueTag>>(() => new Set())
   const [comment, setComment] = useState('')
   // The comment "state" we last successfully sent. Used to compute whether
   // there are unsent edits so the Save-note button can hide when there's
   // nothing to save.
   const [savedComment, setSavedComment] = useState('')
   const [ratingError, setRatingError] = useState<string | null>(null)
+  // Gold answer state — pre-populated with the model's original answer, so
+  // the user's task is "edit what's wrong" rather than "author from scratch".
+  const [gold, setGold] = useState('')
+  const [savedGold, setSavedGold] = useState('')
+  const [goldError, setGoldError] = useState<string | null>(null)
+  const [goldSaving, setGoldSaving] = useState(false)
 
   useEffect(() => {
     fetch('/meta')
@@ -94,14 +116,20 @@ export default function App() {
       })
   }, [])
 
-  async function sendFeedback(nextRating: Rating, commentToSend: string) {
+  async function sendFeedback(
+    nextRating: Rating,
+    nextTags: Set<IssueTag>,
+    commentToSend: string,
+  ) {
     if (!result) return
     // Optimistic: reflect the click immediately, revert on error. This is
     // a low-stakes personal-tool interaction — the fast feedback is worth
     // more than waiting for the network round-trip.
     const previousRating = rating
+    const previousTags = tags
     const previousSavedComment = savedComment
     setRating(nextRating)
+    setTags(nextTags)
     setSavedComment(commentToSend)
     setRatingError(null)
     try {
@@ -111,15 +139,48 @@ export default function App() {
         body: JSON.stringify({
           qa_id: result.qa_id,
           rating: nextRating,
+          tags: [...nextTags],
           comment: commentToSend.trim() ? commentToSend : null,
         }),
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
     } catch (err) {
       setRating(previousRating)
+      setTags(previousTags)
       setSavedComment(previousSavedComment)
       setRatingError(err instanceof Error ? err.message : String(err))
     }
+  }
+
+  async function saveGold() {
+    if (!result || !gold.trim() || goldSaving) return
+    setGoldSaving(true)
+    setGoldError(null)
+    try {
+      const resp = await fetch('/gold', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          qa_id: result.qa_id,
+          question: result.question,
+          gold_answer: gold,
+        }),
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      setSavedGold(gold)
+    } catch (err) {
+      setGoldError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setGoldSaving(false)
+    }
+  }
+
+  function toggleTag(tag: IssueTag) {
+    if (rating == null) return
+    const next = new Set(tags)
+    if (next.has(tag)) next.delete(tag)
+    else next.add(tag)
+    sendFeedback(rating, next, comment)
   }
 
   async function submit(e: React.FormEvent) {
@@ -129,9 +190,13 @@ export default function App() {
     setError(null)
     setResult(null)
     setRating(null)
+    setTags(new Set())
     setComment('')
     setSavedComment('')
     setRatingError(null)
+    setGold('')
+    setSavedGold('')
+    setGoldError(null)
     try {
       const resp = await fetch('/ask', {
         method: 'POST',
@@ -148,6 +213,11 @@ export default function App() {
       }
       const data: AskResponse = await resp.json()
       setResult(data)
+      // Seed the gold field with the model's own answer so the user's
+      // task is editing, not authoring — see design discussion in commit
+      // history for gold-answer feature.
+      setGold(data.answer)
+      setSavedGold('')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -262,7 +332,7 @@ export default function App() {
                       <button
                         key={n}
                         type="button"
-                        onClick={() => sendFeedback(n, comment)}
+                        onClick={() => sendFeedback(n, tags, comment)}
                         aria-pressed={active}
                         title={`${n} — ${RATING_LABELS[n]}`}
                         className={
@@ -288,22 +358,49 @@ export default function App() {
                   )}
                 </div>
                 {rating != null && (
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-3 space-y-2">
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="text-slate-500">Issue tags:</span>
+                      {TAGS.map((t) => {
+                        const active = tags.has(t)
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => toggleTag(t)}
+                            aria-pressed={active}
+                            title={TAG_LABELS[t]}
+                            className={
+                              'rounded-full border px-2 py-0.5 transition ' +
+                              (active
+                                ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                : 'border-slate-300 text-slate-600 hover:bg-slate-50')
+                            }
+                          >
+                            {t}
+                          </button>
+                        )
+                      })}
+                    </div>
                     <textarea
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
-                      placeholder="What was missing or wrong? (optional)"
+                      placeholder="What stood out, good or bad? (optional)"
                       rows={2}
                       className="w-full resize-y rounded-md border border-slate-300 bg-white p-2 text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400">
-                        Rating saved automatically. Note saves when you click below.
+                        {comment !== savedComment
+                          ? 'Unsaved changes to your note.'
+                          : savedComment
+                            ? 'Note saved.'
+                            : 'Rating saved. A note about what worked or didn’t helps future review.'}
                       </span>
                       {comment !== savedComment && (
                         <button
                           type="button"
-                          onClick={() => sendFeedback(rating, comment)}
+                          onClick={() => sendFeedback(rating, tags, comment)}
                           className="rounded-md bg-slate-700 px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-slate-800"
                         >
                           Save note
@@ -312,6 +409,50 @@ export default function App() {
                     </div>
                   </div>
                 )}
+              </div>
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <label className="flex flex-wrap items-baseline gap-2 text-xs">
+                  <span className="text-slate-500">Gold answer</span>
+                  <span className="text-slate-400">
+                    — edit the answer above into what a knowledgeable human would give.
+                    Use <span className="font-mono">## Ultimate</span> /{' '}
+                    <span className="font-mono">## Goaltimate</span> headings so each
+                    section retrieves under its sport. Included in the index on the
+                    next rebuild.
+                  </span>
+                </label>
+                <textarea
+                  value={gold}
+                  onChange={(e) => setGold(e.target.value)}
+                  placeholder="(seeded with the model's answer once one is generated)"
+                  rows={10}
+                  className="mt-2 w-full resize-y rounded-md border border-slate-300 bg-white p-2 font-mono text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">
+                    {goldError ? (
+                      <span className="text-red-600" title={goldError}>
+                        couldn't save
+                      </span>
+                    ) : gold === savedGold && savedGold ? (
+                      'Gold saved. Rebuild the index to make it retrievable.'
+                    ) : gold && gold !== savedGold ? (
+                      'Unsaved edits.'
+                    ) : (
+                      'Optional. Rebuild command: uv run python scripts/build_index.py'
+                    )}
+                  </span>
+                  {gold.trim() && gold !== savedGold && (
+                    <button
+                      type="button"
+                      onClick={saveGold}
+                      disabled={goldSaving}
+                      className="rounded-md bg-slate-700 px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {goldSaving ? 'Saving…' : 'Save gold answer'}
+                    </button>
+                  )}
+                </div>
               </div>
             </section>
 
@@ -364,6 +505,10 @@ export default function App() {
               dev
             </span>
           )}
+          <span className="mx-2 text-slate-300">·</span>
+          <a href="#/admin" className="text-slate-500 hover:text-blue-600 hover:underline">
+            admin
+          </a>
         </footer>
       )}
     </div>

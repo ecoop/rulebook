@@ -18,6 +18,8 @@ Adding a sport is a two-line change to SOURCES below.
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +29,8 @@ from ulty_goalty.chunking import Chunk, chunk_pages
 from ulty_goalty.config import settings
 from ulty_goalty.embeddings import get_embedder
 from ulty_goalty.ingest import extract_pages
+from ulty_goalty.interaction_log import read_latest_curation
+from ulty_goalty.pipeline import DEFAULT_SPORTS
 from ulty_goalty.store import write_store
 
 
@@ -51,6 +55,114 @@ SOURCES = [
 # ~120k tokens per call; 64 is well under both for our chunk sizes.
 EMBED_BATCH_SIZE = 64
 
+# User-authored gold answers, appended by POST /gold. Optional — if the
+# file doesn't exist yet (no golds saved), we skip cleanly.
+GOLD_LOG = Path("data/logs/gold.jsonl")
+
+# Section-heading pattern for splitting a gold answer into per-sport
+# chunks. Matches a line beginning with "## Ultimate" or "## Goaltimate"
+# (case-insensitive). If a gold answer has no such headings, the whole
+# text becomes one chunk tagged with every known sport (so it retrieves
+# for any sport-filtered query).
+_SPORT_HEADING = re.compile(r"^\s*##\s+([A-Za-z][A-Za-z_ -]*?)\s*$", re.M)
+
+
+def load_gold_chunks(gold_path: Path) -> list[Chunk]:
+    """Turn user-authored gold answers into per-sport retrievable chunks.
+
+    Gold answers are append-only in gold.jsonl (latest row per qa_id
+    wins). Each surviving gold is split on ``## Sport`` headings; each
+    section becomes one Chunk tagged with that sport. Sections whose
+    heading isn't a recognized sport are ignored. A gold answer with no
+    matching headings falls back to one shared chunk per known sport so
+    the content still retrieves under any sport filter.
+
+    Chunk metadata is chosen so citations read clearly downstream:
+        rule_id = f"user-gold-{qa_id[:8]}"
+        source  = "gold.jsonl"
+        page    = 0 (no meaningful page for user text)
+    """
+    if not gold_path.exists():
+        return []
+
+    # Latest row per qa_id wins — walk the file and keep last-write-wins.
+    latest: dict[str, dict] = {}
+    with gold_path.open() as f:
+        for line in f:
+            row = json.loads(line)
+            latest[row["qa_id"]] = row
+
+    # Apply admin curation: skip golds whose latest curation row set
+    # included=False. Absent from the curation log = included by default,
+    # so freshly-authored golds flow into the index automatically.
+    curation = read_latest_curation()
+    excluded = {qa_id for qa_id, included in curation.items() if not included}
+    if excluded:
+        latest = {qa_id: row for qa_id, row in latest.items() if qa_id not in excluded}
+        print(f"[curate]  {len(excluded)} gold(s) excluded by admin")
+
+    known = set(DEFAULT_SPORTS)
+    chunks: list[Chunk] = []
+    for qa_id, row in latest.items():
+        text = row["gold_answer"].strip()
+        if not text:
+            continue
+
+        sections = _split_by_sport_heading(text, known)
+        if not sections:
+            # No sport headings — index once per sport so the whole
+            # gold is retrievable under any sport filter.
+            for sport in known:
+                chunks.append(
+                    Chunk(
+                        source="gold.jsonl",
+                        sport=sport,
+                        rule_id=f"user-gold-{qa_id[:8]}",
+                        page_start=0,
+                        page_end=0,
+                        text=text,
+                    )
+                )
+            continue
+
+        for sport, section_text in sections:
+            chunks.append(
+                Chunk(
+                    source="gold.jsonl",
+                    sport=sport,
+                    rule_id=f"user-gold-{qa_id[:8]}",
+                    page_start=0,
+                    page_end=0,
+                    text=section_text,
+                )
+            )
+    return chunks
+
+
+def _split_by_sport_heading(text: str, known_sports: set[str]) -> list[tuple[str, str]]:
+    """Return [(sport, section_text)] for each ``## Sport`` section.
+
+    Sports whose heading isn't in known_sports are dropped (protects
+    against noise headings like ``## Shared`` — that content is
+    currently discarded; if we later want a "both sports" bucket we'd
+    duplicate its text into every known sport here).
+    """
+    matches = list(_SPORT_HEADING.finditer(text))
+    if not matches:
+        return []
+
+    sections: list[tuple[str, str]] = []
+    for i, m in enumerate(matches):
+        sport = m.group(1).strip().lower()
+        if sport not in known_sports:
+            continue
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        section_text = text[start:end].strip()
+        if section_text:
+            sections.append((sport, section_text))
+    return sections
+
 
 def main() -> None:
     repo_root = settings.repo_root
@@ -70,6 +182,15 @@ def main() -> None:
               f"(avg {sum(len(c.text) for c in chunks) // max(len(chunks), 1)} chars)")
 
         all_chunks.extend(chunks)
+
+    gold_chunks = load_gold_chunks(repo_root / GOLD_LOG)
+    if gold_chunks:
+        by_sport: dict[str, int] = {}
+        for c in gold_chunks:
+            by_sport[c.sport] = by_sport.get(c.sport, 0) + 1
+        print(f"[gold  ]  {len(gold_chunks)} chunks from user-authored gold answers "
+              f"({', '.join(f'{s}={n}' for s, n in sorted(by_sport.items()))})")
+        all_chunks.extend(gold_chunks)
 
     if not all_chunks:
         raise RuntimeError("No chunks produced — check the PDFs.")

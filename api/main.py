@@ -23,7 +23,14 @@ from pydantic import BaseModel, Field
 
 from ulty_goalty.build_info import BUILD_INFO
 from ulty_goalty.config import settings
-from ulty_goalty.interaction_log import log_feedback, log_qa
+from ulty_goalty.interaction_log import (
+    log_feedback,
+    log_gold,
+    log_gold_curation,
+    log_qa,
+    read_latest_curation,
+    read_latest_golds,
+)
 from ulty_goalty.pipeline import DEFAULT_SPORTS, ask
 from ulty_goalty.store import list_sports
 
@@ -73,14 +80,49 @@ class AskResponse(BaseModel):
 class FeedbackRequest(BaseModel):
     qa_id: str = Field(..., description="The qa_id returned from a prior /ask response.")
     rating: int = Field(..., ge=1, le=5, description="1 (very wrong) to 5 (perfect).")
+    tags: list[str] = Field(
+        default_factory=list,
+        description="Issue tags — small taxonomy chosen by the client; stored as-is.",
+    )
     comment: str | None = Field(
         default=None,
         max_length=4000,
-        description="Optional note — what was missing, wrong, or worth capturing.",
+        description="Optional note — what worked, what didn't, worth capturing for later review.",
     )
 
 
 class FeedbackResponse(BaseModel):
+    ok: bool = True
+
+
+class GoldRequest(BaseModel):
+    qa_id: str = Field(..., description="The qa_id returned from a prior /ask response.")
+    question: str = Field(..., min_length=1, description="Original question, duplicated for self-contained gold rows.")
+    gold_answer: str = Field(..., min_length=1, max_length=20000, description="User-authored canonical answer, markdown.")
+
+
+class GoldResponse(BaseModel):
+    ok: bool = True
+
+
+class AdminGoldRow(BaseModel):
+    qa_id: str
+    question: str
+    gold_answer: str
+    timestamp: str
+    included: bool = Field(..., description="Whether this gold is included in the next index rebuild.")
+
+
+class AdminGoldListResponse(BaseModel):
+    golds: list[AdminGoldRow]
+
+
+class GoldCurationRequest(BaseModel):
+    qa_id: str
+    included: bool
+
+
+class GoldCurationResponse(BaseModel):
     ok: bool = True
 
 
@@ -166,5 +208,46 @@ def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     log is a data source to be joined and filtered, not a database with
     referential integrity to enforce.
     """
-    log_feedback(req.qa_id, rating=req.rating, comment=req.comment)
+    log_feedback(req.qa_id, rating=req.rating, comment=req.comment, tags=req.tags)
     return FeedbackResponse()
+
+
+@app.post("/gold", response_model=GoldResponse)
+def gold_endpoint(req: GoldRequest) -> GoldResponse:
+    """Record a user-authored canonical answer for a prior qa_id.
+
+    Golds are picked up by scripts/build_index.py on the next rebuild —
+    each gold becomes retrievable chunks tagged by sport (via ## Sport
+    markdown headings) or as a shared/all-sports chunk if the answer
+    has no headings.
+    """
+    log_gold(req.qa_id, question=req.question, gold_answer=req.gold_answer)
+    return GoldResponse()
+
+
+@app.get("/admin/golds", response_model=AdminGoldListResponse)
+def admin_list_golds() -> AdminGoldListResponse:
+    """Merged view of gold.jsonl + gold_curation.jsonl.
+
+    Latest gold per qa_id joined with latest curation decision (default
+    included=True when no curation row exists).
+    """
+    curation = read_latest_curation()
+    rows = [
+        AdminGoldRow(
+            qa_id=g["qa_id"],
+            question=g["question"],
+            gold_answer=g["gold_answer"],
+            timestamp=g["timestamp"],
+            included=curation.get(g["qa_id"], True),
+        )
+        for g in read_latest_golds()
+    ]
+    return AdminGoldListResponse(golds=rows)
+
+
+@app.post("/admin/gold-curation", response_model=GoldCurationResponse)
+def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
+    """Toggle whether a gold is included in the next index rebuild."""
+    log_gold_curation(req.qa_id, included=req.included)
+    return GoldCurationResponse()
