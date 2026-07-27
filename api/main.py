@@ -67,6 +67,7 @@ class AskResponse(BaseModel):
     input_tokens: int
     output_tokens: int
     model: str
+    stop_reason: str = Field(..., description='"end_turn" if the model finished, "max_tokens" if truncated, etc.')
 
 
 class FeedbackRequest(BaseModel):
@@ -152,6 +153,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         model=settings.claude_model,
+        stop_reason=result.stop_reason,
     )
 
 

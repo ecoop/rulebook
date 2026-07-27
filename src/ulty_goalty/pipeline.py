@@ -23,6 +23,7 @@ class AskResult:
     chunks: list[RetrievedChunk]
     input_tokens: int
     output_tokens: int
+    stop_reason: str
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -31,6 +32,7 @@ class AskResult:
             "chunks": [asdict(c) for c in self.chunks],
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "stop_reason": self.stop_reason,
         }
 
 
@@ -63,4 +65,5 @@ def ask(
         chunks=chunks,
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
+        stop_reason=result.stop_reason,
     )

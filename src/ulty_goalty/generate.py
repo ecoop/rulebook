@@ -48,6 +48,11 @@ class GeneratedAnswer:
     answer: str
     input_tokens: int
     output_tokens: int
+    # Anthropic returns "end_turn" when the model finished naturally,
+    # "max_tokens" when we hit the ceiling and cut it off mid-sentence,
+    # or other values for tool-use / refusal / etc. Surfaced to the UI
+    # so a truncated answer can be flagged instead of read as complete.
+    stop_reason: str
 
 
 def format_context(chunks: list[RetrievedChunk]) -> str:
@@ -76,7 +81,7 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
     context = format_context(chunks)
     resp = client.messages.create(
         model=settings.claude_model,
-        max_tokens=1024,
+        max_tokens=2048,
         system=SYSTEM_PROMPT,
         messages=[
             {
@@ -90,4 +95,5 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
         answer=text,
         input_tokens=resp.usage.input_tokens,
         output_tokens=resp.usage.output_tokens,
+        stop_reason=resp.stop_reason or "",
     )
