@@ -11,7 +11,7 @@ from typing import Any
 from .generate import generate_answer
 from .retrieve import RetrievedChunk, retrieve, retrieve_across_sports
 
-# The sports we index. Extend by dropping a new PDF into Rules/, adding
+# The sports we index. Extend by dropping a new PDF into rules/, adding
 # it to SOURCES in scripts/build_index.py, and rebuilding.
 DEFAULT_SPORTS = ["ultimate", "goaltimate"]
 
