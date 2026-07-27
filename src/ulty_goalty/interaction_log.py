@@ -32,6 +32,30 @@ from typing import Any
 
 from .config import settings
 
+# Schema version stamped into every row so readers can dispatch on
+# `v` rather than sniffing the shape. Bump whenever the row format
+# changes in a breaking way (add/remove field, rename, change type
+# of an existing field). Purely additive backfills that keep old
+# values valid can share a version.
+#
+# History (see feedback.jsonl.pre-migration-* backups):
+#   v1  binary rating: {"rating": "up" | "down"}
+#   v2  1-5 int rating + optional comment
+#   v3  v2 + optional `tags` list (current)
+FEEDBACK_SCHEMA_VERSION = 3
+
+# Gold answers — user-authored canonical answers, indexed as retrievable
+# chunks on the next rebuild so future similar questions surface them.
+#   v1  {qa_id, timestamp, question, gold_answer} (current)
+GOLD_SCHEMA_VERSION = 1
+
+# Gold curation — admin decisions about whether a given gold should be
+# included in the next index rebuild. Kept SEPARATE from gold.jsonl so
+# gold stays "what the user authored" and curation stays "what the admin
+# decided". Both are append-only; latest row per qa_id wins.
+#   v1  {qa_id, included: bool, timestamp} (current)
+GOLD_CURATION_SCHEMA_VERSION = 1
+
 # Serialize appends so concurrent requests can't interleave partial writes.
 # JSONL requires one complete object per line — a raced write would corrupt
 # the file for downstream readers. Uvicorn --reload runs one process by
@@ -81,19 +105,104 @@ def log_qa(
     )
 
 
-def log_feedback(qa_id: str, *, rating: int, comment: str | None = None) -> None:
-    """Record a 1-5 rating (and optional note) against a specific qa_id.
+def log_gold(qa_id: str, *, question: str, gold_answer: str) -> None:
+    """Record a user-authored gold (canonical) answer for a qa_id.
 
-    Multiple rows per qa_id are expected — refining a note or changing
-    the rating just appends a new event. Readers should take the last
-    row per qa_id as the "current" state.
+    Same append-only semantics as feedback: multiple rows per qa_id are
+    allowed and the latest wins. Question text is duplicated from qa_log
+    so gold.jsonl is self-contained for downstream consumers (the index
+    builder, a future admin UI, etc).
+    """
+    _append_jsonl(
+        _log_dir() / "gold.jsonl",
+        {
+            "v": GOLD_SCHEMA_VERSION,
+            "qa_id": qa_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "question": question,
+            "gold_answer": gold_answer,
+        },
+    )
+
+
+def log_gold_curation(qa_id: str, *, included: bool) -> None:
+    """Record an admin decision about whether a gold answer is included in
+    the RAG index on the next rebuild.
+
+    Append-only; latest row per qa_id wins. Absent-from-file is treated
+    as "included by default" so a freshly-authored gold flows into the
+    index without an admin having to approve it first.
+    """
+    _append_jsonl(
+        _log_dir() / "gold_curation.jsonl",
+        {
+            "v": GOLD_CURATION_SCHEMA_VERSION,
+            "qa_id": qa_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "included": included,
+        },
+    )
+
+
+def read_latest_golds() -> list[dict[str, Any]]:
+    """Return the latest gold row per qa_id, sorted newest-first.
+
+    Empty list if the log doesn't exist yet.
+    """
+    path = _log_dir() / "gold.jsonl"
+    if not path.exists():
+        return []
+    latest: dict[str, dict] = {}
+    for line in path.read_text().splitlines():
+        if line.strip():
+            row = json.loads(line)
+            latest[row["qa_id"]] = row
+    return sorted(latest.values(), key=lambda r: r["timestamp"], reverse=True)
+
+
+def read_latest_curation() -> dict[str, bool]:
+    """Return {qa_id: included} for the latest curation row per qa_id.
+
+    Absent qa_ids default to included=True at the call site — this
+    function just reports what the log says, no defaulting.
+    """
+    path = _log_dir() / "gold_curation.jsonl"
+    if not path.exists():
+        return {}
+    latest: dict[str, bool] = {}
+    for line in path.read_text().splitlines():
+        if line.strip():
+            row = json.loads(line)
+            latest[row["qa_id"]] = bool(row["included"])
+    return latest
+
+
+def log_feedback(
+    qa_id: str,
+    *,
+    rating: int,
+    comment: str | None = None,
+    tags: list[str] | None = None,
+) -> None:
+    """Record a 1-5 rating, issue tags, and an optional note.
+
+    Multiple rows per qa_id are expected — refining a note, toggling
+    tags, or changing the rating all append a new event. Readers should
+    take the last row per qa_id as the "current" state.
+
+    Tags are a small, action-oriented taxonomy of what went wrong (or
+    right) — see the frontend for the current vocabulary. Stored as-is
+    with no validation here so the vocabulary can evolve without a
+    logfile migration.
     """
     _append_jsonl(
         _log_dir() / "feedback.jsonl",
         {
+            "v": FEEDBACK_SCHEMA_VERSION,
             "qa_id": qa_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "rating": rating,
+            "tags": list(tags or []),
             "comment": comment or None,
         },
     )
