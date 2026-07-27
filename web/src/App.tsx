@@ -23,6 +23,7 @@ interface AskResponse {
   input_tokens: number
   output_tokens: number
   model: string
+  stop_reason: string
 }
 
 type Rating = 1 | 2 | 3 | 4 | 5
@@ -227,6 +228,24 @@ export default function App() {
                   {result.model}
                 </span>
               </div>
+              {result.stop_reason === 'max_tokens' && (
+                <div
+                  className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                  title="Anthropic returned stop_reason=max_tokens — model was cut off mid-response"
+                >
+                  <span className="font-medium">Answer truncated —</span> the model hit the
+                  output-token cap before finishing. The text below stops mid-thought.
+                  Raise <span className="font-mono">max_tokens</span> in{' '}
+                  <span className="font-mono">generate.py</span> and re-ask.
+                </div>
+              )}
+              {result.stop_reason && result.stop_reason !== 'end_turn' && result.stop_reason !== 'max_tokens' && (
+                <div className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Unexpected stop_reason:{' '}
+                  <span className="font-mono">{result.stop_reason}</span>. The answer below
+                  may be incomplete.
+                </div>
+              )}
               <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
                 {result.answer}
               </div>
