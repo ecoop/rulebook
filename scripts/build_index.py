@@ -44,10 +44,10 @@ class Source:
 
 
 SOURCES = [
-    Source(sport="ultimate", path=Path("Rules/2026-27-Official-Rules-of-Ultimate.pdf")),
-    Source(sport="goaltimate", path=Path("Rules/usag-rule-v-2-1-3.pdf")),
+    Source(sport="ultimate", path=Path("rules/2026-27-Official-Rules-of-Ultimate.pdf")),
+    Source(sport="goaltimate", path=Path("rules/usag-rule-v-2-1-3.pdf")),
     # Image-only field diagram — text extracted by vision_extract.py.
-    Source(sport="goaltimate", path=Path("Rules/goaltimate-field-setupregulation2017.extracted.md")),
+    Source(sport="goaltimate", path=Path("rules/goaltimate-field-setupregulation2017.extracted.md")),
 ]
 
 # Embed in batches so we play nice with the embedder's request-size limits

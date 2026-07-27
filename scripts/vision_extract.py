@@ -14,10 +14,10 @@ if the model gets something wrong you can fix the .md by hand.
 
 USAGE
 
-    uv run python scripts/vision_extract.py Rules/some-diagram.pdf
+    uv run python scripts/vision_extract.py rules/some-diagram.pdf
 
     # Overwrite an existing cache:
-    uv run python scripts/vision_extract.py --force Rules/some-diagram.pdf
+    uv run python scripts/vision_extract.py --force rules/some-diagram.pdf
 
 Then add the produced ``.extracted.md`` file to SOURCES in build_index.py
 and re-run the index build.
