@@ -229,7 +229,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-4xl px-6 py-4">
-          <h1 className="text-xl font-semibold tracking-tight">ulty-goalty</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Rulebook</h1>
           <p className="text-sm text-slate-500">
             Ask about the rules of ultimate and goaltimate. Answers cite the actual rule numbers.
           </p>
