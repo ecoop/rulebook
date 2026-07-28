@@ -99,7 +99,7 @@ export default function AdminApp() {
           <div className="flex items-baseline justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold tracking-tight">
-                ulty-goalty <span className="text-slate-400">/ admin</span>
+                Rulebook <span className="text-slate-400">/ admin</span>
               </h1>
               <p className="text-sm text-slate-500">
                 Curate user-authored gold answers. Excluded rows are skipped by the next index rebuild.

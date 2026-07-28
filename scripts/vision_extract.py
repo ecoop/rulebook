@@ -32,7 +32,7 @@ from pathlib import Path
 
 from anthropic import Anthropic
 
-from ulty_goalty.config import settings
+from rulebook.config import settings
 
 # The prompt is deliberately short and prescriptive. Vision models will
 # happily invent structure if you give them wiggle room — we want a

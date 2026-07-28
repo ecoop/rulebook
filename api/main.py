@@ -8,7 +8,7 @@ wrong answer next to the chunks that produced it is worth more than any
 diagram of "what RAG is".
 
 The API is intentionally thin — all the interesting code lives in
-src/ulty_goalty. If you want to swap providers, add reranking, or filter
+src/rulebook. If you want to swap providers, add reranking, or filter
 by more metadata, do it there, not here.
 """
 
@@ -21,9 +21,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from ulty_goalty.build_info import BUILD_INFO
-from ulty_goalty.config import settings
-from ulty_goalty.interaction_log import (
+from rulebook.build_info import BUILD_INFO
+from rulebook.config import settings
+from rulebook.interaction_log import (
     log_feedback,
     log_gold,
     log_gold_curation,
@@ -31,10 +31,10 @@ from ulty_goalty.interaction_log import (
     read_latest_curation,
     read_latest_golds,
 )
-from ulty_goalty.pipeline import DEFAULT_SPORTS, ask
-from ulty_goalty.store import list_sports
+from rulebook.pipeline import DEFAULT_SPORTS, ask
+from rulebook.store import list_sports
 
-app = FastAPI(title="ulty-goalty", description="RAG over disc-sport rules.")
+app = FastAPI(title="rulebook", description="RAG over disc-sport rules.")
 
 # CORS — the Vite dev server runs on 5173 by default. In production you'd
 # lock this down; for a local demo `*` is fine.

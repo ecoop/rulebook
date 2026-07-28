@@ -25,13 +25,13 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from ulty_goalty.chunking import Chunk, chunk_pages
-from ulty_goalty.config import settings
-from ulty_goalty.embeddings import get_embedder
-from ulty_goalty.ingest import extract_pages
-from ulty_goalty.interaction_log import read_latest_curation
-from ulty_goalty.pipeline import DEFAULT_SPORTS
-from ulty_goalty.store import write_store
+from rulebook.chunking import Chunk, chunk_pages
+from rulebook.config import settings
+from rulebook.embeddings import get_embedder
+from rulebook.ingest import extract_pages
+from rulebook.interaction_log import read_latest_curation
+from rulebook.pipeline import DEFAULT_SPORTS
+from rulebook.store import write_store
 
 
 @dataclass
