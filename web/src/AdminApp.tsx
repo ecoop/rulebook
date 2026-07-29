@@ -16,6 +16,13 @@ interface AdminGoldListResponse {
   golds: AdminGoldRow[]
 }
 
+interface RebuildResult {
+  ok: boolean
+  duration_seconds: number
+  stdout_tail: string
+  stderr_tail: string
+}
+
 function formatWhen(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
@@ -33,6 +40,8 @@ export default function AdminApp() {
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [pending, setPending] = useState<Set<string>>(() => new Set())
+  const [rebuilding, setRebuilding] = useState(false)
+  const [rebuildResult, setRebuildResult] = useState<RebuildResult | null>(null)
 
   useEffect(() => {
     void refresh()
@@ -77,6 +86,27 @@ export default function AdminApp() {
         next.delete(row.qa_id)
         return next
       })
+    }
+  }
+
+  async function rebuildIndex() {
+    if (rebuilding) return
+    setRebuilding(true)
+    setRebuildResult(null)
+    try {
+      const resp = await fetch('/admin/rebuild-index', { method: 'POST' })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      const data: RebuildResult = await resp.json()
+      setRebuildResult(data)
+    } catch (err) {
+      setRebuildResult({
+        ok: false,
+        duration_seconds: 0,
+        stdout_tail: '',
+        stderr_tail: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setRebuilding(false)
     }
   }
 
@@ -132,16 +162,41 @@ export default function AdminApp() {
 
         {rows !== null && rows.length > 0 && (
           <>
-            <div className="flex items-center justify-between text-xs text-slate-500">
+            <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
               <span>
                 <span className="font-medium text-slate-700">{includedCount}</span> of{' '}
                 <span className="font-medium text-slate-700">{totalCount}</span> golds included in
                 next rebuild
               </span>
-              <span className="font-mono">
-                rebuild: uv run python scripts/build_index.py
-              </span>
+              <button
+                type="button"
+                onClick={rebuildIndex}
+                disabled={rebuilding}
+                title="Runs scripts/build_index.py — typically 15s, occasionally up to a minute or two when Voyage is slow"
+                className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {rebuilding ? 'Rebuilding…' : 'Rebuild index'}
+              </button>
             </div>
+            {rebuildResult && (
+              <div
+                className={
+                  'rounded-md border p-3 text-xs ' +
+                  (rebuildResult.ok
+                    ? 'border-green-300 bg-green-50 text-green-900'
+                    : 'border-red-300 bg-red-50 text-red-900')
+                }
+              >
+                <div className="mb-1 font-medium">
+                  {rebuildResult.ok
+                    ? `Rebuilt in ${rebuildResult.duration_seconds}s`
+                    : 'Rebuild failed'}
+                </div>
+                <pre className="whitespace-pre-wrap font-mono text-[11px] leading-snug">
+                  {rebuildResult.ok ? rebuildResult.stdout_tail : rebuildResult.stderr_tail}
+                </pre>
+              </div>
+            )}
             <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">

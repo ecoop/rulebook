@@ -14,6 +14,9 @@ by more metadata, do it there, not here.
 
 from __future__ import annotations
 
+import subprocess
+import sys
+import time
 import uuid
 from dataclasses import asdict
 
@@ -124,6 +127,13 @@ class GoldCurationRequest(BaseModel):
 
 class GoldCurationResponse(BaseModel):
     ok: bool = True
+
+
+class RebuildIndexResponse(BaseModel):
+    ok: bool
+    duration_seconds: float
+    stdout_tail: str = Field(..., description="Last few lines of build_index.py output — for the UI to show a build summary.")
+    stderr_tail: str = Field(..., description="Last few lines of stderr if the build failed; empty on success.")
 
 
 class MetaResponse(BaseModel):
@@ -251,3 +261,38 @@ def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
     """Toggle whether a gold is included in the next index rebuild."""
     log_gold_curation(req.qa_id, included=req.included)
     return GoldCurationResponse()
+
+
+@app.post("/admin/rebuild-index", response_model=RebuildIndexResponse)
+def admin_rebuild_index() -> RebuildIndexResponse:
+    """Run scripts/build_index.py synchronously and return its outcome.
+
+    Blocks while the build runs — typically 15s but occasionally 60-90s
+    when Voyage is slow to respond. The 300s subprocess timeout is a
+    backstop against a truly stuck rebuild, not a normal ceiling.
+    Client-side UI should disable the trigger button until this returns.
+
+    Concurrent /ask requests during a rebuild will read the store file
+    mid-write in the worst case; on a single-user local tool that race
+    is vanishingly unlikely — noted as a real concern only if this
+    ever goes multi-user.
+    """
+    started = time.monotonic()
+    proc = subprocess.run(
+        [sys.executable, "scripts/build_index.py"],
+        cwd=str(settings.repo_root),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    elapsed = time.monotonic() - started
+
+    def _tail(s: str, lines: int = 20) -> str:
+        return "\n".join(s.strip().splitlines()[-lines:])
+
+    return RebuildIndexResponse(
+        ok=(proc.returncode == 0),
+        duration_seconds=round(elapsed, 2),
+        stdout_tail=_tail(proc.stdout),
+        stderr_tail=_tail(proc.stderr) if proc.returncode != 0 else "",
+    )
