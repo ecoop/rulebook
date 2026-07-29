@@ -1,10 +1,16 @@
-"""Build the RAG index from the PDFs under ./Rules.
+"""Build the RAG index from the source files under ./rules/<sport>/.
 
 Run:
     uv run python scripts/build_index.py
 
+Sources are discovered by walking ``rules/<sport>/`` — the parent
+directory name is the sport tag. Every ``.pdf``, ``.md``, and ``.txt``
+in there is ingested. Add a new sport by creating a new sibling
+directory; add a new resource by dropping a file into the sport's dir.
+No code change needed.
+
 Pipeline per source:
-    PDF file -> ingest.extract_pages -> chunking.chunk_pages
+    file -> ingest.extract_pages -> chunking.chunk_pages
         -> embeddings.embed(input_type="document")
         -> store.write_store
 
@@ -12,8 +18,6 @@ Idempotent: rewrites the index from scratch every time. That's the safe
 default when your chunking or embedding model might change — a partial
 rebuild would leave old vectors in an inconsistent state next to the new
 ones and retrieval quality would silently degrade.
-
-Adding a sport is a two-line change to SOURCES below.
 """
 
 from __future__ import annotations
@@ -43,12 +47,45 @@ class Source:
     path: Path
 
 
-SOURCES = [
-    Source(sport="ultimate", path=Path("rules/2026-27-Official-Rules-of-Ultimate.pdf")),
-    Source(sport="goaltimate", path=Path("rules/usag-rule-v-2-1-3.pdf")),
-    # Image-only field diagram — text extracted by vision_extract.py.
-    Source(sport="goaltimate", path=Path("rules/goaltimate-field-setupregulation2017.extracted.md")),
-]
+# Root of the source tree; each immediate subdirectory is one sport.
+RULES_ROOT = Path("rules")
+
+# File suffixes we treat as ingestable sources.
+_SOURCE_SUFFIXES = {".pdf", ".md", ".txt"}
+
+
+def discover_sources(rules_root: Path) -> list[Source]:
+    """Walk ``rules/<sport>/`` and return one Source per ingestable file.
+
+    Convention:
+        rules/
+            ultimate/       -> sport="ultimate", every .pdf/.md/.txt inside
+            goaltimate/     -> sport="goaltimate", ditto
+
+    Skip rule: if a ``<stem>.pdf`` and ``<stem>.extracted.md`` are
+    siblings, the PDF is skipped in favor of the extracted markdown.
+    That's the pattern for image-only PDFs where pypdf produces nothing
+    and vision_extract.py has already cached a proper text transcription
+    next to the original.
+    """
+    sources: list[Source] = []
+    for sport_dir in sorted(p for p in rules_root.iterdir() if p.is_dir()):
+        sport = sport_dir.name
+        # Build the set of stems that have an .extracted.md so we can
+        # skip their .pdf siblings in this dir.
+        extracted_stems = {
+            p.name.removesuffix(".extracted.md")
+            for p in sport_dir.iterdir()
+            if p.name.endswith(".extracted.md")
+        }
+        for f in sorted(sport_dir.iterdir()):
+            if not f.is_file() or f.suffix.lower() not in _SOURCE_SUFFIXES:
+                continue
+            if f.suffix.lower() == ".pdf" and f.stem in extracted_stems:
+                # Skip — the .extracted.md sibling is the ingestable form.
+                continue
+            sources.append(Source(sport=sport, path=f))
+    return sources
 
 # Embed in batches so we play nice with the embedder's request-size limits
 # and get a useful progress bar. Voyage caps requests at 1000 items or
@@ -167,17 +204,25 @@ def _split_by_sport_heading(text: str, known_sports: set[str]) -> list[tuple[str
 def main() -> None:
     repo_root = settings.repo_root
 
-    all_chunks: list[Chunk] = []
-    for src in SOURCES:
-        src_path = src.path if src.path.is_absolute() else repo_root / src.path
-        if not src_path.exists():
-            raise FileNotFoundError(f"Missing source: {src_path}")
+    rules_root = repo_root / RULES_ROOT
+    if not rules_root.is_dir():
+        raise FileNotFoundError(f"Missing rules directory: {rules_root}")
 
-        print(f"[ingest]  {src.sport}: reading {src_path.name}")
-        pages = extract_pages(src_path)
+    sources = discover_sources(rules_root)
+    if not sources:
+        raise RuntimeError(
+            f"No source files found under {rules_root}. Add PDFs or .md files"
+            " to rules/<sport>/ and re-run."
+        )
+    print(f"[found ]  {len(sources)} source files across {len({s.sport for s in sources})} sport(s)")
+
+    all_chunks: list[Chunk] = []
+    for src in sources:
+        print(f"[ingest]  {src.sport}: reading {src.path.name}")
+        pages = extract_pages(src.path)
         print(f"          -> {len(pages)} pages of text")
 
-        chunks = chunk_pages(pages, source=src_path.name, sport=src.sport)
+        chunks = chunk_pages(pages, source=src.path.name, sport=src.sport)
         print(f"[chunk ]  {src.sport}: {len(chunks)} chunks "
               f"(avg {sum(len(c.text) for c in chunks) // max(len(chunks), 1)} chars)")
 
