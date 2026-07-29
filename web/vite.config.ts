@@ -11,9 +11,15 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/ask': 'http://localhost:8000',
-      '/meta': 'http://localhost:8000',
-      '/feedback': 'http://localhost:8000',
+      // 127.0.0.1 rather than localhost: on Node 17+ / macOS,
+      // `localhost` can resolve to ::1 first, but uvicorn binds IPv4 by
+      // default — the mismatch shows up as ECONNREFUSED on every proxied
+      // request. Pinning to 127.0.0.1 avoids that.
+      '/ask': 'http://127.0.0.1:8000',
+      '/meta': 'http://127.0.0.1:8000',
+      '/feedback': 'http://127.0.0.1:8000',
+      '/gold': 'http://127.0.0.1:8000',
+      '/admin': 'http://127.0.0.1:8000',
     },
   },
 })
