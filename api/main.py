@@ -195,6 +195,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         model=settings.claude_model,
+        stop_reason=result.stop_reason,
     )
 
     return AskResponse(
