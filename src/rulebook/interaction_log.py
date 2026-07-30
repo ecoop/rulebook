@@ -44,6 +44,13 @@ from .config import settings
 #   v3  v2 + optional `tags` list (current)
 FEEDBACK_SCHEMA_VERSION = 3
 
+# QA log — one row per /ask call.
+#   v1  {qa_id, timestamp, question, sport, k, answer, chunks, input_tokens,
+#        output_tokens, model}
+#   v2  v1 + stop_reason from Anthropic ("end_turn", "max_tokens", ...)
+#        so historical truncations are recoverable from the log. (current)
+QA_LOG_SCHEMA_VERSION = 2
+
 # Gold answers — user-authored canonical answers, indexed as retrievable
 # chunks on the next rebuild so future similar questions surface them.
 #   v1  {qa_id, timestamp, question, gold_answer} (current)
@@ -86,11 +93,13 @@ def log_qa(
     input_tokens: int,
     output_tokens: int,
     model: str,
+    stop_reason: str,
 ) -> None:
     """Record one /ask interaction (question in, answer + chunks out)."""
     _append_jsonl(
         _log_dir() / "qa_log.jsonl",
         {
+            "v": QA_LOG_SCHEMA_VERSION,
             "qa_id": qa_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "question": question,
@@ -101,6 +110,7 @@ def log_qa(
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "model": model,
+            "stop_reason": stop_reason,
         },
     )
 
