@@ -33,8 +33,10 @@ from rulebook.interaction_log import (
     log_qa,
     log_source_curation,
     read_latest_curation,
+    read_latest_feedback,
     read_latest_golds,
     read_latest_source_curation,
+    read_qa_questions,
 )
 from rulebook.pipeline import DEFAULT_SPORTS, ask
 from rulebook.store import list_sports
@@ -129,6 +131,20 @@ class GoldCurationRequest(BaseModel):
 
 class GoldCurationResponse(BaseModel):
     ok: bool = True
+
+
+class AdminFeedbackRow(BaseModel):
+    qa_id: str
+    timestamp: str
+    rating: int
+    tags: list[str] = Field(default_factory=list)
+    comment: str | None = None
+    question: str = Field(..., description="From qa_log; may be empty for orphan feedback rows.")
+    has_gold: bool = Field(..., description="True if the user has authored a gold answer for this qa_id.")
+
+
+class AdminFeedbackListResponse(BaseModel):
+    feedback: list[AdminFeedbackRow]
 
 
 class AdminSourceRow(BaseModel):
@@ -285,6 +301,34 @@ def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
     """Toggle whether a gold is included in the next index rebuild."""
     log_gold_curation(req.qa_id, included=req.included)
     return GoldCurationResponse()
+
+
+@app.get("/admin/feedback", response_model=AdminFeedbackListResponse)
+def admin_list_feedback() -> AdminFeedbackListResponse:
+    """List the latest feedback event per qa_id, sorted newest-first.
+
+    Joins with qa_log for the question text and with the gold log so the
+    UI can flag which rated answers already have a curator-authored
+    correction. Legacy v1 (binary up/down) feedback rows are filtered
+    out — they don't have tag/comment fields and would render as noise.
+    """
+    questions = read_qa_questions()
+    gold_qa_ids = {g["qa_id"] for g in read_latest_golds()}
+
+    rows: list[AdminFeedbackRow] = []
+    for r in read_latest_feedback():
+        rows.append(
+            AdminFeedbackRow(
+                qa_id=r["qa_id"],
+                timestamp=r["timestamp"],
+                rating=int(r["rating"]),
+                tags=list(r.get("tags") or []),
+                comment=r.get("comment"),
+                question=questions.get(r["qa_id"], ""),
+                has_gold=r["qa_id"] in gold_qa_ids,
+            )
+        )
+    return AdminFeedbackListResponse(feedback=rows)
 
 
 @app.get("/admin/sources", response_model=AdminSourceListResponse)

@@ -193,6 +193,43 @@ def read_latest_curation() -> dict[str, bool]:
     return latest
 
 
+def read_latest_feedback() -> list[dict[str, Any]]:
+    """Return the latest feedback event per qa_id, sorted newest-first.
+
+    Multiple rows per qa_id exist by design (each click/save is its own
+    event). For the admin digest we only care about the current state,
+    so we walk the file, keep last-write-wins per qa_id, and sort by
+    timestamp. Empty list if the file doesn't exist yet.
+    """
+    path = _log_dir() / "feedback.jsonl"
+    if not path.exists():
+        return []
+    latest: dict[str, dict] = {}
+    for line in path.read_text().splitlines():
+        if line.strip():
+            row = json.loads(line)
+            # Skip legacy v1 rows (rating is a string) — they were binary
+            # up/down test data and don't fit the tag/comment schema the
+            # digest UI expects.
+            if isinstance(row.get("rating"), str):
+                continue
+            latest[row["qa_id"]] = row
+    return sorted(latest.values(), key=lambda r: r["timestamp"], reverse=True)
+
+
+def read_qa_questions() -> dict[str, str]:
+    """Return {qa_id: question} from qa_log.jsonl. Empty if no log yet."""
+    path = _log_dir() / "qa_log.jsonl"
+    if not path.exists():
+        return {}
+    out: dict[str, str] = {}
+    for line in path.read_text().splitlines():
+        if line.strip():
+            row = json.loads(line)
+            out[row["qa_id"]] = row.get("question", "")
+    return out
+
+
 def log_source_curation(source_path: str, *, included: bool) -> None:
     """Record an admin decision about a source file's inclusion.
 
