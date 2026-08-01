@@ -51,6 +51,26 @@ interface AdminFeedbackListResponse {
 
 type AdminTab = 'feedback' | 'golds' | 'sources'
 
+type SortDir = 'asc' | 'desc'
+type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
+type SourceSortCol = 'included' | 'sport' | 'path' | 'size_bytes' | 'modified_at'
+
+// Generic click handler for a sortable table column: same column → flip
+// direction, new column → default to ascending. Keeps the per-table sort
+// state inline (below) without a shared reducer.
+function nextSort<C extends string>(
+  current: { col: C; dir: SortDir },
+  col: C,
+): { col: C; dir: SortDir } {
+  if (current.col === col) return { col, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+  return { col, dir: 'asc' }
+}
+
+function sortIndicator(active: boolean, dir: SortDir): string {
+  if (!active) return ''
+  return dir === 'asc' ? ' ▲' : ' ▼'
+}
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
@@ -87,6 +107,16 @@ export default function AdminApp() {
   const [sources, setSources] = useState<AdminSourceRow[] | null>(null)
   const [sourcePending, setSourcePending] = useState<Set<string>>(() => new Set())
   const [feedback, setFeedback] = useState<AdminFeedbackRow[] | null>(null)
+  // Sort state per table. Defaults chosen to match the backend's natural
+  // return order so a first render doesn't reshuffle.
+  const [feedbackSort, setFeedbackSort] = useState<{ col: FeedbackSortCol; dir: SortDir }>({
+    col: 'timestamp',
+    dir: 'desc',
+  })
+  const [sourceSort, setSourceSort] = useState<{ col: SourceSortCol; dir: SortDir }>({
+    col: 'sport',
+    dir: 'asc',
+  })
 
   useEffect(() => {
     void refresh()
@@ -284,6 +314,28 @@ export default function AdminApp() {
     feedback?.filter((f) => f.rating <= 3 && !f.has_gold).length ?? 0
   const feedbackTotal = feedback?.length ?? 0
 
+  // Client-side sorting for the two big tables. Slice() so we don't
+  // mutate the state array in place.
+  const sortedFeedback = feedback?.slice().sort((a, b) => {
+    const { col, dir } = feedbackSort
+    const mult = dir === 'asc' ? 1 : -1
+    const av = col === 'has_gold' ? Number(a.has_gold) : a[col]
+    const bv = col === 'has_gold' ? Number(b.has_gold) : b[col]
+    if (av < bv) return -1 * mult
+    if (av > bv) return 1 * mult
+    return 0
+  })
+
+  const sortedSources = sources?.slice().sort((a, b) => {
+    const { col, dir } = sourceSort
+    const mult = dir === 'asc' ? 1 : -1
+    const av = col === 'included' ? Number(a.included) : a[col]
+    const bv = col === 'included' ? Number(b.included) : b[col]
+    if (av < bv) return -1 * mult
+    if (av > bv) return 1 * mult
+    return 0
+  })
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
@@ -385,17 +437,39 @@ export default function AdminApp() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="w-16 px-3 py-2 text-center">rating</th>
+                  <th className="w-16 px-3 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackSort((s) => nextSort(s, 'rating'))}
+                      className="hover:text-slate-700"
+                    >
+                      rating{sortIndicator(feedbackSort.col === 'rating', feedbackSort.dir)}
+                    </button>
+                  </th>
                   <th className="w-16 px-3 py-2 text-center" title="Whether a gold answer has been saved for this qa_id">
-                    gold
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackSort((s) => nextSort(s, 'has_gold'))}
+                      className="hover:text-slate-700"
+                    >
+                      gold{sortIndicator(feedbackSort.col === 'has_gold', feedbackSort.dir)}
+                    </button>
                   </th>
                   <th className="px-3 py-2">question / note</th>
                   <th className="w-40 px-3 py-2">tags</th>
-                  <th className="w-40 px-3 py-2">when</th>
+                  <th className="w-40 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackSort((s) => nextSort(s, 'timestamp'))}
+                      className="hover:text-slate-700"
+                    >
+                      when{sortIndicator(feedbackSort.col === 'timestamp', feedbackSort.dir)}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {feedback.map((f) => {
+                {sortedFeedback!.map((f) => {
                   const needsAttention = f.rating <= 3 && !f.has_gold
                   return (
                     <tr
@@ -607,15 +681,55 @@ export default function AdminApp() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="w-16 px-3 py-2">incl.</th>
-                  <th className="w-28 px-3 py-2">sport</th>
-                  <th className="px-3 py-2">path</th>
-                  <th className="w-24 px-3 py-2 text-right">size</th>
-                  <th className="w-40 px-3 py-2">modified</th>
+                  <th className="w-16 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setSourceSort((s) => nextSort(s, 'included'))}
+                      className="hover:text-slate-700"
+                    >
+                      incl.{sortIndicator(sourceSort.col === 'included', sourceSort.dir)}
+                    </button>
+                  </th>
+                  <th className="w-28 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setSourceSort((s) => nextSort(s, 'sport'))}
+                      className="hover:text-slate-700"
+                    >
+                      sport{sortIndicator(sourceSort.col === 'sport', sourceSort.dir)}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setSourceSort((s) => nextSort(s, 'path'))}
+                      className="hover:text-slate-700"
+                    >
+                      path{sortIndicator(sourceSort.col === 'path', sourceSort.dir)}
+                    </button>
+                  </th>
+                  <th className="w-24 px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setSourceSort((s) => nextSort(s, 'size_bytes'))}
+                      className="hover:text-slate-700"
+                    >
+                      size{sortIndicator(sourceSort.col === 'size_bytes', sourceSort.dir)}
+                    </button>
+                  </th>
+                  <th className="w-40 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setSourceSort((s) => nextSort(s, 'modified_at'))}
+                      className="hover:text-slate-700"
+                    >
+                      modified{sortIndicator(sourceSort.col === 'modified_at', sourceSort.dir)}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {sources.map((s) => (
+                {sortedSources!.map((s) => (
                   <tr key={s.path} className="hover:bg-slate-50">
                     <td className="px-3 py-2">
                       <button
