@@ -38,6 +38,12 @@ dependencies = [
 
     # Nice-to-have progress bars during ingest.
     "tqdm>=4.66.0",
+
+    # LLM cost caps, rate limiting, and event logging. Shared library
+    # extracted from pitchcraft — see docs/integration.md in that repo.
+    # [fastapi] extra pulls in the request-scoped IP-rate-limit dependency
+    # factory. GCS/OTel extras deferred until we host.
+    "llm-guardrails[fastapi] @ git+https://github.com/ecoop/llm-guardrails@v0.1.0",
 ]
 
 [dependency-groups]
@@ -55,6 +61,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rulebook"]
+
+# llm-guardrails is installed from a git URL (see the dep list above).
+# Hatchling rejects direct references by default — this opts us in.
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.ruff]
 line-length = 100
