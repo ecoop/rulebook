@@ -42,6 +42,12 @@ export default function AdminApp() {
   const [pending, setPending] = useState<Set<string>>(() => new Set())
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildResult, setRebuildResult] = useState<RebuildResult | null>(null)
+  // Single-editor policy: only one row's gold_answer can be edited at a
+  // time. Clicking "Edit" on another row discards the in-flight buffer.
+  const [editingQaId, setEditingQaId] = useState<string | null>(null)
+  const [editBuffer, setEditBuffer] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   useEffect(() => {
     void refresh()
@@ -107,6 +113,62 @@ export default function AdminApp() {
       })
     } finally {
       setRebuilding(false)
+    }
+  }
+
+  function beginEdit(row: AdminGoldRow) {
+    setEditingQaId(row.qa_id)
+    setEditBuffer(row.gold_answer)
+    setEditError(null)
+    // Auto-expand so the edit box is visible in the same row.
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      next.add(row.qa_id)
+      return next
+    })
+  }
+
+  function cancelEdit() {
+    setEditingQaId(null)
+    setEditBuffer('')
+    setEditError(null)
+  }
+
+  async function saveEdit(row: AdminGoldRow) {
+    if (savingEdit) return
+    if (!editBuffer.trim()) {
+      setEditError('Gold answer cannot be empty.')
+      return
+    }
+    setSavingEdit(true)
+    setEditError(null)
+    try {
+      const resp = await fetch('/gold', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          qa_id: row.qa_id,
+          question: row.question,
+          gold_answer: editBuffer,
+        }),
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      // Reflect the edit locally with a fresh timestamp so the "SAVED"
+      // column updates immediately.
+      const newIso = new Date().toISOString()
+      setRows((prev) =>
+        prev?.map((r) =>
+          r.qa_id === row.qa_id
+            ? { ...r, gold_answer: editBuffer, timestamp: newIso }
+            : r,
+        ) ?? prev,
+      )
+      setEditingQaId(null)
+      setEditBuffer('')
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -249,9 +311,57 @@ export default function AdminApp() {
                         <tr className="bg-slate-50">
                           <td />
                           <td colSpan={3} className="px-3 py-3">
-                            <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-slate-700">
-                              {r.gold_answer}
-                            </pre>
+                            {editingQaId === r.qa_id ? (
+                              <div className="space-y-2">
+                                <textarea
+                                  value={editBuffer}
+                                  onChange={(e) => setEditBuffer(e.target.value)}
+                                  rows={12}
+                                  className="w-full resize-y rounded-md border border-slate-300 bg-white p-2 font-mono text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                                <div className="flex items-center justify-between gap-3 text-xs">
+                                  <span className="text-slate-400">
+                                    Saves a new row to gold.jsonl. Rebuild index to make it retrievable.
+                                    {editError && (
+                                      <span className="ml-2 text-red-600">{editError}</span>
+                                    )}
+                                  </span>
+                                  <span className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={cancelEdit}
+                                      disabled={savingEdit}
+                                      className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => saveEdit(r)}
+                                      disabled={savingEdit || !editBuffer.trim() || editBuffer === r.gold_answer}
+                                      className="rounded-md bg-slate-700 px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                    >
+                                      {savingEdit ? 'Saving…' : 'Save'}
+                                    </button>
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-slate-700">
+                                  {r.gold_answer}
+                                </pre>
+                                <div className="flex justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => beginEdit(r)}
+                                    className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                                  >
+                                    Edit
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )}
