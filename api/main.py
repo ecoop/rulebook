@@ -31,8 +31,10 @@ from rulebook.interaction_log import (
     log_gold,
     log_gold_curation,
     log_qa,
+    log_source_curation,
     read_latest_curation,
     read_latest_golds,
+    read_latest_source_curation,
 )
 from rulebook.pipeline import DEFAULT_SPORTS, ask
 from rulebook.store import list_sports
@@ -126,6 +128,27 @@ class GoldCurationRequest(BaseModel):
 
 
 class GoldCurationResponse(BaseModel):
+    ok: bool = True
+
+
+class AdminSourceRow(BaseModel):
+    path: str = Field(..., description="Repo-relative posix path, e.g. 'rules/ultimate/strategy.md'.")
+    sport: str
+    size_bytes: int
+    modified_at: str = Field(..., description="ISO 8601 UTC of the file's last mtime.")
+    included: bool = Field(..., description="Whether this file is included in the next index rebuild.")
+
+
+class AdminSourceListResponse(BaseModel):
+    sources: list[AdminSourceRow]
+
+
+class SourceCurationRequest(BaseModel):
+    path: str = Field(..., description="Repo-relative posix path to include/exclude.")
+    included: bool
+
+
+class SourceCurationResponse(BaseModel):
     ok: bool = True
 
 
@@ -262,6 +285,43 @@ def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
     """Toggle whether a gold is included in the next index rebuild."""
     log_gold_curation(req.qa_id, included=req.included)
     return GoldCurationResponse()
+
+
+@app.get("/admin/sources", response_model=AdminSourceListResponse)
+def admin_list_sources() -> AdminSourceListResponse:
+    """List every source file under rules/<sport>/ with its inclusion state.
+
+    Passes apply_curation=False to discover_sources so both included AND
+    excluded files show up in the admin table — the exclusion is
+    surfaced via the ``included`` field so the UI can render a toggle.
+    """
+    from datetime import datetime, timezone
+    from scripts.build_index import discover_sources
+
+    rules_root = settings.repo_root / "rules"
+    curation = read_latest_source_curation()
+
+    rows: list[AdminSourceRow] = []
+    for src in discover_sources(rules_root, apply_curation=False):
+        rel = src.path.relative_to(settings.repo_root).as_posix()
+        st = src.path.stat()
+        rows.append(
+            AdminSourceRow(
+                path=rel,
+                sport=src.sport,
+                size_bytes=st.st_size,
+                modified_at=datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(timespec="seconds"),
+                included=curation.get(rel, True),
+            )
+        )
+    return AdminSourceListResponse(sources=rows)
+
+
+@app.post("/admin/source-curation", response_model=SourceCurationResponse)
+def admin_set_source_curation(req: SourceCurationRequest) -> SourceCurationResponse:
+    """Toggle whether a source file is included in the next index rebuild."""
+    log_source_curation(req.path, included=req.included)
+    return SourceCurationResponse()
 
 
 @app.post("/admin/rebuild-index", response_model=RebuildIndexResponse)

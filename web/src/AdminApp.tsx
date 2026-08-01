@@ -23,6 +23,26 @@ interface RebuildResult {
   stderr_tail: string
 }
 
+interface AdminSourceRow {
+  path: string
+  sport: string
+  size_bytes: number
+  modified_at: string
+  included: boolean
+}
+
+interface AdminSourceListResponse {
+  sources: AdminSourceRow[]
+}
+
+type AdminTab = 'golds' | 'sources'
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
 function formatWhen(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
@@ -48,9 +68,14 @@ export default function AdminApp() {
   const [editBuffer, setEditBuffer] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+  // Sources tab state
+  const [activeTab, setActiveTab] = useState<AdminTab>('golds')
+  const [sources, setSources] = useState<AdminSourceRow[] | null>(null)
+  const [sourcePending, setSourcePending] = useState<Set<string>>(() => new Set())
 
   useEffect(() => {
     void refresh()
+    void refreshSources()
   }, [])
 
   async function refresh() {
@@ -62,6 +87,45 @@ export default function AdminApp() {
       setRows(data.golds)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function refreshSources() {
+    try {
+      const resp = await fetch('/admin/sources')
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      const data: AdminSourceListResponse = await resp.json()
+      setSources(data.sources)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function toggleSourceInclusion(row: AdminSourceRow) {
+    const next = !row.included
+    setSources((prev) =>
+      prev?.map((r) => (r.path === row.path ? { ...r, included: next } : r)) ?? prev,
+    )
+    setSourcePending((prev) => new Set(prev).add(row.path))
+    try {
+      const resp = await fetch('/admin/source-curation', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ path: row.path, included: next }),
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+    } catch (err) {
+      setSources((prev) =>
+        prev?.map((r) => (r.path === row.path ? { ...r, included: row.included } : r))
+          ?? prev,
+      )
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSourcePending((prev) => {
+        const next = new Set(prev)
+        next.delete(row.path)
+        return next
+      })
     }
   }
 
@@ -104,6 +168,8 @@ export default function AdminApp() {
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: RebuildResult = await resp.json()
       setRebuildResult(data)
+      // A rebuild may have picked up new files added on disk since page load.
+      void refreshSources()
     } catch (err) {
       setRebuildResult({
         ok: false,
@@ -181,8 +247,10 @@ export default function AdminApp() {
     })
   }
 
-  const includedCount = rows?.filter((r) => r.included).length ?? 0
-  const totalCount = rows?.length ?? 0
+  const goldIncluded = rows?.filter((r) => r.included).length ?? 0
+  const goldTotal = rows?.length ?? 0
+  const sourceIncluded = sources?.filter((s) => s.included).length ?? 0
+  const sourceTotal = sources?.length ?? 0
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -194,7 +262,7 @@ export default function AdminApp() {
                 Rulebook <span className="text-slate-400">/ admin</span>
               </h1>
               <p className="text-sm text-slate-500">
-                Curate user-authored gold answers. Excluded rows are skipped by the next index rebuild.
+                Curate gold answers and source files. Excluded rows are skipped by the next index rebuild.
               </p>
             </div>
             <a href="#/" className="text-sm text-blue-600 hover:underline">
@@ -212,53 +280,74 @@ export default function AdminApp() {
           </div>
         )}
 
-        {rows === null && !error && (
-          <div className="text-sm text-slate-500">Loading…</div>
+        {/* Rebuild control — global, applies to whichever tab is active. */}
+        <div className="flex items-center justify-end">
+          <button
+            type="button"
+            onClick={rebuildIndex}
+            disabled={rebuilding}
+            title="Runs scripts/build_index.py — typically 15s, occasionally up to a minute or two when Voyage is slow"
+            className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {rebuilding ? 'Rebuilding…' : 'Rebuild index'}
+          </button>
+        </div>
+        {rebuildResult && (
+          <div
+            className={
+              'rounded-md border p-3 text-xs ' +
+              (rebuildResult.ok
+                ? 'border-green-300 bg-green-50 text-green-900'
+                : 'border-red-300 bg-red-50 text-red-900')
+            }
+          >
+            <div className="mb-1 font-medium">
+              {rebuildResult.ok
+                ? `Rebuilt in ${rebuildResult.duration_seconds}s`
+                : 'Rebuild failed'}
+            </div>
+            <pre className="whitespace-pre-wrap font-mono text-[11px] leading-snug">
+              {rebuildResult.ok ? rebuildResult.stdout_tail : rebuildResult.stderr_tail}
+            </pre>
+          </div>
         )}
 
-        {rows !== null && rows.length === 0 && (
+        {/* Tab bar — counts baked into labels so both are visible regardless of active tab. */}
+        <div className="flex gap-1 border-b border-slate-200 text-sm">
+          {(['golds', 'sources'] as AdminTab[]).map((t) => {
+            const active = activeTab === t
+            const label =
+              t === 'golds'
+                ? `Golds (${goldIncluded}/${goldTotal})`
+                : `Sources (${sourceIncluded}/${sourceTotal})`
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setActiveTab(t)}
+                className={
+                  '-mb-px border-b-2 px-3 py-1.5 font-medium transition ' +
+                  (active
+                    ? 'border-blue-600 text-blue-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-700')
+                }
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+
+        {activeTab === 'golds' && rows === null && !error && (
+          <div className="text-sm text-slate-500">Loading golds…</div>
+        )}
+        {activeTab === 'golds' && rows !== null && rows.length === 0 && (
           <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
             No gold answers yet. Rate an answer in the main app and use the "Save gold answer" button.
           </div>
         )}
-
-        {rows !== null && rows.length > 0 && (
+        {activeTab === 'golds' && rows !== null && rows.length > 0 && (
           <>
-            <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
-              <span>
-                <span className="font-medium text-slate-700">{includedCount}</span> of{' '}
-                <span className="font-medium text-slate-700">{totalCount}</span> golds included in
-                next rebuild
-              </span>
-              <button
-                type="button"
-                onClick={rebuildIndex}
-                disabled={rebuilding}
-                title="Runs scripts/build_index.py — typically 15s, occasionally up to a minute or two when Voyage is slow"
-                className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                {rebuilding ? 'Rebuilding…' : 'Rebuild index'}
-              </button>
-            </div>
-            {rebuildResult && (
-              <div
-                className={
-                  'rounded-md border p-3 text-xs ' +
-                  (rebuildResult.ok
-                    ? 'border-green-300 bg-green-50 text-green-900'
-                    : 'border-red-300 bg-red-50 text-red-900')
-                }
-              >
-                <div className="mb-1 font-medium">
-                  {rebuildResult.ok
-                    ? `Rebuilt in ${rebuildResult.duration_seconds}s`
-                    : 'Rebuild failed'}
-                </div>
-                <pre className="whitespace-pre-wrap font-mono text-[11px] leading-snug">
-                  {rebuildResult.ok ? rebuildResult.stdout_tail : rebuildResult.stderr_tail}
-                </pre>
-              </div>
-            )}
             <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -371,6 +460,68 @@ export default function AdminApp() {
               </table>
             </section>
           </>
+        )}
+
+        {activeTab === 'sources' && sources === null && !error && (
+          <div className="text-sm text-slate-500">Loading sources…</div>
+        )}
+        {activeTab === 'sources' && sources !== null && sources.length === 0 && (
+          <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+            No source files found under <span className="font-mono">rules/&lt;sport&gt;/</span>.
+          </div>
+        )}
+        {activeTab === 'sources' && sources !== null && sources.length > 0 && (
+          <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="w-16 px-3 py-2">incl.</th>
+                  <th className="w-28 px-3 py-2">sport</th>
+                  <th className="px-3 py-2">path</th>
+                  <th className="w-24 px-3 py-2 text-right">size</th>
+                  <th className="w-40 px-3 py-2">modified</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {sources.map((s) => (
+                  <tr key={s.path} className="hover:bg-slate-50">
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleSourceInclusion(s)}
+                        disabled={sourcePending.has(s.path)}
+                        aria-pressed={s.included}
+                        title={s.included ? 'Included — click to exclude' : 'Excluded — click to include'}
+                        className={
+                          'inline-flex h-5 w-9 items-center rounded-full border transition ' +
+                          (s.included
+                            ? 'border-green-500 bg-green-500 justify-end'
+                            : 'border-slate-300 bg-slate-200 justify-start') +
+                          (sourcePending.has(s.path) ? ' opacity-50' : '')
+                        }
+                      >
+                        <span className="mx-0.5 h-4 w-4 rounded-full bg-white shadow-sm" />
+                      </button>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700">
+                        {s.sport}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs text-slate-700">
+                      {s.path}
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs text-slate-500">
+                      {formatBytes(s.size_bytes)}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-500">
+                      {formatWhen(s.modified_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
         )}
       </main>
     </div>

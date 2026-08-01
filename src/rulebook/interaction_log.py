@@ -63,6 +63,12 @@ GOLD_SCHEMA_VERSION = 1
 #   v1  {qa_id, included: bool, timestamp} (current)
 GOLD_CURATION_SCHEMA_VERSION = 1
 
+# Source-file curation — admin decisions about whether a given source file
+# under rules/<sport>/ is picked up by the next index rebuild. Same shape
+# as gold curation but keyed by relative path.
+#   v1  {path, included: bool, timestamp} (current)
+SOURCE_CURATION_SCHEMA_VERSION = 1
+
 # Serialize appends so concurrent requests can't interleave partial writes.
 # JSONL requires one complete object per line — a raced write would corrupt
 # the file for downstream readers. Uvicorn --reload runs one process by
@@ -184,6 +190,40 @@ def read_latest_curation() -> dict[str, bool]:
         if line.strip():
             row = json.loads(line)
             latest[row["qa_id"]] = bool(row["included"])
+    return latest
+
+
+def log_source_curation(source_path: str, *, included: bool) -> None:
+    """Record an admin decision about a source file's inclusion.
+
+    ``source_path`` is repo-relative, posix-style
+    (e.g. ``rules/ultimate/strategy.md``). Same append-only semantics
+    as gold curation: latest row per path wins.
+    """
+    _append_jsonl(
+        _log_dir() / "source_curation.jsonl",
+        {
+            "v": SOURCE_CURATION_SCHEMA_VERSION,
+            "path": source_path,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "included": included,
+        },
+    )
+
+
+def read_latest_source_curation() -> dict[str, bool]:
+    """Return {path: included} for the latest source-curation row per path.
+
+    Absent paths default to included=True at the call site.
+    """
+    path = _log_dir() / "source_curation.jsonl"
+    if not path.exists():
+        return {}
+    latest: dict[str, bool] = {}
+    for line in path.read_text().splitlines():
+        if line.strip():
+            row = json.loads(line)
+            latest[row["path"]] = bool(row["included"])
     return latest
 
 

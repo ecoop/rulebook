@@ -33,7 +33,7 @@ from rulebook.chunking import Chunk, chunk_pages
 from rulebook.config import settings
 from rulebook.embeddings import get_embedder
 from rulebook.ingest import extract_pages
-from rulebook.interaction_log import read_latest_curation
+from rulebook.interaction_log import read_latest_curation, read_latest_source_curation
 from rulebook.pipeline import DEFAULT_SPORTS
 from rulebook.store import write_store
 
@@ -54,7 +54,7 @@ RULES_ROOT = Path("rules")
 _SOURCE_SUFFIXES = {".pdf", ".md", ".txt"}
 
 
-def discover_sources(rules_root: Path) -> list[Source]:
+def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[Source]:
     """Walk ``rules/<sport>/`` and return one Source per ingestable file.
 
     Convention:
@@ -67,8 +67,23 @@ def discover_sources(rules_root: Path) -> list[Source]:
     That's the pattern for image-only PDFs where pypdf produces nothing
     and vision_extract.py has already cached a proper text transcription
     next to the original.
+
+    Admin curation: if ``apply_curation`` is True (the default), files
+    whose latest source_curation row set included=False are dropped.
+    Absent from the log = included by default, so freshly-added files
+    flow into the index automatically. The admin UI (GET /admin/sources)
+    passes apply_curation=False so it can show both included and
+    excluded files.
     """
+    excluded_paths: set[str] = set()
+    if apply_curation:
+        excluded_paths = {
+            path for path, included in read_latest_source_curation().items()
+            if not included
+        }
+
     sources: list[Source] = []
+    dropped_by_curation = 0
     for sport_dir in sorted(p for p in rules_root.iterdir() if p.is_dir()):
         sport = sport_dir.name
         # Build the set of stems that have an .extracted.md so we can
@@ -84,7 +99,14 @@ def discover_sources(rules_root: Path) -> list[Source]:
             if f.suffix.lower() == ".pdf" and f.stem in extracted_stems:
                 # Skip — the .extracted.md sibling is the ingestable form.
                 continue
+            rel = f.relative_to(rules_root.parent).as_posix()
+            if rel in excluded_paths:
+                dropped_by_curation += 1
+                continue
             sources.append(Source(sport=sport, path=f))
+
+    if dropped_by_curation:
+        print(f"[curate]  {dropped_by_curation} source file(s) excluded by admin")
     return sources
 
 # Embed in batches so we play nice with the embedder's request-size limits
