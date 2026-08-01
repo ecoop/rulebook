@@ -35,7 +35,21 @@ interface AdminSourceListResponse {
   sources: AdminSourceRow[]
 }
 
-type AdminTab = 'golds' | 'sources'
+interface AdminFeedbackRow {
+  qa_id: string
+  timestamp: string
+  rating: number
+  tags: string[]
+  comment: string | null
+  question: string
+  has_gold: boolean
+}
+
+interface AdminFeedbackListResponse {
+  feedback: AdminFeedbackRow[]
+}
+
+type AdminTab = 'feedback' | 'golds' | 'sources'
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -69,13 +83,15 @@ export default function AdminApp() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   // Sources tab state
-  const [activeTab, setActiveTab] = useState<AdminTab>('golds')
+  const [activeTab, setActiveTab] = useState<AdminTab>('feedback')
   const [sources, setSources] = useState<AdminSourceRow[] | null>(null)
   const [sourcePending, setSourcePending] = useState<Set<string>>(() => new Set())
+  const [feedback, setFeedback] = useState<AdminFeedbackRow[] | null>(null)
 
   useEffect(() => {
     void refresh()
     void refreshSources()
+    void refreshFeedback()
   }, [])
 
   async function refresh() {
@@ -85,6 +101,17 @@ export default function AdminApp() {
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: AdminGoldListResponse = await resp.json()
       setRows(data.golds)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function refreshFeedback() {
+    try {
+      const resp = await fetch('/admin/feedback')
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      const data: AdminFeedbackListResponse = await resp.json()
+      setFeedback(data.feedback)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -251,6 +278,11 @@ export default function AdminApp() {
   const goldTotal = rows?.length ?? 0
   const sourceIncluded = sources?.filter((s) => s.included).length ?? 0
   const sourceTotal = sources?.length ?? 0
+  // "Needs attention" = rated 3 or lower, no gold saved yet. That's the
+  // subset a curator would actually work through.
+  const feedbackNeedsAttention =
+    feedback?.filter((f) => f.rating <= 3 && !f.has_gold).length ?? 0
+  const feedbackTotal = feedback?.length ?? 0
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -314,12 +346,14 @@ export default function AdminApp() {
 
         {/* Tab bar — counts baked into labels so both are visible regardless of active tab. */}
         <div className="flex gap-1 border-b border-slate-200 text-sm">
-          {(['golds', 'sources'] as AdminTab[]).map((t) => {
+          {(['feedback', 'golds', 'sources'] as AdminTab[]).map((t) => {
             const active = activeTab === t
             const label =
-              t === 'golds'
-                ? `Golds (${goldIncluded}/${goldTotal})`
-                : `Sources (${sourceIncluded}/${sourceTotal})`
+              t === 'feedback'
+                ? `Feedback (${feedbackNeedsAttention} to review · ${feedbackTotal})`
+                : t === 'golds'
+                  ? `Golds (${goldIncluded}/${goldTotal})`
+                  : `Sources (${sourceIncluded}/${sourceTotal})`
             return (
               <button
                 key={t}
@@ -337,6 +371,104 @@ export default function AdminApp() {
             )
           })}
         </div>
+
+        {activeTab === 'feedback' && feedback === null && !error && (
+          <div className="text-sm text-slate-500">Loading feedback…</div>
+        )}
+        {activeTab === 'feedback' && feedback !== null && feedback.length === 0 && (
+          <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+            No feedback yet. Rate some answers in the main app.
+          </div>
+        )}
+        {activeTab === 'feedback' && feedback !== null && feedback.length > 0 && (
+          <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="w-16 px-3 py-2 text-center">rating</th>
+                  <th className="w-16 px-3 py-2 text-center" title="Whether a gold answer has been saved for this qa_id">
+                    gold
+                  </th>
+                  <th className="px-3 py-2">question / note</th>
+                  <th className="w-40 px-3 py-2">tags</th>
+                  <th className="w-40 px-3 py-2">when</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {feedback.map((f) => {
+                  const needsAttention = f.rating <= 3 && !f.has_gold
+                  return (
+                    <tr
+                      key={f.qa_id + '-' + f.timestamp}
+                      className={needsAttention ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-slate-50'}
+                    >
+                      <td className="px-3 py-2 text-center">
+                        <span
+                          className={
+                            'inline-flex h-6 w-6 items-center justify-center rounded-full font-mono text-xs ' +
+                            (f.rating <= 2
+                              ? 'bg-red-100 text-red-700'
+                              : f.rating === 3
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-green-100 text-green-700')
+                          }
+                          title={
+                            f.rating <= 2
+                              ? 'wrong / mostly wrong'
+                              : f.rating === 3
+                                ? 'mixed / missing key nuance'
+                                : 'mostly right / perfect'
+                          }
+                        >
+                          {f.rating}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {f.has_gold ? (
+                          <span title="Gold answer authored" className="text-green-600">✓</span>
+                        ) : (
+                          <span title="No gold yet" className="text-slate-300">·</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="text-sm text-slate-800">
+                          {f.question || <span className="italic text-slate-400">(no qa_log entry)</span>}
+                        </div>
+                        {f.comment && (
+                          <div className="mt-1 whitespace-pre-wrap text-xs text-slate-500">
+                            {f.comment}
+                          </div>
+                        )}
+                        <div className="mt-1 font-mono text-[10px] text-slate-400">
+                          {f.qa_id.slice(0, 8)}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-1">
+                          {f.tags.length === 0 ? (
+                            <span className="text-xs text-slate-400">—</span>
+                          ) : (
+                            f.tags.map((t) => (
+                              <span
+                                key={t}
+                                className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-700"
+                              >
+                                {t}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-500">
+                        {formatWhen(f.timestamp)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </section>
+        )}
 
         {activeTab === 'golds' && rows === null && !error && (
           <div className="text-sm text-slate-500">Loading golds…</div>
