@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # --- Provider / model selection ---------------------------------------
     embedding_provider: str = Field(default="voyage", pattern="^(voyage|openai)$")
-    embedding_model: str = "voyage-3.5"
+    embedding_model: str = "voyage-4"
     claude_model: str = "claude-sonnet-5"
 
     # --- Storage -----------------------------------------------------------

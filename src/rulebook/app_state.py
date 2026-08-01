@@ -1,9 +1,16 @@
 """Singleton facade for llm-guardrails — see docs/integration.md in that repo.
 
 Every consumer that needs the cost counter or the rate-limit dependency
-imports from THIS module, never from ``llm_guardrails.*`` directly.
-Constructed once at server start via ``initialize()``; all module-level
-names become non-None after that call.
+imports from THIS module (``from rulebook import app_state``), never
+from ``llm_guardrails.*`` directly. Constructed once at server start
+via ``initialize()``; all module-level names become non-None after
+that call.
+
+a sibling app's integration guide places this file at the repo root; we
+put it inside the ``rulebook`` package so scripts and CLI entry points
+that run from any directory can import it without sys.path fiddling.
+Semantics are identical — one instance per process — and a sibling app's
+init-order pattern still applies.
 
 FASTAPI INIT-ORDER GOTCHA
 
@@ -31,7 +38,7 @@ from llm_guardrails.fastapi_ext import make_enforce_ip_rate_limit
 from llm_guardrails.ratelimit import IPRateLimiter
 from llm_guardrails.state import StateBackend, get_backend
 
-from rulebook.config import Settings
+from .config import Settings
 
 # Module-level singletons, populated by initialize().
 cost_counter: Optional[CostCounter] = None

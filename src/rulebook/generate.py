@@ -26,8 +26,7 @@ from llm_guardrails.counters import WindowedCapHook
 from llm_guardrails.events import EventLogHook
 from llm_guardrails.wrapper import guarded_call
 
-import app_state
-
+from . import app_state
 from .config import settings
 from .retrieve import RetrievedChunk
 

@@ -29,8 +29,8 @@ from rulebook.config import settings
 
 # Wire the guardrails singletons BEFORE anything Depends()-related runs.
 # Rulebook has a single-file API so ordering inside this module is
-# sufficient — see app_state.py for the multi-file case.
-import app_state  # noqa: E402
+# sufficient — see rulebook/app_state.py for the multi-file case.
+from rulebook import app_state  # noqa: E402
 app_state.initialize(settings)
 
 from rulebook.interaction_log import (  # noqa: E402
