@@ -20,13 +20,20 @@ import time
 import uuid
 from dataclasses import asdict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from rulebook.build_info import BUILD_INFO
 from rulebook.config import settings
-from rulebook.interaction_log import (
+
+# Wire the guardrails singletons BEFORE anything Depends()-related runs.
+# Rulebook has a single-file API so ordering inside this module is
+# sufficient — see app_state.py for the multi-file case.
+import app_state  # noqa: E402
+app_state.initialize(settings)
+
+from rulebook.interaction_log import (  # noqa: E402
     log_feedback,
     log_gold,
     log_gold_curation,
@@ -38,8 +45,8 @@ from rulebook.interaction_log import (
     read_latest_source_curation,
     read_qa_questions,
 )
-from rulebook.pipeline import DEFAULT_SPORTS, ask
-from rulebook.store import list_sports
+from rulebook.pipeline import DEFAULT_SPORTS, ask  # noqa: E402
+from rulebook.store import list_sports  # noqa: E402
 
 app = FastAPI(title="rulebook", description="RAG over disc-sport rules.")
 
@@ -200,7 +207,11 @@ def meta() -> MetaResponse:
     )
 
 
-@app.post("/ask", response_model=AskResponse)
+@app.post(
+    "/ask",
+    response_model=AskResponse,
+    dependencies=[Depends(app_state.enforce_ip_rate_limit)],
+)
 def ask_endpoint(req: AskRequest) -> AskResponse:
     try:
         result = ask(question=req.question, sport=req.sport, k=req.k)
