@@ -516,10 +516,14 @@ export default function App() {
 }
 
 function ChunkRow({ chunk }: { chunk: Chunk }) {
+  // Gold chunks have no meaningful page (both 0); hide the pages label
+  // rather than showing "p.0", matching the backend citation formatter.
   const pages =
-    chunk.page_start === chunk.page_end
-      ? `p.${chunk.page_start}`
-      : `pp.${chunk.page_start}-${chunk.page_end}`
+    chunk.page_start === 0 && chunk.page_end === 0
+      ? ''
+      : chunk.page_start === chunk.page_end
+        ? `p.${chunk.page_start}`
+        : `pp.${chunk.page_start}-${chunk.page_end}`
   return (
     <div className="p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">

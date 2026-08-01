@@ -176,7 +176,7 @@ def load_gold_chunks(gold_path: Path) -> list[Chunk]:
                     Chunk(
                         source="gold.jsonl",
                         sport=sport,
-                        rule_id=f"user-gold-{qa_id[:8]}",
+                        rule_id="correction",
                         page_start=0,
                         page_end=0,
                         text=text,
@@ -189,7 +189,7 @@ def load_gold_chunks(gold_path: Path) -> list[Chunk]:
                 Chunk(
                     source="gold.jsonl",
                     sport=sport,
-                    rule_id=f"user-gold-{qa_id[:8]}",
+                    rule_id="correction",
                     page_start=0,
                     page_end=0,
                     text=section_text,

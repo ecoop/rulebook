@@ -62,15 +62,22 @@ def format_context(chunks: list[RetrievedChunk]) -> str:
         [ultimate II.B.1 — pp.12-13]
     which is both the citation format we want back and enough context for
     the model to pick the right chunk to attribute a claim to.
+
+    Gold ("correction") chunks have no meaningful page number — we
+    omit the page suffix so the citation reads ``[ultimate correction]``
+    rather than the awkward ``[ultimate correction — p.0]``.
     """
     blocks = []
     for c in chunks:
-        pages = (
-            f"p.{c.page_start}"
-            if c.page_start == c.page_end
-            else f"pp.{c.page_start}-{c.page_end}"
-        )
-        header = f"[{c.sport} {c.rule_id} — {pages}]"
+        if c.page_start == 0 and c.page_end == 0:
+            header = f"[{c.sport} {c.rule_id}]"
+        else:
+            pages = (
+                f"p.{c.page_start}"
+                if c.page_start == c.page_end
+                else f"pp.{c.page_start}-{c.page_end}"
+            )
+            header = f"[{c.sport} {c.rule_id} — {pages}]"
         blocks.append(f"{header}\n{c.text}")
     return "\n\n---\n\n".join(blocks)
 
