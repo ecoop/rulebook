@@ -5,6 +5,8 @@
  * glance. Backed by GET /diagnostics.
  */
 
+import { Info } from 'lucide-react'
+
 export interface DiagnosticsSnapshot {
   chunk_count: number
   dimension: number
@@ -37,10 +39,27 @@ export function DiagnosticsSummaryLine({ diag }: { diag: DiagnosticsSnapshot | n
   )
 }
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
+function Row({
+  label,
+  info,
+  value,
+  indent = false,
+}: {
+  label: string
+  info?: string
+  value: React.ReactNode
+  indent?: boolean
+}) {
   return (
-    <div className="flex items-baseline justify-between">
-      <span className="text-muted-foreground">{label}</span>
+    <div className={'flex items-baseline justify-between ' + (indent ? 'pl-3' : '')}>
+      <span className="flex items-center gap-0.5 text-muted-foreground">
+        {label}
+        {info && (
+          <Info className="h-3 w-3 opacity-60" aria-label={info}>
+            <title>{info}</title>
+          </Info>
+        )}
+      </span>
       <span className="font-mono tabular-nums text-foreground">{value}</span>
     </div>
   )
@@ -52,17 +71,41 @@ export function DiagnosticsBody({ diag }: { diag: DiagnosticsSnapshot | null }) 
   return (
     <div className="space-y-2 p-2 text-[11px]">
       <div className="space-y-1">
-        <Row label="chunks" value={diag.chunk_count.toLocaleString()} />
+        <Row
+          label="chunks"
+          info="Total embedded rows in the current vector index."
+          value={diag.chunk_count.toLocaleString()}
+        />
         {bySport.map(([sport, n]) => (
-          <Row key={sport} label={`  ${sport}`} value={n.toLocaleString()} />
+          <Row key={sport} label={sport} value={n.toLocaleString()} indent />
         ))}
-        <Row label="dimension" value={diag.dimension} />
-        <Row label="built" value={formatWhen(diag.index_built_at)} />
+        <Row
+          label="dim"
+          info="Embedding vector dimensionality (fixed per model)."
+          value={diag.dimension}
+        />
+        <Row
+          label="built"
+          info="Local time the current index was last written."
+          value={formatWhen(diag.index_built_at)}
+        />
       </div>
       <div className="space-y-1 border-t border-border pt-2">
-        <Row label="source files" value={diag.source_file_count} />
-        <Row label="golds" value={diag.gold_count} />
-        <Row label="feedback events" value={diag.feedback_count} />
+        <Row
+          label="sources"
+          info="Ingestable files under rules/<sport>/ (PDF, .md, .txt). Skips PDFs that have a .extracted.md sibling."
+          value={diag.source_file_count}
+        />
+        <Row
+          label="golds"
+          info="Distinct qa_ids with a user-authored canonical answer."
+          value={diag.gold_count}
+        />
+        <Row
+          label="feedback"
+          info="Distinct qa_ids that received any rating."
+          value={diag.feedback_count}
+        />
       </div>
     </div>
   )
