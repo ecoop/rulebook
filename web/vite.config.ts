@@ -20,6 +20,8 @@ export default defineConfig({
       '/feedback': 'http://127.0.0.1:8000',
       '/gold': 'http://127.0.0.1:8000',
       '/admin': 'http://127.0.0.1:8000',
+      '/usage': 'http://127.0.0.1:8000',
+      '/diagnostics': 'http://127.0.0.1:8000',
     },
   },
 })

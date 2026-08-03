@@ -1,4 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FloatingWidgetStack,
+  LayoutProvider,
+  StackOriginReporter,
+  type FloatingWidgetStackHandle,
+  type WidgetDef,
+} from '@cooperic/floating-widgets'
+
+import { UsageBody, UsageSummaryLine, type UsageSnapshot } from './widgets/Usage'
+import {
+  DiagnosticsBody,
+  DiagnosticsSummaryLine,
+  type DiagnosticsSnapshot,
+} from './widgets/Diagnostics'
+import { DemoBody, DemoSummaryLine } from './widgets/Demo'
 
 // -----------------------------------------------------------------------------
 // Types mirroring the FastAPI response shape. Kept inline (rather than in a
@@ -50,6 +65,13 @@ const TAG_LABELS: Record<IssueTag, string> = {
 }
 
 const TAGS: IssueTag[] = ['wrong', 'incomplete', 'retrieval', 'format']
+
+// Bundle passed to each floating widget's header/render function.
+// Kept as a plain object (view-model), NOT a place to call hooks.
+interface WidgetCtx {
+  usage: UsageSnapshot | null
+  diag: DiagnosticsSnapshot | null
+}
 
 interface Meta {
   sports: string[]
@@ -105,6 +127,12 @@ export default function App() {
   const [savedGold, setSavedGold] = useState('')
   const [goldError, setGoldError] = useState<string | null>(null)
   const [goldSaving, setGoldSaving] = useState(false)
+  // Widget snapshots. Fetched on mount, refreshed after every /ask so
+  // Usage and Diagnostics reflect live state without a page reload.
+  const [usage, setUsage] = useState<UsageSnapshot | null>(null)
+  const [diag, setDiag] = useState<DiagnosticsSnapshot | null>(null)
+  const headerRef = useRef<HTMLElement>(null)
+  const stackRef = useRef<FloatingWidgetStackHandle>(null)
 
   useEffect(() => {
     fetch('/meta')
@@ -114,7 +142,24 @@ export default function App() {
         // Non-fatal — the app is still usable, we just won't populate the
         // sport dropdown from the server's view.
       })
+    void refreshWidgetData()
   }, [])
+
+  async function refreshWidgetData() {
+    // Fetches for the widgets. Called on mount and after every /ask so
+    // Usage/Diagnostics reflect live state. Errors swallowed silently —
+    // widget shows "Loading…" indefinitely rather than breaking the app.
+    try {
+      const [u, d] = await Promise.all([
+        fetch('/usage').then((r) => (r.ok ? r.json() : null)),
+        fetch('/diagnostics').then((r) => (r.ok ? r.json() : null)),
+      ])
+      if (u) setUsage(u)
+      if (d) setDiag(d)
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function sendFeedback(
     nextRating: Rating,
@@ -218,6 +263,8 @@ export default function App() {
       // history for gold-answer feature.
       setGold(data.answer)
       setSavedGold('')
+      // The ask just moved the cost counter — refresh Usage widget.
+      void refreshWidgetData()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -225,9 +272,44 @@ export default function App() {
     }
   }
 
+  // Widget context — the bundle of live state passed to each widget's
+  // header/render function. Rebuilt each render; the registry never
+  // closes over live state directly (see @cooperic/floating-widgets
+  // README for why).
+  const widgetCtx: WidgetCtx = { usage, diag }
+
+  // Widget registry. Order = stack order (top to bottom). useMemo with
+  // an empty dep list makes the array reference stable so the stack
+  // doesn't remount widgets each render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const widgets = useMemo<WidgetDef<WidgetCtx>[]>(
+    () => [
+      {
+        id: 'usage',
+        header: (c) => <UsageSummaryLine usage={c.usage} />,
+        render: (c) => <UsageBody usage={c.usage} />,
+      },
+      {
+        id: 'diagnostics',
+        defaultCollapsed: true,
+        header: (c) => <DiagnosticsSummaryLine diag={c.diag} />,
+        render: (c) => <DiagnosticsBody diag={c.diag} />,
+      },
+      {
+        id: 'demo',
+        defaultCollapsed: true,
+        header: () => <DemoSummaryLine />,
+        render: () => <DemoBody />,
+      },
+    ],
+    [],
+  )
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
+    <LayoutProvider>
+      <StackOriginReporter headerRef={headerRef} />
+      <div className="min-h-screen bg-slate-50 text-slate-900">
+        <header ref={headerRef} className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-4xl px-6 py-4">
           <h1 className="text-xl font-semibold tracking-tight">Rulebook</h1>
           <p className="text-sm text-slate-500">
@@ -236,7 +318,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
+      <main className="mx-auto max-w-4xl space-y-6 px-6 py-8 lg:pr-[19rem]">
         <form onSubmit={submit} className="space-y-3">
           <textarea
             value={question}
@@ -511,7 +593,13 @@ export default function App() {
           </a>
         </footer>
       )}
-    </div>
+      <FloatingWidgetStack<WidgetCtx>
+        ref={stackRef}
+        widgets={widgets}
+        ctx={widgetCtx}
+      />
+      </div>
+    </LayoutProvider>
   )
 }
 
