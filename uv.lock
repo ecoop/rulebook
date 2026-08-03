@@ -1258,8 +1258,8 @@ wheels = [
 
 [[package]]
 name = "llm-guardrails"
-version = "0.1.0"
-source = { git = "https://github.com/ecoop/llm-guardrails?rev=v0.1.0#4f95edb484ebce610fe43a8fd0bf6902affb3782" }
+version = "0.2.0"
+source = { git = "https://github.com/ecoop/llm-guardrails?rev=v0.2.0#00acddcbf0eb35797ea4656e7d1e2dcce95eb964" }
 dependencies = [
     { name = "pydantic" },
 ]
@@ -2375,7 +2375,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", specifier = ">=0.40.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "llm-guardrails", extras = ["fastapi"], git = "https://github.com/ecoop/llm-guardrails?rev=v0.1.0" },
+    { name = "llm-guardrails", extras = ["fastapi"], git = "https://github.com/ecoop/llm-guardrails?rev=v0.2.0" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "openai", specifier = ">=1.55.0" },
     { name = "pydantic", specifier = ">=2.9.0" },
