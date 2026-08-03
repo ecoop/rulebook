@@ -12,6 +12,8 @@
  * — this file only renders.
  */
 
+import { Info } from 'lucide-react'
+
 export interface UsageSnapshot {
   hourly_usd: number
   daily_usd: number
@@ -53,12 +55,27 @@ export function UsageSummaryLine({ usage }: { usage: UsageSnapshot | null }) {
   )
 }
 
-function CapBar({ label, spent, cap }: { label: string; spent: number; cap: number }) {
+function CapBar({
+  label,
+  info,
+  spent,
+  cap,
+}: {
+  label: string
+  info: string
+  spent: number
+  cap: number
+}) {
   const p = pct(spent, cap)
   return (
     <div className="space-y-0.5">
       <div className="flex items-baseline justify-between text-[11px]">
-        <span className="text-muted-foreground">{label}</span>
+        <span className="flex items-center gap-0.5 text-muted-foreground">
+          {label}
+          <Info className="h-3 w-3 opacity-60" aria-label={info}>
+            <title>{info}</title>
+          </Info>
+        </span>
         <span className="font-mono tabular-nums">
           {money(spent)} <span className="text-muted-foreground">/ {money(cap)}</span>
         </span>
@@ -80,18 +97,45 @@ export function UsageBody({ usage }: { usage: UsageSnapshot | null }) {
   if (!usage) return <div className="p-2 text-xs text-muted-foreground">Loading…</div>
   return (
     <div className="space-y-2.5 p-2 text-xs">
-      <CapBar label="hourly" spent={usage.hourly_usd} cap={usage.caps.hourly_usd} />
-      <CapBar label="daily" spent={usage.daily_usd} cap={usage.caps.daily_usd} />
-      <CapBar label="weekly" spent={usage.weekly_usd} cap={usage.caps.weekly_usd} />
+      <CapBar
+        label="hour"
+        info="USD spent on LLM calls in the current UTC hour. Resets at :00."
+        spent={usage.hourly_usd}
+        cap={usage.caps.hourly_usd}
+      />
+      <CapBar
+        label="day"
+        info="USD spent today (UTC). Resets at midnight UTC."
+        spent={usage.daily_usd}
+        cap={usage.caps.daily_usd}
+      />
+      <CapBar
+        label="week"
+        info="USD spent this week (UTC, Mon-based). Resets Monday 00:00 UTC."
+        spent={usage.weekly_usd}
+        cap={usage.caps.weekly_usd}
+      />
       {!usage.guardrails_enabled && (
-        <div className="pt-1 text-[10px] italic text-muted-foreground">
-          Guardrails disabled — caps not enforced (informational only).
+        <div
+          className="text-[10px] text-amber-700"
+          title="GUARDRAILS_ENABLED=false in .env — caps track spend but don't block calls."
+        >
+          <span className="rounded bg-amber-100 px-1 py-0.5 font-medium">off</span>
+          <span className="ml-1 text-muted-foreground">not enforcing</span>
         </div>
       )}
       {usage.caller_weekly_usd != null && (
         <div className="border-t border-border pt-2 text-[11px]">
           <div className="flex items-baseline justify-between">
-            <span className="text-muted-foreground">you (this week)</span>
+            <span className="flex items-center gap-0.5 text-muted-foreground">
+              you
+              <Info
+                className="h-3 w-3 opacity-60"
+                aria-label="Your cumulative weekly spend against the per-guest cap. Populates when guest-auth identifies you."
+              >
+                <title>Your cumulative weekly spend against the per-guest cap.</title>
+              </Info>
+            </span>
             <span className="font-mono tabular-nums">
               {money(usage.caller_weekly_usd)}{' '}
               <span className="text-muted-foreground">
