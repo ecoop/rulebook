@@ -34,9 +34,43 @@ INPUT TYPE
 
 from typing import Literal, Protocol
 
+from llm_guardrails.counters import WindowedCapHook
+from llm_guardrails.events import EventLogHook
+from llm_guardrails.wrapper import record_usage
+
+from . import app_state
 from .config import settings
 
 InputType = Literal["document", "query"]
+
+
+def _record_embed_usage(
+    provider: str, model: str, tokens: int, input_type: InputType,
+) -> None:
+    """Fan the embedding call through the guardrail hook chain.
+
+    Embeddings don't fit ``guarded_call`` (which wraps a provider
+    adapter written for chat-completion shapes), so we call
+    ``record_usage`` post-hoc with the token count reported by the
+    provider. The hook chain then fires: WindowedCapHook accumulates
+    spend against the caps, EventLogHook emits the JSON event line.
+    """
+    if app_state.cost_counter is None:
+        # No app_state.initialize() has run — most likely a unit-test
+        # context using the embedder directly. Skip silently rather
+        # than blowing up.
+        return
+    record_usage(
+        provider=provider,
+        model=model,
+        input_tokens=tokens,
+        output_tokens=0,
+        hooks=[
+            WindowedCapHook(app_state.cost_counter),
+            EventLogHook(enabled=settings.guardrails_enabled),
+        ],
+        tags={"stage": "embed", "input_type": input_type},
+    )
 
 
 class Embedder(Protocol):
@@ -54,6 +88,7 @@ class VoyageEmbedder:
 
     def embed(self, texts, *, input_type):
         result = self._client.embed(texts, model=self._model, input_type=input_type)
+        _record_embed_usage("voyage", self._model, int(result.total_tokens), input_type)
         return result.embeddings
 
 
@@ -67,6 +102,7 @@ class OpenAIEmbedder:
     def embed(self, texts, *, input_type):
         # OpenAI doesn't distinguish input_type; the argument is ignored.
         resp = self._client.embeddings.create(model=self._model, input=texts)
+        _record_embed_usage("openai", self._model, int(resp.usage.total_tokens), input_type)
         return [d.embedding for d in resp.data]
 
 

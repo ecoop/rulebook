@@ -31,8 +31,16 @@ import sys
 from pathlib import Path
 
 from anthropic import Anthropic
+from llm_guardrails.counters import WindowedCapHook
+from llm_guardrails.events import EventLogHook
+from llm_guardrails.wrapper import guarded_call
 
+from rulebook import app_state
 from rulebook.config import settings
+
+# Guardrails singletons — needed for the vision call below to record
+# spend against the cost counter and fire the event-log hook.
+app_state.initialize(settings)
 
 # The prompt is deliberately short and prescriptive. Vision models will
 # happily invent structure if you give them wiggle room — we want a
@@ -63,7 +71,15 @@ def extract(pdf_path: Path, *, force: bool = False) -> Path:
     b64 = base64.standard_b64encode(pdf_bytes).decode("ascii")
 
     client = Anthropic(api_key=settings.anthropic_api_key)
-    resp = client.messages.create(
+    hooks = [
+        WindowedCapHook(app_state.cost_counter),
+        EventLogHook(enabled=settings.guardrails_enabled),
+    ]
+    resp, _usage = guarded_call(
+        client,
+        provider="anthropic",
+        hooks=hooks,
+        tags={"stage": "vision-extract"},
         model=settings.claude_model,
         max_tokens=4096,
         messages=[
