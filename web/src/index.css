@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+/*
+ * shadcn-compatible design tokens.
+ *
+ * @cooperic/floating-widgets styles its panel chrome with these CSS
+ * variables. The rest of the rulebook UI uses plain Tailwind utility
+ * classes (bg-slate-*, text-slate-*, etc.) so most of the app is
+ * unaffected — this section exists purely to let the widget package
+ * render themed.
+ *
+ * Values are the slate palette from shadcn's default theme in Tailwind
+ * v4's oklch space. Dark-mode variant flips on `prefers-color-scheme:
+ * dark` to match how the app's Tailwind classes already respond to
+ * system theme.
+ */
+@theme {
+  --color-card: oklch(0.984 0.003 247.858);
+  --color-card-foreground: oklch(0.129 0.042 264.695);
+  --color-border: oklch(0.929 0.013 255.508);
+  --color-muted-foreground: oklch(0.554 0.046 257.417);
+  --color-foreground: oklch(0.129 0.042 264.695);
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-card: oklch(0.278 0.033 256.848);
+    --color-card-foreground: oklch(0.984 0.003 247.858);
+    --color-border: oklch(0.372 0.044 257.287);
+    --color-muted-foreground: oklch(0.711 0.035 256.788);
+    --color-foreground: oklch(0.984 0.003 247.858);
+  }
+}

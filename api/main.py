@@ -192,6 +192,42 @@ class MetaResponse(BaseModel):
     started_at: str = Field(..., description="ISO 8601 UTC timestamp when the server process started.")
 
 
+class DiagnosticsResponse(BaseModel):
+    """Live runtime stats for the Diagnostics widget."""
+    chunk_count: int
+    dimension: int
+    chunks_by_sport: dict[str, int]
+    index_built_at: str | None = Field(
+        default=None,
+        description="ISO 8601 UTC mtime of the manifest.json; None if no index yet.",
+    )
+    gold_count: int = Field(..., description="Distinct qa_ids with a gold answer.")
+    feedback_count: int = Field(..., description="Distinct qa_ids with any feedback.")
+    source_file_count: int = Field(..., description="Files under rules/<sport>/ eligible for ingest.")
+
+
+class UsageCaps(BaseModel):
+    hourly_usd: float
+    daily_usd: float
+    weekly_usd: float
+    per_token_usd: float
+
+
+class UsageResponse(BaseModel):
+    """Current CostCounter snapshot for the Usage widget."""
+    hourly_usd: float
+    daily_usd: float
+    weekly_usd: float
+    caps: UsageCaps
+    caller_weekly_usd: float | None = Field(
+        default=None,
+        description="This caller's cumulative weekly spend. None until guest-auth lands and we can identify a caller.",
+    )
+    guardrails_enabled: bool = Field(
+        ..., description="Whether the caps are actually being enforced (else the panel is informational only)."
+    )
+
+
 @app.get("/meta", response_model=MetaResponse)
 def meta() -> MetaResponse:
     """Small metadata endpoint the frontend hits on load — sports + models in use."""
@@ -204,6 +240,80 @@ def meta() -> MetaResponse:
         build_sha=BUILD_INFO.sha,
         build_dirty=BUILD_INFO.dirty,
         started_at=BUILD_INFO.started_at,
+    )
+
+
+@app.get("/diagnostics", response_model=DiagnosticsResponse)
+def diagnostics_endpoint() -> DiagnosticsResponse:
+    """Live runtime stats for the Diagnostics widget.
+
+    Reads index metadata, chunk log rows, and the source directory
+    directly — no aggregation cache. Fast enough because the numbers
+    are all small.
+    """
+    from collections import Counter
+    from datetime import datetime, timezone
+    import json as _json
+    from scripts.build_index import discover_sources
+
+    index_path = settings.resolved_index_path
+    manifest_path = index_path / "manifest.json"
+
+    chunk_count = 0
+    dimension = 0
+    chunks_by_sport: dict[str, int] = {}
+    index_built_at: str | None = None
+    if manifest_path.exists():
+        manifest = _json.loads(manifest_path.read_text())
+        chunk_count = int(manifest.get("count", 0))
+        dimension = int(manifest.get("dimension", 0))
+        index_built_at = datetime.fromtimestamp(
+            manifest_path.stat().st_mtime, tz=timezone.utc
+        ).isoformat(timespec="seconds")
+
+        chunks_path = index_path / "chunks.jsonl"
+        if chunks_path.exists():
+            sports = Counter()
+            with chunks_path.open() as f:
+                for line in f:
+                    row = _json.loads(line)
+                    sports[row["sport"]] += 1
+            chunks_by_sport = dict(sports)
+
+    gold_count = len(read_latest_golds())
+    feedback_count = len(read_latest_feedback())
+    source_file_count = len(
+        discover_sources(settings.repo_root / "rules", apply_curation=False)
+    )
+
+    return DiagnosticsResponse(
+        chunk_count=chunk_count,
+        dimension=dimension,
+        chunks_by_sport=chunks_by_sport,
+        index_built_at=index_built_at,
+        gold_count=gold_count,
+        feedback_count=feedback_count,
+        source_file_count=source_file_count,
+    )
+
+
+@app.get("/usage", response_model=UsageResponse)
+def usage_endpoint() -> UsageResponse:
+    """Current spend snapshot from the llm-guardrails CostCounter.
+
+    Feeds the Usage floating widget. Uses snapshot_for(None) — the
+    privacy-boundary variant — so no per-token detail leaks to the
+    browser. When guest-auth lands, pass the caller's token to get a
+    per-guest caller_weekly_usd line.
+    """
+    snap = app_state.cost_counter.snapshot_for(None)
+    return UsageResponse(
+        hourly_usd=snap["hourly_usd"],
+        daily_usd=snap["daily_usd"],
+        weekly_usd=snap["weekly_usd"],
+        caps=UsageCaps(**snap["caps"]),
+        caller_weekly_usd=snap.get("caller_weekly_usd"),
+        guardrails_enabled=settings.guardrails_enabled,
     )
 
 
