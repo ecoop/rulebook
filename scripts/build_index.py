@@ -29,6 +29,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
+from rulebook import app_state
 from rulebook.chunking import Chunk, chunk_pages
 from rulebook.config import settings
 from rulebook.embeddings import get_embedder
@@ -36,6 +37,11 @@ from rulebook.ingest import extract_pages
 from rulebook.interaction_log import read_latest_curation, read_latest_source_curation
 from rulebook.pipeline import DEFAULT_SPORTS
 from rulebook.store import write_store
+
+# Guardrails singletons — needed so the embedding calls this script
+# makes can record_usage against the cost counter. Same initialize()
+# the API server calls.
+app_state.initialize(settings)
 
 
 @dataclass

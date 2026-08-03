@@ -28,6 +28,9 @@ data/index/
 # Q&A and feedback logs — user-generated data, not for commit
 data/logs/
 
+# llm-guardrails cost counter state — per-instance mutable state
+data/cost_counter.json
+
 # Node / Vite
 node_modules/
 web/dist/
