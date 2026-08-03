@@ -43,7 +43,7 @@ dependencies = [
     # extracted from a sibling app — see docs/integration.md in that repo.
     # [fastapi] extra pulls in the request-scoped IP-rate-limit dependency
     # factory. GCS/OTel extras deferred until we host.
-    "llm-guardrails[fastapi] @ git+https://github.com/ecoop/llm-guardrails@v0.1.0",
+    "llm-guardrails[fastapi] @ git+https://github.com/ecoop/llm-guardrails@v0.2.0",
 ]
 
 [dependency-groups]
