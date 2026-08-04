@@ -238,6 +238,10 @@ class UsageResponse(BaseModel):
     guardrails_enabled: bool = Field(
         ..., description="Whether the caps are actually being enforced (else the panel is informational only)."
     )
+    per_provider_usd: dict[str, float] = Field(
+        default_factory=dict,
+        description="In-memory per-provider USD totals since the server started. Resets on restart.",
+    )
 
 
 @app.get("/meta", response_model=MetaResponse)
@@ -326,6 +330,7 @@ def usage_endpoint() -> UsageResponse:
         caps=UsageCaps(**snap["caps"]),
         caller_weekly_usd=snap.get("caller_weekly_usd"),
         guardrails_enabled=settings.guardrails_enabled,
+        per_provider_usd=dict(app_state.provider_totals),
     )
 
 
