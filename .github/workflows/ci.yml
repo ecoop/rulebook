@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# rulebook has no test suite yet, so this workflow gates on what it can verify
+# cheaply across every supported interpreter: the full dependency tree resolves
+# and installs (the real Python-version risk — C-extension wheels like uvloop /
+# numpy / pydantic-core), the package imports, and every module byte-compiles.
+# Add a `pytest` step here once tests land.
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install (project + runtime deps)
+        run: uv sync --no-dev
+
+      - name: Import smoke test
+        run: uv run --no-sync python -c "import rulebook, sys; print('rulebook import OK on', sys.version.split()[0])"
+
+      - name: Byte-compile all modules
+        run: uv run --no-sync python -m compileall -q src/rulebook
