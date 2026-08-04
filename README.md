@@ -104,6 +104,39 @@ Adding soccer or basketball is a matter of:
 
 Nothing in the retrieval or generation layers is sport-specific — they read the `sport` field off the retrieved chunk.
 
+## Invite-gated demo mode (optional)
+
+For pre-production or invite-only previews, Rulebook can gate every request behind a per-recipient invite token. It uses the [`guest-auth`](https://github.com/ecoop/guest-auth) library — the same middleware Pitchcraft runs.
+
+**Off by default.** Local dev and any public deploy without the flag set behave exactly as before; no auth, no cookie, no redirects.
+
+To enable it:
+
+1. Mint a token — anything opaque works, e.g.:
+
+   ```bash
+   echo "tok_$(uuidgen | tr -d - | tr '[:upper:]' '[:lower:]')"
+   ```
+
+2. Set two env vars (in `.env` or your deployment's config):
+
+   ```
+   RULEBOOK_DEMO_MODE=true
+   RULEBOOK_INVITE_TOKENS={"tok_abc123def456": "eric-test"}
+   ```
+
+   The value is a JSON `{token: recipient-label}` map — the label is only used for logging.
+
+3. Share the invite link:
+
+   ```
+   https://your-deploy.example.com/?token=tok_abc123def456
+   ```
+
+   First visit exchanges the token for a `guest_session` cookie (httpOnly, Secure, SameSite=Lax, 30-day lifetime) and redirects to a clean URL. Every subsequent request authenticates via the cookie. Unknown tokens and cookie-less visits get a minimal invite-only 401 page.
+
+Revoking access means removing the entry from `RULEBOOK_INVITE_TOKENS` and redeploying — cookies aren't signed, so the middleware re-checks the allowlist on every request.
+
 ## What this project deliberately does _not_ do (yet)
 
 Kept out of v1 so each is a clear next lesson rather than a bundled complexity:
