@@ -44,6 +44,11 @@ dependencies = [
     # [fastapi] extra pulls in the request-scoped IP-rate-limit dependency
     # factory. GCS/OTel extras deferred until we host.
     "llm-guardrails[fastapi] @ git+https://github.com/ecoop/llm-guardrails@v0.2.0",
+
+    # Invite-token gate for pre-production demos. Opt-in via
+    # RULEBOOK_DEMO_MODE=true; a pure pass-through when off, so local
+    # dev is unaffected. Also extracted from a sibling app.
+    "guest-auth @ git+https://github.com/ecoop/guest-auth@v0.1.0",
 ]
 
 [dependency-groups]

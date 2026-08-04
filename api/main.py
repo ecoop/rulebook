@@ -22,15 +22,16 @@ from dataclasses import asdict
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from guest_auth import InviteAuthMiddleware
 from pydantic import BaseModel, Field
-
-from rulebook.build_info import BUILD_INFO
-from rulebook.config import settings
 
 # Wire the guardrails singletons BEFORE anything Depends()-related runs.
 # Rulebook has a single-file API so ordering inside this module is
 # sufficient — see rulebook/app_state.py for the multi-file case.
 from rulebook import app_state  # noqa: E402
+from rulebook.build_info import BUILD_INFO
+from rulebook.config import settings
+
 app_state.initialize(settings)
 
 from rulebook.interaction_log import (  # noqa: E402
@@ -58,6 +59,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Invite-token gate. Off by default (RULEBOOK_DEMO_MODE unset/false)
+# so local dev and any public deploy keep the current no-auth
+# behaviour — the middleware is a complete pass-through in that
+# case. When on, the settings object supplies both `demo_mode` and
+# `invite_tokens` via the GuestAuthConfig Protocol; attribute access
+# happens at request time so runtime mutations (tests, hot reload)
+# take effect on the live app. No welcome_html override — the
+# library's built-in "invite-only" fallback is fine for now; swap in
+# rendered markdown here if we ever want a real welcome page.
+app.add_middleware(InviteAuthMiddleware, config=settings)
 
 
 class AskRequest(BaseModel):
@@ -461,6 +473,7 @@ def admin_list_sources() -> AdminSourceListResponse:
     surfaced via the ``included`` field so the UI can render a toggle.
     """
     from datetime import datetime, timezone
+
     from scripts.build_index import discover_sources
 
     rules_root = settings.repo_root / "rules"

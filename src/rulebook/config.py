@@ -62,6 +62,27 @@ class Settings(BaseSettings):
     # FastAPI dependency. Only enforced when guardrails_enabled=True.
     rate_limit_rpm: int = 30
 
+    # --- Guest auth (guest-auth library) ----------------------------------
+    # Opt-in invite-token gate for pre-production demos. When demo_mode
+    # is False the middleware is a complete pass-through — local dev
+    # and any public deploy without an allowlist keep the current
+    # no-auth behaviour. Field names (demo_mode, invite_tokens) match
+    # the GuestAuthConfig Protocol so the Settings instance can be
+    # handed to InviteAuthMiddleware(config=...) directly.
+    demo_mode: bool = Field(
+        default=False,
+        validation_alias="RULEBOOK_DEMO_MODE",
+    )
+    # JSON map of {token: recipient-label}. Read at request time from
+    # this attribute, so tests can monkeypatch it on the live app.
+    # Mint tokens with any opaque generator (e.g. `uuidgen`) prefixed
+    # with `tok_` for readability, then set:
+    #   RULEBOOK_INVITE_TOKENS='{"tok_abc123": "eric-test"}'
+    invite_tokens: dict[str, str] = Field(
+        default_factory=dict,
+        validation_alias="RULEBOOK_INVITE_TOKENS",
+    )
+
     @property
     def repo_root(self) -> Path:
         # Anchor relative paths to the repo root, not the shell's cwd, so
