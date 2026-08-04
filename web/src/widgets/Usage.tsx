@@ -26,6 +26,7 @@ export interface UsageSnapshot {
   }
   caller_weekly_usd: number | null
   guardrails_enabled: boolean
+  per_provider_usd: Record<string, number>
 }
 
 function pct(n: number, d: number): number {
@@ -34,6 +35,17 @@ function pct(n: number, d: number): number {
 
 function money(n: number): string {
   return n < 0.01 ? '<$0.01' : `$${n.toFixed(2)}`
+}
+
+// Per-provider totals are often sub-cent for Voyage embeddings, so
+// two-decimal `money()` collapses everything to "<$0.01" and loses the
+// signal. This variant keeps four decimals in the sub-cent range so
+// $0.0001 and $0.006 render distinctly.
+function moneyPrecise(n: number): string {
+  if (n === 0) return '$0.00'
+  if (n < 0.0001) return '<$0.0001'
+  if (n < 0.01) return `$${n.toFixed(4)}`
+  return `$${n.toFixed(2)}`
 }
 
 export function UsageSummaryLine({ usage }: { usage: UsageSnapshot | null }) {
@@ -115,6 +127,27 @@ export function UsageBody({ usage }: { usage: UsageSnapshot | null }) {
         spent={usage.weekly_usd}
         cap={usage.caps.weekly_usd}
       />
+      {Object.keys(usage.per_provider_usd).length > 0 && (
+        <div className="space-y-0.5 border-t border-border pt-2 text-[11px]">
+          <div className="flex items-center gap-0.5 text-muted-foreground">
+            by provider
+            <Info
+              className="h-3 w-3 opacity-60"
+              aria-label="In-memory USD totals per provider since server start. Resets on restart."
+            >
+              <title>In-memory USD totals per provider since server start. Resets on restart.</title>
+            </Info>
+          </div>
+          {Object.entries(usage.per_provider_usd)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([provider, usd]) => (
+              <div key={provider} className="flex items-baseline justify-between pl-3">
+                <span className="text-muted-foreground">{provider}</span>
+                <span className="font-mono tabular-nums">{moneyPrecise(usd)}</span>
+              </div>
+            ))}
+        </div>
+      )}
       {!usage.guardrails_enabled && (
         <div
           className="text-[10px] text-amber-700"
