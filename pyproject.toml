@@ -3,7 +3,7 @@ name = "rulebook"
 version = "0.1.0"
 description = "RAG prototype for disc sports rules — ultimate and goaltimate — with a FastAPI + React frontend. Built as an instructional example of retrieval-augmented generation over structured documents."
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11"
 dependencies = [
     # Generation: Claude via Anthropic's official SDK.
     "anthropic>=0.40.0",

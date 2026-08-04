@@ -98,6 +98,7 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
     context = format_context(chunks)
     hooks = [
         WindowedCapHook(app_state.cost_counter),
+        app_state.provider_totals_hook,
         EventLogHook(enabled=settings.guardrails_enabled),
     ]
     resp, _usage = guarded_call(

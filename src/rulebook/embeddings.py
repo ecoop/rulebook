@@ -67,6 +67,7 @@ def _record_embed_usage(
         output_tokens=0,
         hooks=[
             WindowedCapHook(app_state.cost_counter),
+            app_state.provider_totals_hook,
             EventLogHook(enabled=settings.guardrails_enabled),
         ],
         tags={"stage": "embed", "input_type": input_type},
