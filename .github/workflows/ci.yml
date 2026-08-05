@@ -31,3 +31,28 @@ jobs:
 
       - name: Pytest
         run: uv run --no-sync pytest -q
+
+  # Frontend: install from the lockfile and run the production build, which is
+  # `tsc -b` (typecheck — would catch the missing vite-env.d.ts fixed in #3) +
+  # `vite build`. Kept separate from the Python matrix so a break in either
+  # surface is isolated.
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install (npm ci)
+        run: npm ci
+
+      - name: Build (tsc typecheck + vite build)
+        run: npm run build
