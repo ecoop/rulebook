@@ -6,11 +6,11 @@ on:
   pull_request:
     branches: [main]
 
-# rulebook has no test suite yet, so this workflow gates on what it can verify
-# cheaply across every supported interpreter: the full dependency tree resolves
-# and installs (the real Python-version risk — C-extension wheels like uvloop /
-# numpy / pydantic-core), the package imports, and every module byte-compiles.
-# Add a `pytest` step here once tests land.
+# Gates every supported interpreter on: the full dependency tree resolves and
+# installs (the real Python-version risk — C-extension wheels like uvloop /
+# numpy / pydantic-core), and the pytest suite passes. The suite's
+# import-everything guard (tests/test_imports.py) imports every module under
+# src/, api/, AND scripts/, so a broken/stale import anywhere fails here.
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,11 +26,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install (project + runtime deps)
-        run: uv sync --no-dev
+      - name: Install (project + test deps)
+        run: uv sync --no-dev --group test
 
-      - name: Import smoke test
-        run: uv run --no-sync python -c "import rulebook, sys; print('rulebook import OK on', sys.version.split()[0])"
-
-      - name: Byte-compile all modules
-        run: uv run --no-sync python -m compileall -q src/rulebook
+      - name: Pytest
+        run: uv run --no-sync pytest -q
