@@ -66,6 +66,11 @@ dev = [
     # Linter / formatter.
     "ruff>=0.7.0",
 ]
+# Kept separate from dev so CI installs pytest without the heavy notebook
+# stack (jupyter/ipykernel). CI runs: uv sync --no-dev --group test.
+test = [
+    "pytest>=8.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -86,3 +91,11 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]  # long lines are fine in comment-heavy teaching code
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--tb=short"
+# Only `rulebook` is an installed package; `api/` and `scripts/` are top-level
+# app dirs. Put the repo root (for the `api` package) and `scripts/` (loose
+# modules) on sys.path so the import-everything guard can reach them.
+pythonpath = [".", "scripts"]
