@@ -5,7 +5,7 @@ import {
   StackOriginReporter,
   type FloatingWidgetStackHandle,
   type WidgetDef,
-} from '@cooperic/floating-widgets'
+} from '@nobadeer/floating-widgets'
 
 import { UsageBody, UsageSummaryLine, type UsageSnapshot } from './widgets/Usage'
 import {
@@ -274,7 +274,7 @@ export default function App() {
 
   // Widget context — the bundle of live state passed to each widget's
   // header/render function. Rebuilt each render; the registry never
-  // closes over live state directly (see @cooperic/floating-widgets
+  // closes over live state directly (see @nobadeer/floating-widgets
   // README for why).
   const widgetCtx: WidgetCtx = { usage, diag }
 
