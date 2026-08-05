@@ -31,9 +31,9 @@ import sys
 from pathlib import Path
 
 from anthropic import Anthropic
-from llm_guardrails.counters import WindowedCapHook
-from llm_guardrails.events import EventLogHook
-from llm_guardrails.wrapper import guarded_call
+from llm_cost_governor.counters import WindowedCapHook
+from llm_cost_governor.events import EventLogHook
+from llm_cost_governor.wrapper import guarded_call
 
 from rulebook import app_state
 from rulebook.config import settings
