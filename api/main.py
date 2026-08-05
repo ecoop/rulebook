@@ -315,7 +315,7 @@ def diagnostics_endpoint() -> DiagnosticsResponse:
 
 @app.get("/usage", response_model=UsageResponse)
 def usage_endpoint() -> UsageResponse:
-    """Current spend snapshot from the llm-guardrails CostCounter.
+    """Current spend snapshot from the llm-cost-governor CostCounter.
 
     Feeds the Usage floating widget. Uses snapshot_for(None) — the
     privacy-boundary variant — so no per-token detail leaks to the
@@ -330,7 +330,7 @@ def usage_endpoint() -> UsageResponse:
         caps=UsageCaps(**snap["caps"]),
         caller_weekly_usd=snap.get("caller_weekly_usd"),
         guardrails_enabled=settings.guardrails_enabled,
-        per_provider_usd=dict(app_state.provider_totals),
+        per_provider_usd=(app_state.provider_totals.snapshot() if app_state.provider_totals else {}),
     )
 
 
