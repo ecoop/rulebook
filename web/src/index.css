@@ -3,7 +3,7 @@
 /*
  * shadcn-compatible design tokens.
  *
- * @cooperic/floating-widgets styles its panel chrome with these CSS
+ * @nobadeer/floating-widgets styles its panel chrome with these CSS
  * variables. The rest of the rulebook UI uses plain Tailwind utility
  * classes (bg-slate-*, text-slate-*, etc.) so most of the app is
  * unaffected — this section exists purely to let the widget package
