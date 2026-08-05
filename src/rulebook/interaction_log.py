@@ -24,11 +24,10 @@ RATIONALE
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
 from pathlib import Path
-from threading import Lock
 from typing import Any
+
+from jsonl_log import append_jsonl, read_latest, read_latest_list, utc_now_iso
 
 from .config import settings
 
@@ -69,23 +68,15 @@ GOLD_CURATION_SCHEMA_VERSION = 1
 #   v1  {path, included: bool, timestamp} (current)
 SOURCE_CURATION_SCHEMA_VERSION = 1
 
-# Serialize appends so concurrent requests can't interleave partial writes.
-# JSONL requires one complete object per line — a raced write would corrupt
-# the file for downstream readers. Uvicorn --reload runs one process by
-# default, so an in-process lock suffices; a real multi-worker deployment
-# would need file locking (fcntl.flock or a small append-service).
-_write_lock = Lock()
+# Append + last-row-wins reads come from the shared `jsonl-log` library
+# (jsonl_log.append_jsonl / read_latest / read_latest_list). It serializes
+# writes under an in-process lock — the same single-process semantics the
+# old local `_write_lock` gave; a real multi-worker deployment would still
+# need file locking (fcntl.flock or a small append-service).
 
 
 def _log_dir() -> Path:
     return settings.repo_root / "data" / "logs"
-
-
-def _append_jsonl(path: Path, obj: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    line = json.dumps(obj, ensure_ascii=False) + "\n"
-    with _write_lock, path.open("a", encoding="utf-8") as f:
-        f.write(line)
 
 
 def log_qa(
@@ -102,12 +93,12 @@ def log_qa(
     stop_reason: str,
 ) -> None:
     """Record one /ask interaction (question in, answer + chunks out)."""
-    _append_jsonl(
+    append_jsonl(
         _log_dir() / "qa_log.jsonl",
         {
             "v": QA_LOG_SCHEMA_VERSION,
             "qa_id": qa_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": utc_now_iso(timespec="auto", z=False),
             "question": question,
             "sport": sport,
             "k": k,
@@ -129,12 +120,12 @@ def log_gold(qa_id: str, *, question: str, gold_answer: str) -> None:
     so gold.jsonl is self-contained for downstream consumers (the index
     builder, a future admin UI, etc).
     """
-    _append_jsonl(
+    append_jsonl(
         _log_dir() / "gold.jsonl",
         {
             "v": GOLD_SCHEMA_VERSION,
             "qa_id": qa_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": utc_now_iso(timespec="auto", z=False),
             "question": question,
             "gold_answer": gold_answer,
         },
@@ -149,12 +140,12 @@ def log_gold_curation(qa_id: str, *, included: bool) -> None:
     as "included by default" so a freshly-authored gold flows into the
     index without an admin having to approve it first.
     """
-    _append_jsonl(
+    append_jsonl(
         _log_dir() / "gold_curation.jsonl",
         {
             "v": GOLD_CURATION_SCHEMA_VERSION,
             "qa_id": qa_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": utc_now_iso(timespec="auto", z=False),
             "included": included,
         },
     )
@@ -165,15 +156,7 @@ def read_latest_golds() -> list[dict[str, Any]]:
 
     Empty list if the log doesn't exist yet.
     """
-    path = _log_dir() / "gold.jsonl"
-    if not path.exists():
-        return []
-    latest: dict[str, dict] = {}
-    for line in path.read_text().splitlines():
-        if line.strip():
-            row = json.loads(line)
-            latest[row["qa_id"]] = row
-    return sorted(latest.values(), key=lambda r: r["timestamp"], reverse=True)
+    return read_latest_list(_log_dir() / "gold.jsonl", "qa_id", sort_desc="timestamp")
 
 
 def read_latest_curation() -> dict[str, bool]:
@@ -182,15 +165,8 @@ def read_latest_curation() -> dict[str, bool]:
     Absent qa_ids default to included=True at the call site — this
     function just reports what the log says, no defaulting.
     """
-    path = _log_dir() / "gold_curation.jsonl"
-    if not path.exists():
-        return {}
-    latest: dict[str, bool] = {}
-    for line in path.read_text().splitlines():
-        if line.strip():
-            row = json.loads(line)
-            latest[row["qa_id"]] = bool(row["included"])
-    return latest
+    latest = read_latest(_log_dir() / "gold_curation.jsonl", "qa_id")
+    return {qa_id: bool(row["included"]) for qa_id, row in latest.items()}
 
 
 def read_latest_feedback() -> list[dict[str, Any]]:
@@ -201,33 +177,20 @@ def read_latest_feedback() -> list[dict[str, Any]]:
     so we walk the file, keep last-write-wins per qa_id, and sort by
     timestamp. Empty list if the file doesn't exist yet.
     """
-    path = _log_dir() / "feedback.jsonl"
-    if not path.exists():
-        return []
-    latest: dict[str, dict] = {}
-    for line in path.read_text().splitlines():
-        if line.strip():
-            row = json.loads(line)
-            # Skip legacy v1 rows (rating is a string) — they were binary
-            # up/down test data and don't fit the tag/comment schema the
-            # digest UI expects.
-            if isinstance(row.get("rating"), str):
-                continue
-            latest[row["qa_id"]] = row
-    return sorted(latest.values(), key=lambda r: r["timestamp"], reverse=True)
+    # Skip legacy v1 rows (rating is a string) — they were binary up/down
+    # test data and don't fit the tag/comment schema the digest UI expects.
+    return read_latest_list(
+        _log_dir() / "feedback.jsonl",
+        "qa_id",
+        where=lambda r: not isinstance(r.get("rating"), str),
+        sort_desc="timestamp",
+    )
 
 
 def read_qa_questions() -> dict[str, str]:
     """Return {qa_id: question} from qa_log.jsonl. Empty if no log yet."""
-    path = _log_dir() / "qa_log.jsonl"
-    if not path.exists():
-        return {}
-    out: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        if line.strip():
-            row = json.loads(line)
-            out[row["qa_id"]] = row.get("question", "")
-    return out
+    latest = read_latest(_log_dir() / "qa_log.jsonl", "qa_id")
+    return {qa_id: row.get("question", "") for qa_id, row in latest.items()}
 
 
 def log_source_curation(source_path: str, *, included: bool) -> None:
@@ -237,12 +200,12 @@ def log_source_curation(source_path: str, *, included: bool) -> None:
     (e.g. ``rules/ultimate/strategy.md``). Same append-only semantics
     as gold curation: latest row per path wins.
     """
-    _append_jsonl(
+    append_jsonl(
         _log_dir() / "source_curation.jsonl",
         {
             "v": SOURCE_CURATION_SCHEMA_VERSION,
             "path": source_path,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": utc_now_iso(timespec="auto", z=False),
             "included": included,
         },
     )
@@ -253,15 +216,8 @@ def read_latest_source_curation() -> dict[str, bool]:
 
     Absent paths default to included=True at the call site.
     """
-    path = _log_dir() / "source_curation.jsonl"
-    if not path.exists():
-        return {}
-    latest: dict[str, bool] = {}
-    for line in path.read_text().splitlines():
-        if line.strip():
-            row = json.loads(line)
-            latest[row["path"]] = bool(row["included"])
-    return latest
+    latest = read_latest(_log_dir() / "source_curation.jsonl", "path")
+    return {path: bool(row["included"]) for path, row in latest.items()}
 
 
 def log_feedback(
@@ -282,12 +238,12 @@ def log_feedback(
     with no validation here so the vocabulary can evolve without a
     logfile migration.
     """
-    _append_jsonl(
+    append_jsonl(
         _log_dir() / "feedback.jsonl",
         {
             "v": FEEDBACK_SCHEMA_VERSION,
             "qa_id": qa_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": utc_now_iso(timespec="auto", z=False),
             "rating": rating,
             "tags": list(tags or []),
             "comment": comment or None,
