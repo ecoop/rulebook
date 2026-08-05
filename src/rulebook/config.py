@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # --- Storage -----------------------------------------------------------
     index_path: Path = Field(default=Path("./data/index"))
 
-    # --- Guardrails (llm-guardrails library) ------------------------------
+    # --- Guardrails (llm-cost-governor library) ---------------------------
     # Master gate. When False the CostCounter and IP rate limit are
     # constructed but disabled — no enforcement, no persistence. Local
     # dev leaves this off; hosted deployments flip it on.

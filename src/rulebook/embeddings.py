@@ -34,9 +34,9 @@ INPUT TYPE
 
 from typing import Literal, Protocol
 
-from llm_guardrails.counters import WindowedCapHook
-from llm_guardrails.events import EventLogHook
-from llm_guardrails.wrapper import record_usage
+from llm_cost_governor.counters import WindowedCapHook
+from llm_cost_governor.events import EventLogHook
+from llm_cost_governor.wrapper import record_usage
 
 from . import app_state
 from .config import settings

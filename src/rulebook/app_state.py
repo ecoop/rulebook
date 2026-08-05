@@ -1,8 +1,8 @@
-"""Singleton facade for llm-guardrails — see docs/integration.md in that repo.
+"""Singleton facade for llm-cost-governor — see docs/integration.md in that repo.
 
 Every consumer that needs the cost counter or the rate-limit dependency
 imports from THIS module (``from rulebook import app_state``), never
-from ``llm_guardrails.*`` directly. Constructed once at server start
+from ``llm_cost_governor.*`` directly. Constructed once at server start
 via ``initialize()``; all module-level names become non-None after
 that call.
 
@@ -29,43 +29,17 @@ FASTAPI INIT-ORDER GOTCHA
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 from fastapi import Request
 
-from llm_guardrails.counters import CostCounter
-from llm_guardrails.fastapi_ext import make_enforce_ip_rate_limit
-from llm_guardrails.ratelimit import IPRateLimiter
-from llm_guardrails.state import StateBackend, get_backend
+from llm_cost_governor.counters import CostCounter
+from llm_cost_governor.fastapi_ext import make_enforce_ip_rate_limit
+from llm_cost_governor.provider_totals import ProviderTotals, ProviderTotalsHook
+from llm_cost_governor.ratelimit import IPRateLimiter
+from llm_cost_governor.state import StateBackend, get_backend
 
 from .config import Settings
-
-
-class ProviderTotalsHook:
-    """Guardrails hook that maintains in-memory per-provider USD totals.
-
-    Sits alongside WindowedCapHook in each call site's hook chain.
-    Records ``usage.cost_usd`` against ``usage.provider`` after every
-    LLM call so the Usage widget can break spend out per provider
-    (anthropic vs voyage), which the shared CostCounter aggregates away.
-
-    Deliberately in-memory only — resets on process restart. If we want
-    persistence later, swap the impl to read from a persisted event log
-    (see the roadmap discussion in the "Voyage on the Usage widget"
-    exchange). The public shape (``totals: dict[str, float]``) stays
-    the same across that swap.
-    """
-
-    def __init__(self, totals: dict[str, float]):
-        self._totals = totals
-
-    def pre(self, ctx: Any) -> None:  # noqa: D401 — Hook protocol
-        return None
-
-    def post(self, ctx: Any, usage: Any) -> None:
-        provider = getattr(usage, "provider", None) or "unknown"
-        usd = float(getattr(usage, "cost_usd", 0.0) or 0.0)
-        self._totals[provider] = self._totals.get(provider, 0.0) + usd
 
 # Module-level singletons, populated by initialize().
 cost_counter: Optional[CostCounter] = None
@@ -73,17 +47,18 @@ ip_rate_limiter: Optional[IPRateLimiter] = None
 state_backend: Optional[StateBackend] = None
 _enforce_ip_rate_limit_impl: Optional[Callable[[Request], None]] = None
 
-# Per-provider running totals — mutated in place by ProviderTotalsHook
-# on every LLM call. Readers (e.g. the /usage endpoint) copy the dict
-# rather than holding the reference.
-provider_totals: dict[str, float] = {}
+# Per-provider running USD totals — the upstream ProviderTotals read-model,
+# accumulated by ProviderTotalsHook on every LLM call. In-memory / since-boot
+# (no backend, so it resets on restart). Readers (e.g. the /usage endpoint)
+# call .snapshot() for a copy rather than holding the reference.
+provider_totals: Optional[ProviderTotals] = None
 provider_totals_hook: Optional[ProviderTotalsHook] = None
 
 
 def initialize(settings: Settings) -> None:
     """Construct the guardrail singletons. Call once, before any router loads."""
     global cost_counter, ip_rate_limiter, state_backend, _enforce_ip_rate_limit_impl
-    global provider_totals_hook
+    global provider_totals, provider_totals_hook
 
     state_backend = get_backend(
         kind=settings.state_backend_kind,
@@ -109,6 +84,7 @@ def initialize(settings: Settings) -> None:
         enabled=settings.guardrails_enabled,
     )
 
+    provider_totals = ProviderTotals()  # in-memory, since-boot per-provider USD
     provider_totals_hook = ProviderTotalsHook(provider_totals)
 
 

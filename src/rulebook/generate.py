@@ -22,9 +22,9 @@ respond to — not in advance.
 from dataclasses import dataclass
 
 from anthropic import Anthropic
-from llm_guardrails.counters import WindowedCapHook
-from llm_guardrails.events import EventLogHook
-from llm_guardrails.wrapper import guarded_call
+from llm_cost_governor.counters import WindowedCapHook
+from llm_cost_governor.events import EventLogHook
+from llm_cost_governor.wrapper import guarded_call
 
 from . import app_state
 from .config import settings
@@ -89,7 +89,7 @@ def format_context(chunks: list[RetrievedChunk]) -> str:
 def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAnswer:
     """Call Claude with the retrieved chunks and return the answer + usage.
 
-    The call goes through llm-guardrails' ``guarded_call`` so cost caps
+    The call goes through llm-cost-governor's ``guarded_call`` so cost caps
     and the event log fire uniformly. ``raise_on_truncation=False``
     keeps our existing behavior of returning the truncated text and
     surfacing ``stop_reason`` to the UI instead of raising.
