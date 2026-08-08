@@ -22,7 +22,7 @@ from dataclasses import asdict
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from guest_auth import InviteAuthMiddleware
+from guest_auth import InviteAuthMiddleware, get_current_guest
 from pydantic import BaseModel, Field
 
 # Wire the guardrails singletons BEFORE anything Depends()-related runs.
@@ -233,7 +233,7 @@ class UsageResponse(BaseModel):
     caps: UsageCaps
     caller_weekly_usd: float | None = Field(
         default=None,
-        description="This caller's cumulative weekly spend. None until guest-auth lands and we can identify a caller.",
+        description="This caller's cumulative weekly spend against per_token_usd. Populated only when guest-auth identifies a caller (demo_mode=true + valid invite cookie); None otherwise.",
     )
     guardrails_enabled: bool = Field(
         ..., description="Whether the caps are actually being enforced (else the panel is informational only)."
@@ -241,6 +241,10 @@ class UsageResponse(BaseModel):
     per_provider_usd: dict[str, float] = Field(
         default_factory=dict,
         description="In-memory per-provider USD totals since the server started. Resets on restart.",
+    )
+    guest_recipient: str | None = Field(
+        default=None,
+        description="Human-readable label for the current invite token, if any. Powers the Demo widget's 'Signed in as ...' line.",
     )
 
 
@@ -317,12 +321,15 @@ def diagnostics_endpoint() -> DiagnosticsResponse:
 def usage_endpoint() -> UsageResponse:
     """Current spend snapshot from the llm-cost-governor CostCounter.
 
-    Feeds the Usage floating widget. Uses snapshot_for(None) — the
-    privacy-boundary variant — so no per-token detail leaks to the
-    browser. When guest-auth lands, pass the caller's token to get a
-    per-guest caller_weekly_usd line.
+    Feeds the Usage floating widget. Passes the current guest's token
+    (when demo_mode is on and the caller is identified) to
+    snapshot_for(), so caller_weekly_usd populates against the
+    per-guest weekly cap. Outside demo_mode / for unidentified
+    callers, token is None and only the global windows are returned —
+    same privacy boundary as before (no per-token detail leaks).
     """
-    snap = app_state.cost_counter.snapshot_for(None)
+    guest = get_current_guest()
+    snap = app_state.cost_counter.snapshot_for(guest.token if guest else None)
     return UsageResponse(
         hourly_usd=snap["hourly_usd"],
         daily_usd=snap["daily_usd"],
@@ -331,6 +338,7 @@ def usage_endpoint() -> UsageResponse:
         caller_weekly_usd=snap.get("caller_weekly_usd"),
         guardrails_enabled=settings.guardrails_enabled,
         per_provider_usd=(app_state.provider_totals.snapshot() if app_state.provider_totals else {}),
+        guest_recipient=(guest.recipient if guest else None),
     )
 
 
