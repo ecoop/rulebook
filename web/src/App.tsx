@@ -298,8 +298,8 @@ export default function App() {
       {
         id: 'demo',
         defaultCollapsed: true,
-        header: () => <DemoSummaryLine />,
-        render: () => <DemoBody />,
+        header: (c) => <DemoSummaryLine usage={c.usage} />,
+        render: (c) => <DemoBody usage={c.usage} />,
       },
     ],
     [],
