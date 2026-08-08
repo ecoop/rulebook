@@ -66,7 +66,7 @@ def _record_embed_usage(
         input_tokens=tokens,
         output_tokens=0,
         hooks=[
-            WindowedCapHook(app_state.cost_counter),
+            WindowedCapHook(app_state.cost_counter, identity_provider=app_state.current_guest_token),
             app_state.provider_totals_hook,
             EventLogHook(enabled=settings.guardrails_enabled),
         ],
