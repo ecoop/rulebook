@@ -1,0 +1,50 @@
+# Copyright (c) 2026 Eric Cooper.
+#
+# Keep the container image small and free of local-only state / secrets.
+# Anything not needed at runtime should be listed here so the COPY in the
+# Dockerfile's runtime stage doesn't drag it in.
+
+# Secrets — never ship keys.
+.env
+.env.*
+
+# Local Python state.
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Git history — excluded so the image stays small. build_info.py reads
+# RULEBOOK_GIT_SHA / RULEBOOK_BUILD_NUM (passed via --build-arg) instead
+# of shelling out to git at runtime.
+.git/
+.gitignore
+.github/
+
+# Frontend build artifacts — the multi-stage build produces web/dist/
+# inside the image; whatever's on the host is irrelevant.
+node_modules/
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Local runtime state — cost counter JSON, JSONL logs, prebuilt index.
+# The container starts fresh; state comes from configured backends.
+data/
+
+# Worktrees for concurrent branch work.
+.claude/worktrees/
+
+# IDE / OS noise.
+.DS_Store
+.vscode/
+.idea/
+
+# Docs / rules — rules/*.pdf must ride along for index rebuilds.
+# The rules/ dir is source content, not local-only state; keep it.
+
+# Notebooks — instructional but not runtime.
+notebooks/
