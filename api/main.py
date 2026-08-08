@@ -370,6 +370,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
 
     # Persist the full interaction so we can later mine downvoted answers
     # for corrections, upvoted ones for a "greatest hits" corpus, etc.
+    guest = get_current_guest()
     log_qa(
         qa_id,
         question=result.question,
@@ -381,6 +382,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
         output_tokens=result.output_tokens,
         model=settings.claude_model,
         stop_reason=result.stop_reason,
+        author=(guest.recipient if guest else None),
     )
 
     return AskResponse(
@@ -404,7 +406,14 @@ def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     log is a data source to be joined and filtered, not a database with
     referential integrity to enforce.
     """
-    log_feedback(req.qa_id, rating=req.rating, comment=req.comment, tags=req.tags)
+    guest = get_current_guest()
+    log_feedback(
+        req.qa_id,
+        rating=req.rating,
+        comment=req.comment,
+        tags=req.tags,
+        author=(guest.recipient if guest else None),
+    )
     return FeedbackResponse()
 
 
@@ -417,7 +426,13 @@ def gold_endpoint(req: GoldRequest) -> GoldResponse:
     markdown headings) or as a shared/all-sports chunk if the answer
     has no headings.
     """
-    log_gold(req.qa_id, question=req.question, gold_answer=req.gold_answer)
+    guest = get_current_guest()
+    log_gold(
+        req.qa_id,
+        question=req.question,
+        gold_answer=req.gold_answer,
+        author=(guest.recipient if guest else None),
+    )
     return GoldResponse()
 
 
