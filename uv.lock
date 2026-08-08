@@ -779,10 +779,14 @@ wheels = [
 
 [[package]]
 name = "guest-auth"
-version = "0.1.0"
-source = { git = "https://github.com/ecoop/guest-auth?rev=v0.1.0#cfb85758f03695f4bc84cbc37603ca069ee80a7c" }
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "starlette" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/56/ba/5dcd15b90e700927a2ace02da8c9843aa29b511831503681f2a490cb2a5f/guest_auth-0.1.1.tar.gz", hash = "sha256:7d5b3f34d55735b617b6b4039fe91cfd119ec612c426b50b2d4ee8ed4b3203f5", size = 16951, upload-time = "2026-08-07T13:05:40.902Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b1/ae/6624cf5a71374f27fe10dbd4eb5a3d7a0a89a4db273e6b469f7fee535622/guest_auth-0.1.1-py3-none-any.whl", hash = "sha256:7c4517cdbdcf5bf79e36ea1a60044ba88969dd695b82797578ae1675636dddb6", size = 12942, upload-time = "2026-08-07T13:05:39.661Z" },
 ]
 
 [[package]]
@@ -1135,11 +1139,15 @@ wheels = [
 
 [[package]]
 name = "jsonl-log"
-version = "0.1.0"
-source = { git = "https://github.com/ecoop/jsonl-log?rev=v0.1.0#2e1b67552600671122e58617aa41616ebb569534" }
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "python-ulid" },
     { name = "typing-extensions", marker = "python_full_version < '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2b/3c/9016e0f9bae55aa573b0012ea3dd93c210432e260af53f0b215ef82081c2/jsonl_log-0.1.1.tar.gz", hash = "sha256:794b8005042f12132a7a2ad7bf8defa099f5f6c5b80f85cfb5e2352f354982d1", size = 13236, upload-time = "2026-08-07T13:10:50.433Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/db/68/343cce613717f38e4655e89da5d28ac9ea33a9a5f20f2cac75d853c46077/jsonl_log-0.1.1-py3-none-any.whl", hash = "sha256:cbd9c153bbfbf9ec185110d6a0f76148edda073aaf7cf50f947a08df850a6f2d", size = 9298, upload-time = "2026-08-07T13:10:49.216Z" },
 ]
 
 [[package]]
@@ -2976,8 +2984,8 @@ test = [
 requires-dist = [
     { name = "anthropic", specifier = ">=0.40.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "guest-auth", git = "https://github.com/ecoop/guest-auth?rev=v0.1.0" },
-    { name = "jsonl-log", git = "https://github.com/ecoop/jsonl-log?rev=v0.1.0" },
+    { name = "guest-auth", specifier = ">=0.1.1" },
+    { name = "jsonl-log", specifier = ">=0.1.1" },
     { name = "llm-cost-governor", extras = ["fastapi"], specifier = ">=0.3.3" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "openai", specifier = ">=1.55.0" },

@@ -33,6 +33,7 @@ from typing import Callable, Optional
 
 from fastapi import Request
 
+from guest_auth import get_current_guest
 from llm_cost_governor.counters import CostCounter
 from llm_cost_governor.fastapi_ext import make_enforce_ip_rate_limit
 from llm_cost_governor.provider_totals import ProviderTotals, ProviderTotalsHook
@@ -53,6 +54,19 @@ _enforce_ip_rate_limit_impl: Optional[Callable[[Request], None]] = None
 # call .snapshot() for a copy rather than holding the reference.
 provider_totals: Optional[ProviderTotals] = None
 provider_totals_hook: Optional[ProviderTotalsHook] = None
+
+
+def current_guest_token() -> str | None:
+    """Return the invite token of the current request's guest, or None.
+
+    Passed as ``identity_provider`` to WindowedCapHook so per-guest cost
+    caps (``cap_per_token_usd``) attribute spend to the specific invite.
+    Returns None outside a request context or when demo_mode is off,
+    which is the "no per-guest attribution" fallback the counter already
+    handles cleanly.
+    """
+    guest = get_current_guest()
+    return guest.token if guest is not None else None
 
 
 def initialize(settings: Settings) -> None:
