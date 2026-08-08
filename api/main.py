@@ -200,6 +200,7 @@ class MetaResponse(BaseModel):
     embedding_model: str
     claude_model: str
     build_sha: str = Field(..., description="Short git SHA at server start.")
+    build_num: str = Field(..., description="Monotonic commit count (rev-list --count HEAD); '?' if unavailable.")
     build_dirty: bool = Field(..., description="True if the working tree had uncommitted changes at start.")
     started_at: str = Field(..., description="ISO 8601 UTC timestamp when the server process started.")
 
@@ -258,6 +259,7 @@ def meta() -> MetaResponse:
         embedding_model=settings.embedding_model,
         claude_model=settings.claude_model,
         build_sha=BUILD_INFO.sha,
+        build_num=BUILD_INFO.build_num,
         build_dirty=BUILD_INFO.dirty,
         started_at=BUILD_INFO.started_at,
     )
@@ -563,3 +565,22 @@ def admin_rebuild_index() -> RebuildIndexResponse:
         stdout_tail=_tail(proc.stdout),
         stderr_tail=_tail(proc.stderr) if proc.returncode != 0 else "",
     )
+
+
+# ── Web bundle (production only) ──────────────────────────────────────────────
+# Mount LAST so all API routes take precedence. Vite dev serves the frontend
+# itself and proxies /ask etc. back to this server; in that mode web/dist/
+# doesn't exist and this mount is skipped silently. In the container, the
+# multi-stage build produces web/dist/ and this mount hands its files to
+# any non-API GET request. html=True serves index.html at the mount root.
+#
+# CWD-relative rather than settings.repo_root — an installed (non-editable)
+# package resolves .repo_root to the site-packages ancestor, not the repo.
+# Both `uv run` in dev and the container's WORKDIR=/app have web/dist
+# under CWD, so this works in both modes.
+from pathlib import Path  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+_web_dist = Path("web/dist").resolve()
+if _web_dist.is_dir():
+    app.mount("/", StaticFiles(directory=_web_dist, html=True), name="web")
