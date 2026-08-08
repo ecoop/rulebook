@@ -40,20 +40,23 @@ from .config import settings
 # History (see feedback.jsonl.pre-migration-* backups):
 #   v1  binary rating: {"rating": "up" | "down"}
 #   v2  1-5 int rating + optional comment
-#   v3  v2 + optional `tags` list (current)
-FEEDBACK_SCHEMA_VERSION = 3
+#   v3  v2 + optional `tags` list
+#   v4  v3 + optional `author` (guest-auth recipient label; null before adoption)
+FEEDBACK_SCHEMA_VERSION = 4
 
 # QA log — one row per /ask call.
 #   v1  {qa_id, timestamp, question, sport, k, answer, chunks, input_tokens,
 #        output_tokens, model}
 #   v2  v1 + stop_reason from Anthropic ("end_turn", "max_tokens", ...)
-#        so historical truncations are recoverable from the log. (current)
-QA_LOG_SCHEMA_VERSION = 2
+#        so historical truncations are recoverable from the log.
+#   v3  v2 + optional `author` (guest-auth recipient label; null before adoption)
+QA_LOG_SCHEMA_VERSION = 3
 
 # Gold answers — user-authored canonical answers, indexed as retrievable
 # chunks on the next rebuild so future similar questions surface them.
-#   v1  {qa_id, timestamp, question, gold_answer} (current)
-GOLD_SCHEMA_VERSION = 1
+#   v1  {qa_id, timestamp, question, gold_answer}
+#   v2  v1 + optional `author` (guest-auth recipient label; null before adoption)
+GOLD_SCHEMA_VERSION = 2
 
 # Gold curation — admin decisions about whether a given gold should be
 # included in the next index rebuild. Kept SEPARATE from gold.jsonl so
@@ -91,6 +94,7 @@ def log_qa(
     output_tokens: int,
     model: str,
     stop_reason: str,
+    author: str | None = None,
 ) -> None:
     """Record one /ask interaction (question in, answer + chunks out)."""
     append_jsonl(
@@ -108,11 +112,18 @@ def log_qa(
             "output_tokens": output_tokens,
             "model": model,
             "stop_reason": stop_reason,
+            "author": author,
         },
     )
 
 
-def log_gold(qa_id: str, *, question: str, gold_answer: str) -> None:
+def log_gold(
+    qa_id: str,
+    *,
+    question: str,
+    gold_answer: str,
+    author: str | None = None,
+) -> None:
     """Record a user-authored gold (canonical) answer for a qa_id.
 
     Same append-only semantics as feedback: multiple rows per qa_id are
@@ -128,6 +139,7 @@ def log_gold(qa_id: str, *, question: str, gold_answer: str) -> None:
             "timestamp": utc_now_iso(timespec="auto", z=False),
             "question": question,
             "gold_answer": gold_answer,
+            "author": author,
         },
     )
 
@@ -226,6 +238,7 @@ def log_feedback(
     rating: int,
     comment: str | None = None,
     tags: list[str] | None = None,
+    author: str | None = None,
 ) -> None:
     """Record a 1-5 rating, issue tags, and an optional note.
 
@@ -247,5 +260,6 @@ def log_feedback(
             "rating": rating,
             "tags": list(tags or []),
             "comment": comment or None,
+            "author": author,
         },
     )

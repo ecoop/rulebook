@@ -27,6 +27,7 @@ export interface UsageSnapshot {
   caller_weekly_usd: number | null
   guardrails_enabled: boolean
   per_provider_usd: Record<string, number>
+  guest_recipient: string | null
 }
 
 function pct(n: number, d: number): number {
