@@ -31,8 +31,14 @@ from pydantic import BaseModel, Field
 from rulebook import app_state  # noqa: E402
 from rulebook.build_info import BUILD_INFO
 from rulebook.config import settings
+from rulebook.index_sync import sync_index_from_gcs
 
 app_state.initialize(settings)
+
+# Hosted (gcs) deploys don't ship the index in the image and can't write
+# under repo_root; pull it into the writable INDEX_PATH before any request.
+# No-op in local dev (state_backend_kind="local"); best-effort otherwise.
+sync_index_from_gcs()
 
 from rulebook.interaction_log import (  # noqa: E402
     log_feedback,

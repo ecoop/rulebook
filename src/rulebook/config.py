@@ -37,7 +37,22 @@ class Settings(BaseSettings):
     claude_model: str = "claude-sonnet-5"
 
     # --- Storage -----------------------------------------------------------
+    # Where the vector index lives on the local filesystem. Local dev leaves
+    # this relative (resolved under repo_root); a hosted container sets an
+    # absolute INDEX_PATH (e.g. /tmp/rulebook/index) that index_sync.py
+    # populates from GCS at startup — repo_root is unwritable there.
     index_path: Path = Field(default=Path("./data/index"))
+
+    # Writable root for app-owned mutable scratch (cost counter JSON when
+    # local, JSONL logs). Defaults to <repo>/data for dev. Hosted deploys
+    # point RULEBOOK_DATA_DIR at a writable location (e.g. /tmp/rulebook)
+    # because the installed-package repo_root resolves into an unwritable
+    # site-packages ancestor. Durable state (cost counter) still routes
+    # through the GCS StateBackend; only transient scratch lives here.
+    data_root: Path | None = Field(
+        default=None,
+        validation_alias="RULEBOOK_DATA_DIR",
+    )
 
     # --- Guardrails (llm-cost-governor library) ---------------------------
     # Master gate. When False the CostCounter and IP rate limit are
@@ -98,10 +113,19 @@ class Settings(BaseSettings):
     def data_dir(self) -> Path:
         """Root of app-owned mutable state — cost counter JSON, JSONL logs, etc.
 
-        Currently a subdir of the repo, matching how the rest of the app
-        already writes to ``data/``. When we host, this moves to a
-        container-mounted volume or a GCS bucket via a StateBackend.
+        Defaults to a subdir of the repo, matching how the rest of the app
+        already writes to ``data/`` in local dev. Hosted deploys override via
+        RULEBOOK_DATA_DIR (``data_root``) to a writable path, because the
+        installed-package ``repo_root`` resolves to an unwritable
+        site-packages ancestor. Durable state routes through the GCS
+        StateBackend; this is scratch.
         """
+        if self.data_root is not None:
+            return (
+                self.data_root
+                if self.data_root.is_absolute()
+                else self.repo_root / self.data_root
+            )
         return self.repo_root / "data"
 
 
