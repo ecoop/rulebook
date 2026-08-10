@@ -79,6 +79,7 @@ interface Meta {
   embedding_model: string
   claude_model: string
   build_sha: string
+  build_num?: string
   build_dirty: boolean
   started_at: string
 }
@@ -309,14 +310,51 @@ export default function App() {
     <LayoutProvider>
       <StackOriginReporter headerRef={headerRef} />
       <div className="min-h-screen bg-slate-50 text-slate-900">
-        <header ref={headerRef} className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-4xl px-6 py-4">
-          <h1 className="text-xl font-semibold tracking-tight">Rulebook</h1>
-          <p className="text-sm text-slate-500">
-            Ask about the rules of ultimate and goaltimate. Answers cite the actual rule numbers.
-          </p>
-        </div>
-      </header>
+        <header ref={headerRef} className="border-b border-border bg-card">
+          <div className="mx-auto max-w-4xl px-6 py-4">
+            <h1 className="text-xl font-medium">Rulebook</h1>
+            <p className="text-sm text-muted-foreground">
+              Ask about the rules of ultimate and goaltimate. Answers cite the actual rule numbers.
+            </p>
+            {meta && (
+              <p className="text-sm text-muted-foreground">
+                build{' '}
+                <span className="opacity-70">
+                  {meta.build_num && `${meta.build_num} (`}
+                  <span
+                    className="font-mono"
+                    title={
+                      meta.build_dirty
+                        ? 'Uncommitted changes were present at server start'
+                        : `Commit ${meta.build_sha}`
+                    }
+                  >
+                    {meta.build_sha}
+                    {meta.build_dirty && '*'}
+                  </span>
+                  {meta.build_num && ')'}
+                  {' · started '}
+                  {formatStartedAt(meta.started_at)}
+                </span>
+                {import.meta.env.DEV && (
+                  <span
+                    className="ml-1.5 inline-flex items-center rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 ring-1 ring-inset ring-amber-500/30 dark:bg-amber-950/60 dark:text-amber-200"
+                    title="Vite dev server is running with HMR — the frontend may not match the reported build SHA"
+                  >
+                    dev
+                  </span>
+                )}
+              </p>
+            )}
+            {usage?.guest_recipient && (
+              <p className="text-sm text-muted-foreground">
+                Demo
+                <span className="text-muted-foreground/70"> · </span>
+                <span className="font-medium text-foreground">{usage.guest_recipient}</span>
+              </p>
+            )}
+          </div>
+        </header>
 
       <main className="mx-auto max-w-4xl space-y-6 px-6 py-8 lg:pr-[19rem]">
         <form onSubmit={submit} className="space-y-3">
@@ -564,31 +602,11 @@ export default function App() {
       </main>
 
       {meta && (
-        <footer className="mx-auto max-w-4xl px-6 py-4 text-xs text-slate-400">
+        <footer className="mx-auto max-w-4xl px-6 py-4 text-xs text-muted-foreground">
           embeddings: {meta.embedding_provider}/{meta.embedding_model} · gen:{' '}
-          {meta.claude_model} · build{' '}
-          <span
-            className="font-mono"
-            title={
-              meta.build_dirty
-                ? 'Uncommitted changes were present at server start'
-                : `Commit ${meta.build_sha}`
-            }
-          >
-            {meta.build_sha}
-            {meta.build_dirty && '*'}
-          </span>{' '}
-          · started {formatStartedAt(meta.started_at)}
-          {import.meta.env.DEV && (
-            <span
-              className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800"
-              title="Vite dev server is running with HMR — the frontend may not match the reported build SHA"
-            >
-              dev
-            </span>
-          )}
-          <span className="mx-2 text-slate-300">·</span>
-          <a href="#/admin" className="text-slate-500 hover:text-blue-600 hover:underline">
+          {meta.claude_model}
+          <span className="mx-2 opacity-50">·</span>
+          <a href="#/admin" className="hover:text-foreground hover:underline">
             admin
           </a>
         </footer>
