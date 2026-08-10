@@ -311,7 +311,7 @@ def diagnostics_endpoint() -> DiagnosticsResponse:
     gold_count = len(read_latest_golds())
     feedback_count = len(read_latest_feedback())
     source_file_count = len(
-        discover_sources(settings.repo_root / "rules", apply_curation=False)
+        discover_sources(settings.rules_dir, apply_curation=False)
     )
 
     return DiagnosticsResponse(
@@ -512,12 +512,14 @@ def admin_list_sources() -> AdminSourceListResponse:
 
     from scripts.build_index import discover_sources
 
-    rules_root = settings.repo_root / "rules"
+    rules_root = settings.rules_dir
     curation = read_latest_source_curation()
 
     rows: list[AdminSourceRow] = []
     for src in discover_sources(rules_root, apply_curation=False):
-        rel = src.path.relative_to(settings.repo_root).as_posix()
+        # Identity is "rules/<sport>/<file>" — kept stable (independent of
+        # where rules_dir resolves) so source-curation keys keep matching.
+        rel = (Path("rules") / src.path.relative_to(rules_root)).as_posix()
         st = src.path.stat()
         rows.append(
             AdminSourceRow(

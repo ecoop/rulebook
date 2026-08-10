@@ -110,6 +110,19 @@ class Settings(BaseSettings):
         return p if p.is_absolute() else self.repo_root / p
 
     @property
+    def rules_dir(self) -> Path:
+        """Source rulebooks (rules/<sport>/…), read by diagnostics + admin.
+
+        ``repo_root/rules`` in local dev. In an installed-package container
+        ``repo_root`` points into an unwritable site-packages ancestor with
+        no ``rules/``; the image ships the sources under ``WORKDIR=/app``,
+        so fall back to the CWD-relative ``rules/`` — same trick main.py
+        uses for ``web/dist``.
+        """
+        candidate = self.repo_root / "rules"
+        return candidate if candidate.is_dir() else Path("rules").resolve()
+
+    @property
     def data_dir(self) -> Path:
         """Root of app-owned mutable state — cost counter JSON, JSONL logs, etc.
 
