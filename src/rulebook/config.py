@@ -81,21 +81,30 @@ class Settings(BaseSettings):
     # Opt-in invite-token gate for pre-production demos. When demo_mode
     # is False the middleware is a complete pass-through — local dev
     # and any public deploy without an allowlist keep the current
-    # no-auth behaviour. Field names (demo_mode, invite_tokens) match
-    # the GuestAuthConfig Protocol so the Settings instance can be
-    # handed to InviteAuthMiddleware(config=...) directly.
+    # no-auth behaviour. `demo_mode` + the `invite_tokens` property match
+    # the GuestAuthConfig Protocol so the Settings instance can be handed
+    # to InviteAuthMiddleware(config=...) directly.
     demo_mode: bool = Field(
         default=False,
         validation_alias="RULEBOOK_DEMO_MODE",
     )
-    # JSON map of {token: recipient-label}. Read at request time from
-    # this attribute, so tests can monkeypatch it on the live app.
-    # Mint tokens with any opaque generator (e.g. `uuidgen`) prefixed
-    # with `tok_` for readability, then set:
+    # Static seed of {token: recipient-label}. The historical env var —
+    # still the whole allowlist in local dev. Mint tokens with any opaque
+    # generator (e.g. `uuidgen`) prefixed with `tok_`, then set:
     #   RULEBOOK_INVITE_TOKENS='{"tok_abc123": "eric-test"}'
-    invite_tokens: dict[str, str] = Field(
+    # A hosted (gcs) deploy layers a mutable GCS object OVER this seed —
+    # see the `invite_tokens` property and tokens.py.
+    invite_tokens_seed: dict[str, str] = Field(
         default_factory=dict,
         validation_alias="RULEBOOK_INVITE_TOKENS",
+    )
+    # Name of the GCS object (in gcs_state_bucket) holding the mutable
+    # allowlist. Read per request with a short TTL when state_backend_kind
+    # is "gcs"; ignored otherwise. Adding a user = rewriting this object,
+    # no redeploy (see scripts/invite_tokens.py).
+    invite_tokens_object: str = Field(
+        default="invite_tokens.json",
+        validation_alias="RULEBOOK_INVITE_TOKENS_OBJECT",
     )
 
     @property
@@ -108,6 +117,24 @@ class Settings(BaseSettings):
     def resolved_index_path(self) -> Path:
         p = self.index_path
         return p if p.is_absolute() else self.repo_root / p
+
+    @property
+    def invite_tokens(self) -> dict[str, str]:
+        """Effective {token: recipient-label} allowlist for guest-auth.
+
+        Local dev: just ``invite_tokens_seed``. Hosted (gcs): the seed with
+        the mutable GCS object merged over it, refreshed on a short TTL so a
+        newly-added user works within seconds and no redeploy is needed.
+        Read per request by InviteAuthMiddleware (only when demo_mode is on).
+        """
+        from .tokens import get_invite_tokens
+
+        return get_invite_tokens(
+            kind=self.state_backend_kind,
+            bucket=self.gcs_state_bucket,
+            object_name=self.invite_tokens_object,
+            seed=self.invite_tokens_seed,
+        )
 
     @property
     def rules_dir(self) -> Path:
