@@ -25,16 +25,29 @@ That's fine for a small trusted circle. It stops being fine when:
 
 ## Roles
 
-Monotonic ladder — each role gets everything the one below has, plus one thing more.
+Monotonic ladder — each role gets everything the one below has, plus one thing more (except `suspended`, which is a floor with nothing).
 
 | Role | Ask | Rate (1–5) | Tags / Notes | Gold answer | Admin panel | Change roles |
 |---|---|---|---|---|---|---|
+| `suspended` | | | | | | |
 | `novice` | ✓ | ✓ | | | | |
 | `evaluator` | ✓ | ✓ | ✓ | ✓ | | |
 | `admin` | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | `superuser` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 Monotonic ordering matters — `require_role(min)` becomes a single comparison rather than a set-membership check.
+
+### `suspended` — revocation as a role
+
+Suspension is a role, not a separate mechanism. Setting a user to `suspended` gates every endpoint (including `/me`), returning 403. Their `guest-auth` cookie stays technically valid — rulebook's role check is what bounces them.
+
+Advantages of modeling this as a role:
+
+- Reversible with a normal `POST /admin/roles` call — no separate suspend / unsuspend endpoints.
+- Historical log rows keep their `author` intact for audit.
+- Live: no redeploy needed to revoke access, and no redeploy needed to restore it.
+
+Full deletion (removing a token from the allowlist so the cookie stops resolving at all) requires a redeploy — `RULEBOOK_INVITE_TOKENS` is an env var. Deferred as a "revisit if it becomes real" concern; suspension covers 90% of practical revocation needs. See _Non-goals_ below.
 
 ### Rationale for the split
 
@@ -73,12 +86,40 @@ At least one token in `RULEBOOK_INITIAL_ROLES` must be `superuser`. Documented a
 Three endpoints under `/admin/roles`, all `superuser`-gated:
 
 - `GET /admin/roles` — current role assignments (seed + overrides merged).
-- `POST /admin/roles` — body: `{token, role}`. Appends to `roles.jsonl`.
-- `DELETE /admin/roles/{token}` — appends a "reset-to-seed" marker; next resolve falls back to the seed value (or novice if not seeded).
+- `POST /admin/roles` — body: `{token, role, note?}`. Appends to `roles.jsonl`. `role` accepts any of the five tiers (`suspended`, `novice`, `evaluator`, `admin`, `superuser`).
+- `POST /admin/roles/{token}/reset` — appends a reset marker; next resolve falls back to the env-var seed value (or `novice` if not seeded). Nothing is physically deleted — the log stays append-only. The historical override rows remain inspectable via `GET /admin/roles/history` (see below).
 
 Plus one public-ish endpoint any authenticated user hits:
 
 - `GET /me` — returns `{recipient, role}` for the current guest. Powers frontend UI gating.
+
+Optional (nice-to-have, not required for v1):
+
+- `GET /admin/roles/history?token=…` — full append-only history of role changes for a token, useful when auditing "who promoted this person, and when." Superuser-gated.
+
+### Row shape (`roles.jsonl` v1)
+
+Every append writes one row with the same shape as other jsonl-log files in the project:
+
+```json
+{
+  "v": 1,
+  "timestamp": "2026-08-10T14:32:11+00:00",
+  "token": "tok_alice_abc",
+  "role": "evaluator",
+  "changed_by": "SuperUser Name",
+  "note": "promoted after 25+ ratings, mostly on-target"
+}
+```
+
+Fields:
+
+- `v` — schema version, matches the pattern used across the other jsonl logs (`FEEDBACK_SCHEMA_VERSION`, `QA_LOG_SCHEMA_VERSION`, etc.). Bump when the shape changes.
+- `timestamp` — ISO 8601 UTC. Same source as other logs (`jsonl_log.utc_now_iso`).
+- `token` — the guest whose role is being set.
+- `role` — the new role, one of the five tiers. For a reset, the value is the sentinel `"reset"`; readers dispatch on it.
+- `changed_by` — `recipient` string of the superuser who made the change. Audit trail.
+- `note` — optional free-text reason. Where "why did I promote / demote this person" lives, useful when re-reading months later.
 
 ## Enforcement
 
@@ -118,10 +159,11 @@ Recommendation: **body-level validation**, single endpoint. Return 403 with a sp
 
 Frontend fetches `/me` on load; component tree branches on `role`.
 
+- **suspended**: no app shell at all. `/me` returns 403; the frontend renders the guest-auth welcome page (or a specific "your access has been suspended" variant).
 - **novice**: rating pips + submit only. Tag chips hidden, note textarea hidden, "Save gold answer" button hidden.
 - **evaluator**: current full HITL surface.
 - **admin**: also renders the `admin` link in the footer.
-- **superuser**: admin page gets a new "Roles" tab (list users, promote / demote / reset).
+- **superuser**: admin page gets a new "Roles" tab (list users, promote / demote / reset / suspend).
 
 Non-permitted controls are **hidden**, not disabled. Disabled controls confuse novices about what's available; hiding matches "you can only see what you can do."
 
@@ -136,12 +178,13 @@ Recommendation: **stopgap**. Losing a role change on restart is disproportionate
 
 ## Non-goals
 
-- Per-endpoint fine-grained permissions beyond the four-tier ladder.
+- Per-endpoint fine-grained permissions beyond the five-tier ladder.
 - Group-based roles.
 - Time-bounded role grants ("admin for 24 hours").
 - Audit trail beyond the append-only `roles.jsonl` itself.
 - UI for a role-holder to voluntarily downgrade themselves (footgun on a single-superuser system; superuser demoting themselves would deadlock the bootstrap).
 - Automated novice → evaluator promotion. Planned for later; the API can support it via the same `POST /admin/roles` path, driven by a small background evaluator.
+- **User deletion.** Suspension (via the `suspended` role) is reversible and preserves audit trail — covers 90% of practical revocation needs. Physical deletion requires either a redeploy (drop from `RULEBOOK_INVITE_TOKENS`) or a GDPR-style scrubbing pass over historical log rows (`author` / `recipient` / `comment` fields). Deferred to its own design conversation if / when it becomes real.
 
 ## Prerequisites
 
