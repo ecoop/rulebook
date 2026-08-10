@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
   <rect width="48" height="48" rx="11" fill="#2f9e44"/>
   <!-- cone: lower-right toward the field corner, subtle flat (truncated) top, base detail -->
-  <ellipse cx="32" cy="40" rx="7.35" ry="1.9" fill="#e8600f"/>
-  <path d="M31.1 27.3L32.9 27.3L38.3 40L25.7 40Z" fill="#ff7a1a"/>
+  <ellipse cx="31.5" cy="40" rx="8.9" ry="2.3" fill="#ff9500"/>
+  <path d="M30.2 23.6L33.8 23.6L40.6 40L22.4 40Z" fill="#ffb020"/>
   <!-- disc: upper-left, no overlap with cone -->
   <g transform="rotate(-20 19 17)">
     <ellipse cx="19" cy="18.4" rx="15" ry="6" fill="#c4d9c7"/>
