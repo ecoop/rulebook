@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { PanelRightOpen } from 'lucide-react'
 import {
   FloatingWidgetStack,
   LayoutProvider,
@@ -311,48 +312,59 @@ export default function App() {
       <StackOriginReporter headerRef={headerRef} />
       <div className="min-h-screen bg-background text-foreground">
         <header ref={headerRef} className="border-b border-border bg-card">
-          <div className="mx-auto max-w-4xl px-6 py-4">
-            <h1 className="text-xl font-medium">Rulebook</h1>
-            <p className="text-sm text-muted-foreground">
-              Ask about the rules of ultimate and goaltimate. Answers cite the actual rule numbers.
-            </p>
-            {meta && (
+          <div className="mx-auto flex max-w-4xl items-start justify-between gap-4 px-6 py-4">
+            <div className="min-w-0">
+              <h1 className="text-xl font-medium">Rulebook</h1>
               <p className="text-sm text-muted-foreground">
-                build{' '}
-                <span className="opacity-70">
-                  {meta.build_num && `${meta.build_num} (`}
-                  <span
-                    className="font-mono"
-                    title={
-                      meta.build_dirty
-                        ? 'Uncommitted changes were present at server start'
-                        : `Commit ${meta.build_sha}`
-                    }
-                  >
-                    {meta.build_sha}
-                    {meta.build_dirty && '*'}
-                  </span>
-                  {meta.build_num && ')'}
-                  {' · started '}
-                  {formatStartedAt(meta.started_at)}
-                </span>
-                {import.meta.env.DEV && (
-                  <span
-                    className="ml-1.5 inline-flex items-center rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 ring-1 ring-inset ring-amber-500/30 dark:bg-amber-950/60 dark:text-amber-200"
-                    title="Vite dev server is running with HMR — the frontend may not match the reported build SHA"
-                  >
-                    dev
-                  </span>
-                )}
+                Ask about the rules of ultimate and goaltimate. Answers cite the actual rule numbers.
               </p>
-            )}
-            {usage?.guest_recipient && (
-              <p className="text-sm text-muted-foreground">
-                Demo
-                <span className="text-muted-foreground/70"> · </span>
-                <span className="font-medium text-foreground">{usage.guest_recipient}</span>
-              </p>
-            )}
+              {meta && (
+                <p className="text-sm text-muted-foreground">
+                  build{' '}
+                  <span className="opacity-70">
+                    {meta.build_num && `${meta.build_num} (`}
+                    <span
+                      className="font-mono"
+                      title={
+                        meta.build_dirty
+                          ? 'Uncommitted changes were present at server start'
+                          : `Commit ${meta.build_sha}`
+                      }
+                    >
+                      {meta.build_sha}
+                      {meta.build_dirty && '*'}
+                    </span>
+                    {meta.build_num && ')'}
+                    {' · started '}
+                    {formatStartedAt(meta.started_at)}
+                  </span>
+                  {import.meta.env.DEV && (
+                    <span
+                      className="ml-1.5 inline-flex items-center rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 ring-1 ring-inset ring-amber-500/30 dark:bg-amber-950/60 dark:text-amber-200"
+                      title="Vite dev server is running with HMR — the frontend may not match the reported build SHA"
+                    >
+                      dev
+                    </span>
+                  )}
+                </p>
+              )}
+              {usage?.guest_recipient && (
+                <p className="text-sm text-muted-foreground">
+                  Demo
+                  <span className="text-muted-foreground/70"> · </span>
+                  <span className="font-medium text-foreground">{usage.guest_recipient}</span>
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => stackRef.current?.snapAll()}
+              title="Snap widgets back to the corner"
+              aria-label="Snap widgets back to the corner"
+              className="-mr-1.5 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <PanelRightOpen className="h-4 w-4" />
+            </button>
           </div>
         </header>
 
