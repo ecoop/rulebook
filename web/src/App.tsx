@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { PanelRightOpen } from 'lucide-react'
 import {
   FloatingWidgetStack,
   LayoutProvider,
@@ -79,6 +80,7 @@ interface Meta {
   embedding_model: string
   claude_model: string
   build_sha: string
+  build_num?: string
   build_dirty: boolean
   started_at: string
 }
@@ -308,24 +310,72 @@ export default function App() {
   return (
     <LayoutProvider>
       <StackOriginReporter headerRef={headerRef} />
-      <div className="min-h-screen bg-slate-50 text-slate-900">
-        <header ref={headerRef} className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-4xl px-6 py-4">
-          <h1 className="text-xl font-semibold tracking-tight">Rulebook</h1>
-          <p className="text-sm text-slate-500">
-            Ask about the rules of ultimate and goaltimate. Answers cite the actual rule numbers.
-          </p>
-        </div>
-      </header>
+      <div className="min-h-screen bg-background text-foreground">
+        <header ref={headerRef} className="border-b border-border bg-card">
+          <div className="flex items-start justify-between gap-4 px-6 py-4">
+            <div className="min-w-0">
+              <h1 className="text-xl font-medium">Rulebook</h1>
+              <p className="text-sm text-muted-foreground">
+                Ask about the rules of ultimate and goaltimate. Answers cite the actual rule numbers.
+              </p>
+              {meta && (
+                <p className="text-sm text-muted-foreground">
+                  build{' '}
+                  <span className="opacity-70">
+                    {meta.build_num && `${meta.build_num} (`}
+                    <span
+                      className="font-mono"
+                      title={
+                        meta.build_dirty
+                          ? 'Uncommitted changes were present at server start'
+                          : `Commit ${meta.build_sha}`
+                      }
+                    >
+                      {meta.build_sha}
+                      {meta.build_dirty && '*'}
+                    </span>
+                    {meta.build_num && ')'}
+                    {' · started '}
+                    {formatStartedAt(meta.started_at)}
+                  </span>
+                  {import.meta.env.DEV && (
+                    <span
+                      className="ml-1.5 inline-flex items-center rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 ring-1 ring-inset ring-amber-500/30 dark:bg-amber-950/60 dark:text-amber-200"
+                      title="Vite dev server is running with HMR — the frontend may not match the reported build SHA"
+                    >
+                      dev
+                    </span>
+                  )}
+                </p>
+              )}
+              {usage?.guest_recipient && (
+                <p className="text-sm text-muted-foreground">
+                  Demo
+                  <span className="text-muted-foreground/70"> · </span>
+                  <span className="font-medium text-foreground">{usage.guest_recipient}</span>
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => stackRef.current?.snapAll()}
+              title="Snap widgets back to the corner"
+              aria-label="Snap widgets back to the corner"
+              className="-mr-1.5 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <PanelRightOpen className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
 
-      <main className="mx-auto max-w-4xl space-y-6 px-6 py-8 lg:pr-[19rem]">
+      <main className="space-y-6 px-6 py-8 lg:pr-[19rem]">
         <form onSubmit={submit} className="space-y-3">
           <textarea
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="Is double-teaming allowed?"
             rows={3}
-            className="w-full resize-y rounded-md border border-slate-300 bg-white p-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full resize-y rounded-md border border-input bg-card p-3 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 submit(e as unknown as React.FormEvent)
@@ -334,14 +384,14 @@ export default function App() {
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm">
-              <label htmlFor="sport" className="text-slate-600">
+              <label htmlFor="sport" className="text-muted-foreground">
                 Sport:
               </label>
               <select
                 id="sport"
                 value={sport}
                 onChange={(e) => setSport(e.target.value)}
-                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm"
+                className="rounded-md border border-input bg-card px-2 py-1 text-sm shadow-sm"
               >
                 <option value="">All (compare across sports)</option>
                 {(meta?.sports ?? []).map((s) => (
@@ -350,14 +400,14 @@ export default function App() {
                   </option>
                 ))}
               </select>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-muted-foreground">
                 ⌘/Ctrl+Enter to submit
               </span>
             </div>
             <button
               type="submit"
               disabled={loading || !question.trim()}
-              className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
             >
               {loading ? 'Thinking…' : 'Ask'}
             </button>
@@ -365,7 +415,7 @@ export default function App() {
         </form>
 
         {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
             <div className="font-medium">Request failed</div>
             <div className="mt-1 whitespace-pre-wrap font-mono text-xs">{error}</div>
           </div>
@@ -373,10 +423,10 @@ export default function App() {
 
         {result && (
           <>
-            <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-slate-500">
+            <section className="rounded-md border border-border bg-card p-4 shadow-sm">
+              <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
                 <span>Answer</span>
-                <span className="font-mono normal-case text-slate-400">
+                <span className="font-mono normal-case text-muted-foreground">
                   {result.model}
                 </span>
               </div>
@@ -398,15 +448,15 @@ export default function App() {
                   may be incomplete.
                 </div>
               )}
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
+              <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                 {result.answer}
               </div>
-              <div className="mt-3 text-xs text-slate-400">
+              <div className="mt-3 text-xs text-muted-foreground">
                 {result.input_tokens.toLocaleString()} in ·{' '}
                 {result.output_tokens.toLocaleString()} out tokens
               </div>
-              <div className="mt-4 border-t border-slate-100 pt-3">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <div className="mt-4 border-t border-border pt-3">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span>Rate this answer:</span>
                   {([1, 2, 3, 4, 5] as Rating[]).map((n) => {
                     const active = rating === n
@@ -420,8 +470,8 @@ export default function App() {
                         className={
                           'w-7 rounded border py-0.5 font-mono transition ' +
                           (active
-                            ? 'border-blue-500 bg-blue-50 text-blue-700'
-                            : 'border-slate-300 hover:bg-slate-50')
+                            ? 'border-primary bg-accent text-foreground'
+                            : 'border-input hover:bg-accent')
                         }
                       >
                         {n}
@@ -429,12 +479,12 @@ export default function App() {
                     )
                   })}
                   {rating != null && (
-                    <span className="text-slate-400">
+                    <span className="text-muted-foreground">
                       {RATING_LABELS[rating]}
                     </span>
                   )}
                   {ratingError && (
-                    <span className="ml-auto text-red-600" title={ratingError}>
+                    <span className="ml-auto text-destructive" title={ratingError}>
                       couldn't save
                     </span>
                   )}
@@ -442,7 +492,7 @@ export default function App() {
                 {rating != null && (
                   <div className="mt-3 space-y-2">
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                      <span className="text-slate-500">Issue tags:</span>
+                      <span className="text-muted-foreground">Issue tags:</span>
                       {TAGS.map((t) => {
                         const active = tags.has(t)
                         return (
@@ -455,8 +505,8 @@ export default function App() {
                             className={
                               'rounded-full border px-2 py-0.5 transition ' +
                               (active
-                                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                : 'border-slate-300 text-slate-600 hover:bg-slate-50')
+                                ? 'border-primary bg-accent text-foreground'
+                                : 'border-input text-muted-foreground hover:bg-accent hover:text-foreground')
                             }
                           >
                             {t}
@@ -469,10 +519,10 @@ export default function App() {
                       onChange={(e) => setComment(e.target.value)}
                       placeholder="What stood out, good or bad? (optional)"
                       rows={2}
-                      className="w-full resize-y rounded-md border border-slate-300 bg-white p-2 text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full resize-y rounded-md border border-input bg-card p-2 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                     />
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400">
+                      <span className="text-muted-foreground">
                         {comment !== savedComment
                           ? 'Unsaved changes to your note.'
                           : savedComment
@@ -483,7 +533,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => sendFeedback(rating, tags, comment)}
-                          className="rounded-md bg-slate-700 px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-slate-800"
+                          className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
                         >
                           Save note
                         </button>
@@ -492,10 +542,10 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <div className="mt-4 border-t border-slate-100 pt-3">
+              <div className="mt-4 border-t border-border pt-3">
                 <label className="flex flex-wrap items-baseline gap-2 text-xs">
-                  <span className="text-slate-500">Gold answer</span>
-                  <span className="text-slate-400">
+                  <span className="text-muted-foreground">Gold answer</span>
+                  <span className="text-muted-foreground">
                     — edit the answer above into what a knowledgeable human would give.
                     Use <span className="font-mono">## Ultimate</span> /{' '}
                     <span className="font-mono">## Goaltimate</span> headings so each
@@ -508,12 +558,12 @@ export default function App() {
                   onChange={(e) => setGold(e.target.value)}
                   placeholder="(seeded with the model's answer once one is generated)"
                   rows={10}
-                  className="mt-2 w-full resize-y rounded-md border border-slate-300 bg-white p-2 font-mono text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="mt-2 w-full resize-y rounded-md border border-input bg-card p-2 font-mono text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                 />
                 <div className="mt-2 flex items-center justify-between text-xs">
-                  <span className="text-slate-400">
+                  <span className="text-muted-foreground">
                     {goldError ? (
-                      <span className="text-red-600" title={goldError}>
+                      <span className="text-destructive" title={goldError}>
                         couldn't save
                       </span>
                     ) : gold === savedGold && savedGold ? (
@@ -529,7 +579,7 @@ export default function App() {
                       type="button"
                       onClick={saveGold}
                       disabled={goldSaving}
-                      className="rounded-md bg-slate-700 px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
                     >
                       {goldSaving ? 'Saving…' : 'Save gold answer'}
                     </button>
@@ -538,21 +588,21 @@ export default function App() {
               </div>
             </section>
 
-            <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+            <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
               <button
                 type="button"
                 onClick={() => setSourcesOpen(!sourcesOpen)}
-                className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-slate-50"
+                className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-accent"
               >
                 <span>
                   {sourcesOpen ? '▼' : '▶'} Retrieved sources ({result.chunks.length})
                 </span>
-                <span className="text-xs font-normal text-slate-400">
+                <span className="text-xs font-normal text-muted-foreground">
                   these chunks fed the model above
                 </span>
               </button>
               {sourcesOpen && (
-                <div className="divide-y divide-slate-100 border-t border-slate-100">
+                <div className="divide-y divide-border border-t border-border">
                   {result.chunks.map((c, i) => (
                     <ChunkRow key={i} chunk={c} />
                   ))}
@@ -564,31 +614,11 @@ export default function App() {
       </main>
 
       {meta && (
-        <footer className="mx-auto max-w-4xl px-6 py-4 text-xs text-slate-400">
+        <footer className="px-6 py-4 text-xs text-muted-foreground lg:pr-[19rem]">
           embeddings: {meta.embedding_provider}/{meta.embedding_model} · gen:{' '}
-          {meta.claude_model} · build{' '}
-          <span
-            className="font-mono"
-            title={
-              meta.build_dirty
-                ? 'Uncommitted changes were present at server start'
-                : `Commit ${meta.build_sha}`
-            }
-          >
-            {meta.build_sha}
-            {meta.build_dirty && '*'}
-          </span>{' '}
-          · started {formatStartedAt(meta.started_at)}
-          {import.meta.env.DEV && (
-            <span
-              className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800"
-              title="Vite dev server is running with HMR — the frontend may not match the reported build SHA"
-            >
-              dev
-            </span>
-          )}
-          <span className="mx-2 text-slate-300">·</span>
-          <a href="#/admin" className="text-slate-500 hover:text-blue-600 hover:underline">
+          {meta.claude_model}
+          <span className="mx-2 opacity-50">·</span>
+          <a href="#/admin" className="hover:text-foreground hover:underline">
             admin
           </a>
         </footer>
@@ -615,16 +645,16 @@ function ChunkRow({ chunk }: { chunk: Chunk }) {
   return (
     <div className="p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <span className="rounded bg-blue-100 px-2 py-0.5 font-mono text-blue-800">
+        <span className="rounded bg-secondary px-2 py-0.5 font-mono text-secondary-foreground">
           {chunk.sport}
         </span>
-        <span className="font-mono text-slate-700">{chunk.rule_id}</span>
-        <span className="text-slate-400">{pages}</span>
-        <span className="ml-auto font-mono text-slate-400" title="L2 distance on unit vectors; lower = more similar">
+        <span className="font-mono text-foreground">{chunk.rule_id}</span>
+        <span className="text-muted-foreground">{pages}</span>
+        <span className="ml-auto font-mono text-muted-foreground" title="L2 distance on unit vectors; lower = more similar">
           d={chunk.distance.toFixed(3)}
         </span>
       </div>
-      <div className="whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
+      <div className="whitespace-pre-wrap text-xs leading-relaxed text-foreground">
         {chunk.text}
       </div>
     </div>
