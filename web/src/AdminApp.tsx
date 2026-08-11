@@ -549,19 +549,19 @@ export default function AdminApp() {
   const canManageUsers = isSuperuser
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="border-b border-border bg-card">
         <div className="mx-auto max-w-5xl px-6 py-4">
           <div className="flex items-baseline justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold tracking-tight">
-                Rulebook <span className="text-slate-400">/ admin</span>
+                Rulebook <span className="text-muted-foreground">/ admin</span>
               </h1>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted-foreground">
                 Curate gold answers and source files. Excluded rows are skipped by the next index rebuild.
               </p>
             </div>
-            <a href="#/" className="text-sm text-blue-600 hover:underline">
+            <a href="#/" className="text-sm text-muted-foreground hover:text-foreground hover:underline">
               ← back to Q&amp;A
             </a>
           </div>
@@ -570,24 +570,24 @@ export default function AdminApp() {
 
       <main className="mx-auto max-w-5xl space-y-4 px-6 py-6">
         {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
             <div className="font-medium">Request failed</div>
             <div className="mt-1 whitespace-pre-wrap font-mono text-xs">{error}</div>
           </div>
         )}
 
         {!me && !meForbidden && !error && (
-          <div className="text-sm text-slate-500">Checking access…</div>
+          <div className="text-sm text-muted-foreground">Checking access…</div>
         )}
 
         {meForbidden && (
-          <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+          <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
             Your access has been suspended. Contact an admin if you think this is a mistake.
           </div>
         )}
 
         {me && !meForbidden && !canUseAdmin && (
-          <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+          <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
             {!me.demo_mode ? (
               <>
                 The admin panel isn't available on this deploy. It needs a gated deploy
@@ -614,7 +614,7 @@ export default function AdminApp() {
             onClick={rebuildIndex}
             disabled={rebuilding}
             title="Runs scripts/build_index.py — typically 15s, occasionally up to a minute or two when Voyage is slow"
-            className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
           >
             {rebuilding ? 'Rebuilding…' : 'Rebuild index'}
           </button>
@@ -625,7 +625,7 @@ export default function AdminApp() {
               'rounded-md border p-3 text-xs ' +
               (rebuildResult.ok
                 ? 'border-green-300 bg-green-50 text-green-900'
-                : 'border-red-300 bg-red-50 text-red-900')
+                : 'border-destructive/30 bg-destructive/10 text-destructive')
             }
           >
             <div className="mb-1 font-medium">
@@ -640,7 +640,7 @@ export default function AdminApp() {
         )}
 
         {/* Tab bar — counts baked into labels so both are visible regardless of active tab. */}
-        <div className="flex gap-1 border-b border-slate-200 text-sm">
+        <div className="flex gap-1 border-b border-border text-sm">
           {([
             'feedback',
             'golds',
@@ -666,8 +666,8 @@ export default function AdminApp() {
                 className={
                   '-mb-px border-b-2 px-3 py-1.5 font-medium transition ' +
                   (active
-                    ? 'border-blue-600 text-blue-700'
-                    : 'border-transparent text-slate-500 hover:text-slate-700')
+                    ? 'border-primary text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground')
                 }
               >
                 {label}
@@ -677,23 +677,23 @@ export default function AdminApp() {
         </div>
 
         {activeTab === 'feedback' && feedback === null && !error && (
-          <div className="text-sm text-slate-500">Loading feedback…</div>
+          <div className="text-sm text-muted-foreground">Loading feedback…</div>
         )}
         {activeTab === 'feedback' && feedback !== null && feedback.length === 0 && (
-          <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+          <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
             No feedback yet. Rate some answers in the main app.
           </div>
         )}
         {activeTab === 'feedback' && feedback !== null && feedback.length > 0 && (
-          <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+          <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="w-16 px-3 py-2 text-center">
                     <button
                       type="button"
                       onClick={() => setFeedbackSort((s) => nextSort(s, 'rating'))}
-                      className="hover:text-slate-700"
+                      className="hover:text-foreground"
                     >
                       rating{sortIndicator(feedbackSort.col === 'rating', feedbackSort.dir)}
                     </button>
@@ -702,7 +702,7 @@ export default function AdminApp() {
                     <button
                       type="button"
                       onClick={() => setFeedbackSort((s) => nextSort(s, 'has_gold'))}
-                      className="hover:text-slate-700"
+                      className="hover:text-foreground"
                     >
                       gold{sortIndicator(feedbackSort.col === 'has_gold', feedbackSort.dir)}
                     </button>
@@ -713,20 +713,20 @@ export default function AdminApp() {
                     <button
                       type="button"
                       onClick={() => setFeedbackSort((s) => nextSort(s, 'timestamp'))}
-                      className="hover:text-slate-700"
+                      className="hover:text-foreground"
                     >
                       when{sortIndicator(feedbackSort.col === 'timestamp', feedbackSort.dir)}
                     </button>
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-border">
                 {sortedFeedback!.map((f) => {
                   const needsAttention = f.rating <= 3 && !f.has_gold
                   return (
                     <tr
                       key={f.qa_id + '-' + f.timestamp}
-                      className={needsAttention ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-slate-50'}
+                      className={needsAttention ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-accent'}
                     >
                       <td className="px-3 py-2 text-center">
                         <span
@@ -753,31 +753,31 @@ export default function AdminApp() {
                         {f.has_gold ? (
                           <span title="Gold answer authored" className="text-green-600">✓</span>
                         ) : (
-                          <span title="No gold yet" className="text-slate-300">·</span>
+                          <span title="No gold yet" className="text-muted-foreground/50">·</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="text-sm text-slate-800">
-                          {f.question || <span className="italic text-slate-400">(no qa_log entry)</span>}
+                        <div className="text-sm text-foreground">
+                          {f.question || <span className="italic text-muted-foreground">(no qa_log entry)</span>}
                         </div>
                         {f.comment && (
-                          <div className="mt-1 whitespace-pre-wrap text-xs text-slate-500">
+                          <div className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
                             {f.comment}
                           </div>
                         )}
-                        <div className="mt-1 font-mono text-[10px] text-slate-400">
+                        <div className="mt-1 font-mono text-[10px] text-muted-foreground">
                           {f.qa_id.slice(0, 8)}
                         </div>
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-1">
                           {f.tags.length === 0 ? (
-                            <span className="text-xs text-slate-400">—</span>
+                            <span className="text-xs text-muted-foreground">—</span>
                           ) : (
                             f.tags.map((t) => (
                               <span
                                 key={t}
-                                className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-700"
+                                className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-foreground"
                               >
                                 {t}
                               </span>
@@ -785,7 +785,7 @@ export default function AdminApp() {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-500">
+                      <td className="px-3 py-2 text-xs text-muted-foreground">
                         {formatWhen(f.timestamp)}
                       </td>
                     </tr>
@@ -797,18 +797,18 @@ export default function AdminApp() {
         )}
 
         {activeTab === 'golds' && rows === null && !error && (
-          <div className="text-sm text-slate-500">Loading golds…</div>
+          <div className="text-sm text-muted-foreground">Loading golds…</div>
         )}
         {activeTab === 'golds' && rows !== null && rows.length === 0 && (
-          <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+          <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
             No gold answers yet. Rate an answer in the main app and use the "Save gold answer" button.
           </div>
         )}
         {activeTab === 'golds' && rows !== null && rows.length > 0 && (
           <>
-            <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+            <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="w-16 px-3 py-2">incl.</th>
                     <th className="px-3 py-2">question</th>
@@ -816,10 +816,10 @@ export default function AdminApp() {
                     <th className="w-24 px-3 py-2">qa_id</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-border">
                   {rows.map((r) => (
                     <Fragment key={r.qa_id}>
-                      <tr className="hover:bg-slate-50">
+                      <tr className="hover:bg-accent">
                         <td className="px-3 py-2">
                           <button
                             type="button"
@@ -831,31 +831,31 @@ export default function AdminApp() {
                               'inline-flex h-5 w-9 items-center rounded-full border transition ' +
                               (r.included
                                 ? 'border-green-500 bg-green-500 justify-end'
-                                : 'border-slate-300 bg-slate-200 justify-start') +
+                                : 'border-input bg-muted justify-start') +
                               (pending.has(r.qa_id) ? ' opacity-50' : '')
                             }
                           >
-                            <span className="mx-0.5 h-4 w-4 rounded-full bg-white shadow-sm" />
+                            <span className="mx-0.5 h-4 w-4 rounded-full bg-card shadow-sm" />
                           </button>
                         </td>
                         <td className="px-3 py-2">
                           <button
                             type="button"
                             onClick={() => toggleExpanded(r.qa_id)}
-                            className="text-left text-sm text-slate-800 hover:text-blue-600"
+                            className="text-left text-sm text-foreground hover:text-foreground"
                           >
                             {expanded.has(r.qa_id) ? '▼' : '▶'} {r.question}
                           </button>
                         </td>
-                        <td className="px-3 py-2 text-xs text-slate-500">
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
                           {formatWhen(r.timestamp)}
                         </td>
-                        <td className="px-3 py-2 font-mono text-xs text-slate-400">
+                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
                           {r.qa_id.slice(0, 8)}
                         </td>
                       </tr>
                       {expanded.has(r.qa_id) && (
-                        <tr className="bg-slate-50">
+                        <tr className="bg-muted">
                           <td />
                           <td colSpan={3} className="px-3 py-3">
                             {editingQaId === r.qa_id ? (
@@ -864,13 +864,13 @@ export default function AdminApp() {
                                   value={editBuffer}
                                   onChange={(e) => setEditBuffer(e.target.value)}
                                   rows={12}
-                                  className="w-full resize-y rounded-md border border-slate-300 bg-white p-2 font-mono text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  className="w-full resize-y rounded-md border border-input bg-card p-2 font-mono text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                                 />
                                 <div className="flex items-center justify-between gap-3 text-xs">
-                                  <span className="text-slate-400">
+                                  <span className="text-muted-foreground">
                                     Saves a new row to gold.jsonl. Rebuild index to make it retrievable.
                                     {editError && (
-                                      <span className="ml-2 text-red-600">{editError}</span>
+                                      <span className="ml-2 text-destructive">{editError}</span>
                                     )}
                                   </span>
                                   <span className="flex gap-2">
@@ -878,7 +878,7 @@ export default function AdminApp() {
                                       type="button"
                                       onClick={cancelEdit}
                                       disabled={savingEdit}
-                                      className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                      className="rounded-md border border-input bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                       Cancel
                                     </button>
@@ -886,7 +886,7 @@ export default function AdminApp() {
                                       type="button"
                                       onClick={() => saveEdit(r)}
                                       disabled={savingEdit || !editBuffer.trim() || editBuffer === r.gold_answer}
-                                      className="rounded-md bg-slate-700 px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                      className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
                                     >
                                       {savingEdit ? 'Saving…' : 'Save'}
                                     </button>
@@ -895,14 +895,14 @@ export default function AdminApp() {
                               </div>
                             ) : (
                               <div className="space-y-2">
-                                <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-slate-700">
+                                <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foreground">
                                   {r.gold_answer}
                                 </pre>
                                 <div className="flex justify-end">
                                   <button
                                     type="button"
                                     onClick={() => beginEdit(r)}
-                                    className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                                    className="rounded-md border border-input bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
                                   >
                                     Edit
                                   </button>
@@ -921,23 +921,23 @@ export default function AdminApp() {
         )}
 
         {activeTab === 'sources' && sources === null && !error && (
-          <div className="text-sm text-slate-500">Loading sources…</div>
+          <div className="text-sm text-muted-foreground">Loading sources…</div>
         )}
         {activeTab === 'sources' && sources !== null && sources.length === 0 && (
-          <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+          <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
             No source files found under <span className="font-mono">rules/&lt;sport&gt;/</span>.
           </div>
         )}
         {activeTab === 'sources' && sources !== null && sources.length > 0 && (
-          <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+          <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="w-16 px-3 py-2">
                     <button
                       type="button"
                       onClick={() => setSourceSort((s) => nextSort(s, 'included'))}
-                      className="hover:text-slate-700"
+                      className="hover:text-foreground"
                     >
                       incl.{sortIndicator(sourceSort.col === 'included', sourceSort.dir)}
                     </button>
@@ -946,7 +946,7 @@ export default function AdminApp() {
                     <button
                       type="button"
                       onClick={() => setSourceSort((s) => nextSort(s, 'sport'))}
-                      className="hover:text-slate-700"
+                      className="hover:text-foreground"
                     >
                       sport{sortIndicator(sourceSort.col === 'sport', sourceSort.dir)}
                     </button>
@@ -955,7 +955,7 @@ export default function AdminApp() {
                     <button
                       type="button"
                       onClick={() => setSourceSort((s) => nextSort(s, 'path'))}
-                      className="hover:text-slate-700"
+                      className="hover:text-foreground"
                     >
                       path{sortIndicator(sourceSort.col === 'path', sourceSort.dir)}
                     </button>
@@ -964,7 +964,7 @@ export default function AdminApp() {
                     <button
                       type="button"
                       onClick={() => setSourceSort((s) => nextSort(s, 'size_bytes'))}
-                      className="hover:text-slate-700"
+                      className="hover:text-foreground"
                     >
                       size{sortIndicator(sourceSort.col === 'size_bytes', sourceSort.dir)}
                     </button>
@@ -973,16 +973,16 @@ export default function AdminApp() {
                     <button
                       type="button"
                       onClick={() => setSourceSort((s) => nextSort(s, 'modified_at'))}
-                      className="hover:text-slate-700"
+                      className="hover:text-foreground"
                     >
                       modified{sortIndicator(sourceSort.col === 'modified_at', sourceSort.dir)}
                     </button>
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-border">
                 {sortedSources!.map((s) => (
-                  <tr key={s.path} className="hover:bg-slate-50">
+                  <tr key={s.path} className="hover:bg-accent">
                     <td className="px-3 py-2">
                       <button
                         type="button"
@@ -994,25 +994,25 @@ export default function AdminApp() {
                           'inline-flex h-5 w-9 items-center rounded-full border transition ' +
                           (s.included
                             ? 'border-green-500 bg-green-500 justify-end'
-                            : 'border-slate-300 bg-slate-200 justify-start') +
+                            : 'border-input bg-muted justify-start') +
                           (sourcePending.has(s.path) ? ' opacity-50' : '')
                         }
                       >
-                        <span className="mx-0.5 h-4 w-4 rounded-full bg-white shadow-sm" />
+                        <span className="mx-0.5 h-4 w-4 rounded-full bg-card shadow-sm" />
                       </button>
                     </td>
                     <td className="px-3 py-2">
-                      <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700">
+                      <span className="rounded bg-secondary px-2 py-0.5 font-mono text-xs text-foreground">
                         {s.sport}
                       </span>
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-slate-700">
+                    <td className="px-3 py-2 font-mono text-xs text-foreground">
                       {s.path}
                     </td>
-                    <td className="px-3 py-2 text-right text-xs text-slate-500">
+                    <td className="px-3 py-2 text-right text-xs text-muted-foreground">
                       {formatBytes(s.size_bytes)}
                     </td>
-                    <td className="px-3 py-2 text-xs text-slate-500">
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
                       {formatWhen(s.modified_at)}
                     </td>
                   </tr>
@@ -1023,7 +1023,7 @@ export default function AdminApp() {
         )}
 
         {activeTab === 'users' && !canManageUsers && (
-          <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+          <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
             User management applies to a gated demo deploy. Set{' '}
             <span className="font-mono">RULEBOOK_DEMO_MODE=true</span> with{' '}
             <span className="font-mono">STATE_BACKEND_KIND=gcs</span>, and sign in as a{' '}
@@ -1034,10 +1034,10 @@ export default function AdminApp() {
         {activeTab === 'users' && canManageUsers && (
           <div className="space-y-4">
             {/* Add invitee — allowlist entry (defaults to novice until promoted). */}
-            <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+            <section className="rounded-md border border-border bg-card p-4 shadow-sm">
               <div className="flex flex-wrap items-end gap-3">
                 <label className="flex-1">
-                  <span className="mb-1 block text-xs font-medium text-slate-600">Add invitee</span>
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground">Add invitee</span>
                   <input
                     type="text"
                     value={addLabel}
@@ -1046,14 +1046,14 @@ export default function AdminApp() {
                       if (e.key === 'Enter') void addUser()
                     }}
                     placeholder="Name or label, e.g. Alice"
-                    className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full rounded-md border border-input bg-card px-2 py-1.5 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </label>
                 <button
                   type="button"
                   onClick={() => void addUser()}
                   disabled={addPending || !addLabel.trim()}
-                  className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
                 >
                   {addPending ? 'Adding…' : 'Add'}
                 </button>
@@ -1067,13 +1067,13 @@ export default function AdminApp() {
                         Added {newInvite.label}. Share this invite link:
                       </div>
                       <div className="flex items-center gap-2">
-                        <code className="flex-1 truncate rounded bg-white px-2 py-1 font-mono text-[11px] text-slate-700">
+                        <code className="flex-1 truncate rounded bg-card px-2 py-1 font-mono text-[11px] text-foreground">
                           {link}
                         </code>
                         <button
                           type="button"
                           onClick={() => void copy(link)}
-                          className="rounded-md border border-green-300 bg-white px-2 py-1 font-medium text-green-800 hover:bg-green-100"
+                          className="rounded-md border border-green-300 bg-card px-2 py-1 font-medium text-green-800 hover:bg-green-100"
                         >
                           {copied === link ? 'Copied' : 'Copy link'}
                         </button>
@@ -1084,17 +1084,17 @@ export default function AdminApp() {
             </section>
 
             {inviteTokens === null && !error && (
-              <div className="text-sm text-slate-500">Loading users…</div>
+              <div className="text-sm text-muted-foreground">Loading users…</div>
             )}
             {inviteTokens !== null && userRows.length === 0 && (
-              <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+              <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
                 No invitees yet. Add one above.
               </div>
             )}
             {inviteTokens !== null && userRows.length > 0 && (
-              <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+              <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2">label</th>
                       <th className="w-40 px-3 py-2">token</th>
@@ -1103,22 +1103,22 @@ export default function AdminApp() {
                       <th className="w-40 px-3 py-2 text-right">actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-border">
                     {userRows.map((u) => {
                       const busy = userPending.has(u.token)
                       const isSelf = me?.recipient != null && me.recipient === u.label
                       return (
                         <tr
                           key={u.token}
-                          className={'hover:bg-slate-50' + (busy ? ' opacity-50' : '')}
+                          className={'hover:bg-accent' + (busy ? ' opacity-50' : '')}
                         >
-                          <td className="px-3 py-2 text-slate-800">{u.label}</td>
+                          <td className="px-3 py-2 text-foreground">{u.label}</td>
                           <td className="px-3 py-2">
                             <button
                               type="button"
                               onClick={() => void copy(u.token)}
                               title="Click to copy token"
-                              className="font-mono text-xs text-slate-500 hover:text-blue-600"
+                              className="font-mono text-xs text-muted-foreground hover:text-foreground"
                             >
                               {u.token.slice(0, 12)}…{copied === u.token ? ' ✓' : ''}
                             </button>
@@ -1128,7 +1128,7 @@ export default function AdminApp() {
                               value={u.role}
                               disabled={busy}
                               onChange={(e) => void changeRole(u.token, e.target.value)}
-                              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                              className="rounded-md border border-input bg-card px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                             >
                               {ladder.map((r) => (
                                 <option key={r} value={r}>
@@ -1137,7 +1137,7 @@ export default function AdminApp() {
                               ))}
                             </select>
                           </td>
-                          <td className="px-3 py-2 text-xs text-slate-400">{u.source}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">{u.source}</td>
                           <td className="px-3 py-2">
                             <div className="flex justify-end gap-2 text-xs">
                               <button
@@ -1145,7 +1145,7 @@ export default function AdminApp() {
                                 onClick={() => void resetRole(u.token)}
                                 disabled={busy || u.source !== 'override'}
                                 title="Clear the override → fall back to the env seed (or novice)"
-                                className="rounded-md border border-slate-300 bg-white px-2 py-1 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="rounded-md border border-input bg-card px-2 py-1 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
                               >
                                 Reset
                               </button>
@@ -1154,7 +1154,7 @@ export default function AdminApp() {
                                 onClick={() => void removeUser(u.token, u.label)}
                                 disabled={busy || isSelf}
                                 title={isSelf ? "You can't remove yourself" : 'Hard-delete this invite'}
-                                className="rounded-md border border-red-300 bg-white px-2 py-1 font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="rounded-md border border-destructive/30 bg-card px-2 py-1 font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
                               >
                                 Remove
                               </button>
