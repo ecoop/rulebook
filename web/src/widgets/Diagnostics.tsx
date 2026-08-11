@@ -32,7 +32,7 @@ function formatWhen(iso: string | null): string {
 export function DiagnosticsSummaryLine({ diag }: { diag: DiagnosticsSnapshot | null }) {
   if (!diag) return <span className="text-muted-foreground">…</span>
   return (
-    <span className="flex items-center gap-1.5">
+    <span className="flex items-center gap-1.5 text-[11px] font-medium">
       <span className="font-mono tabular-nums">{diag.chunk_count.toLocaleString()}</span>
       <span className="text-muted-foreground">chunks · {diag.dimension}d</span>
     </span>

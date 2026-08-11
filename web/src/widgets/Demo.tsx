@@ -16,9 +16,9 @@ function money(n: number): string {
 export function DemoSummaryLine({ usage }: { usage: UsageSnapshot | null }) {
   if (!usage) return <span className="text-muted-foreground">…</span>
   if (!usage.guest_recipient) {
-    return <span className="text-muted-foreground">not signed in</span>
+    return <span className="text-[11px] font-medium text-muted-foreground">not signed in</span>
   }
-  return <span className="truncate">{usage.guest_recipient}</span>
+  return <span className="truncate text-[11px] font-medium">{usage.guest_recipient}</span>
 }
 
 export function DemoBody({ usage }: { usage: UsageSnapshot | null }) {
@@ -50,14 +50,15 @@ export function DemoBody({ usage }: { usage: UsageSnapshot | null }) {
         <div className="flex items-baseline justify-between">
           <span className="text-muted-foreground">your week</span>
           <span className="font-mono tabular-nums">
-            {money(spent)} <span className="text-muted-foreground">/ {money(cap)}</span>
+            <span className="text-emerald-600 dark:text-emerald-400">{money(spent)}</span>{' '}
+            <span className="text-muted-foreground">/ {money(cap)}</span>
           </span>
         </div>
         <div className="h-1 overflow-hidden rounded-full bg-border">
           <div
             className={
               'h-full transition-all ' +
-              (pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-blue-500')
+              (pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500')
             }
             style={{ width: `${pct}%` }}
           />
