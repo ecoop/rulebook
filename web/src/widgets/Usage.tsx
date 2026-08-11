@@ -50,10 +50,16 @@ function moneyPrecise(n: number): string {
 }
 
 export function UsageSummaryLine({ usage }: { usage: UsageSnapshot | null }) {
-  if (!usage) return <span className="text-muted-foreground">…</span>
+  if (!usage)
+    return (
+      <span className="text-[11px] font-medium">
+        Usage <span className="text-muted-foreground">…</span>
+      </span>
+    )
   const p = pct(usage.daily_usd, usage.caps.daily_usd)
   return (
     <span className="flex items-center gap-1.5 text-[11px] font-medium">
+      <span>Usage</span>
       <span className="font-mono font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
         {money(usage.daily_usd)}
       </span>
