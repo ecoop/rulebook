@@ -107,6 +107,22 @@ class Settings(BaseSettings):
         validation_alias="RULEBOOK_INVITE_TOKENS_OBJECT",
     )
 
+    # --- Roles / RBAC (see docs/roles.md, rulebook.roles) -----------------
+    # Seed role assignments {token: role}. Baseline resolved under the live
+    # roles.jsonl overrides; must include at least one `superuser` to
+    # bootstrap (no self-promotion endpoint exists). Redeploy to change.
+    #   RULEBOOK_INITIAL_ROLES='{"tok_alice": "superuser"}'
+    initial_roles: dict[str, str] = Field(
+        default_factory=dict,
+        validation_alias="RULEBOOK_INITIAL_ROLES",
+    )
+    # GCS object holding the append-only role-change log, written by the
+    # superuser /admin/roles API. Live overrides over the seed.
+    roles_object: str = Field(
+        default="roles.jsonl",
+        validation_alias="RULEBOOK_ROLES_OBJECT",
+    )
+
     @property
     def repo_root(self) -> Path:
         # Anchor relative paths to the repo root, not the shell's cwd, so

@@ -53,7 +53,18 @@ from rulebook.interaction_log import (  # noqa: E402
     read_qa_questions,
 )
 from rulebook.pipeline import DEFAULT_SPORTS, ask  # noqa: E402
+from rulebook.roles import (  # noqa: E402
+    RESET_SENTINEL,
+    ROLE_LADDER,
+    append_role_row,
+    is_valid_role,
+    overrides_from_rows,
+    read_role_rows,
+    require_role,
+    resolve_role,
+)
 from rulebook.store import list_sports  # noqa: E402
+from jsonl_log import utc_now_iso  # noqa: E402
 
 app = FastAPI(title="rulebook", description="RAG over disc-sport rules.")
 
@@ -198,6 +209,38 @@ class RebuildIndexResponse(BaseModel):
     duration_seconds: float
     stdout_tail: str = Field(..., description="Last few lines of build_index.py output — for the UI to show a build summary.")
     stderr_tail: str = Field(..., description="Last few lines of stderr if the build failed; empty on success.")
+
+
+class MeResponse(BaseModel):
+    recipient: str | None = Field(
+        default=None,
+        description="Guest label; null outside demo_mode / when unauthenticated.",
+    )
+    role: str = Field(..., description="Effective role: suspended|novice|evaluator|admin|superuser.")
+    demo_mode: bool = Field(..., description="Whether the invite gate is active.")
+
+
+class RoleAssignmentOut(BaseModel):
+    token: str
+    role: str
+    source: str = Field(..., description='"override" (roles.jsonl) or "seed" (env).')
+
+
+class AdminRolesResponse(BaseModel):
+    roles: list[RoleAssignmentOut]
+    ladder: list[str] = Field(..., description="Role tiers low→high.")
+
+
+class RoleChangeRequest(BaseModel):
+    token: str = Field(..., min_length=1, description="The guest token whose role is being set.")
+    role: str = Field(..., description="One of the ladder tiers.")
+    note: str | None = Field(default=None, max_length=2000, description="Optional audit note.")
+
+
+class RoleChangeResponse(BaseModel):
+    ok: bool = True
+    token: str
+    role: str = Field(..., description="Effective role after the change.")
 
 
 class MetaResponse(BaseModel):
@@ -353,7 +396,10 @@ def usage_endpoint() -> UsageResponse:
 @app.post(
     "/ask",
     response_model=AskResponse,
-    dependencies=[Depends(app_state.enforce_ip_rate_limit)],
+    dependencies=[
+        Depends(app_state.enforce_ip_rate_limit),
+        Depends(require_role("novice")),
+    ],
 )
 def ask_endpoint(req: AskRequest) -> AskResponse:
     try:
@@ -405,7 +451,11 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
     )
 
 
-@app.post("/feedback", response_model=FeedbackResponse)
+@app.post(
+    "/feedback",
+    response_model=FeedbackResponse,
+    dependencies=[Depends(require_role("novice"))],
+)
 def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     """Record a thumbs-up / thumbs-down on a prior answer.
 
@@ -413,8 +463,18 @@ def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     ends up as an orphan feedback row. That's fine for HITL work: the
     log is a data source to be joined and filtered, not a database with
     referential integrity to enforce.
+
+    Partial permission (docs/roles.md): novices may submit a bare rating;
+    the richer surface (tags, free-text comment) requires evaluator+.
     """
     guest = get_current_guest()
+    if (req.tags or req.comment) and settings.demo_mode:
+        role = resolve_role(guest.token if guest else None)
+        if not is_valid_role(role) or ROLE_LADDER.index(role) < ROLE_LADDER.index("evaluator"):
+            raise HTTPException(
+                status_code=403,
+                detail="tags/comment require role 'evaluator'; rating alone is allowed",
+            )
     log_feedback(
         req.qa_id,
         rating=req.rating,
@@ -425,7 +485,11 @@ def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     return FeedbackResponse()
 
 
-@app.post("/gold", response_model=GoldResponse)
+@app.post(
+    "/gold",
+    response_model=GoldResponse,
+    dependencies=[Depends(require_role("evaluator"))],
+)
 def gold_endpoint(req: GoldRequest) -> GoldResponse:
     """Record a user-authored canonical answer for a prior qa_id.
 
@@ -444,7 +508,112 @@ def gold_endpoint(req: GoldRequest) -> GoldResponse:
     return GoldResponse()
 
 
-@app.get("/admin/golds", response_model=AdminGoldListResponse)
+@app.get(
+    "/me",
+    response_model=MeResponse,
+    dependencies=[Depends(require_role("novice"))],
+)
+def me_endpoint() -> MeResponse:
+    """Current guest's identity + effective role — powers UI gating.
+
+    Gated at novice, so a `suspended` guest gets 403 here (the frontend
+    renders the suspended screen on that). Outside demo_mode there's no
+    guest: recipient is null and role is the novice default.
+    """
+    guest = get_current_guest()
+    return MeResponse(
+        recipient=(guest.recipient if guest else None),
+        role=resolve_role(guest.token if guest else None),
+        demo_mode=settings.demo_mode,
+    )
+
+
+def _require_gcs_for_roles() -> tuple[str, str]:
+    if settings.state_backend_kind != "gcs" or not settings.gcs_state_bucket:
+        raise HTTPException(
+            status_code=400,
+            detail="role changes require the gcs state backend (RULEBOOK_STATE_BACKEND=gcs).",
+        )
+    return settings.gcs_state_bucket, settings.roles_object
+
+
+@app.get(
+    "/admin/roles",
+    response_model=AdminRolesResponse,
+    dependencies=[Depends(require_role("superuser"))],
+)
+def admin_list_roles() -> AdminRolesResponse:
+    """Merged role assignments (env seed ⊕ live roles.jsonl overrides)."""
+    merged: dict[str, tuple[str, str]] = {
+        tok: (role, "seed") for tok, role in settings.initial_roles.items()
+    }
+    if settings.state_backend_kind == "gcs" and settings.gcs_state_bucket:
+        overrides = overrides_from_rows(
+            read_role_rows(settings.gcs_state_bucket, settings.roles_object)
+        )
+        for tok, role in overrides.items():
+            merged[tok] = (role, "override")
+    rows = [
+        RoleAssignmentOut(token=tok, role=role, source=src)
+        for tok, (role, src) in sorted(merged.items())
+    ]
+    return AdminRolesResponse(roles=rows, ladder=list(ROLE_LADDER))
+
+
+@app.post(
+    "/admin/roles",
+    response_model=RoleChangeResponse,
+    dependencies=[Depends(require_role("superuser"))],
+)
+def admin_set_role(req: RoleChangeRequest) -> RoleChangeResponse:
+    """Append a role change to roles.jsonl. Takes effect within the TTL."""
+    if not is_valid_role(req.role):
+        raise HTTPException(
+            status_code=422,
+            detail=f"invalid role '{req.role}'; one of {list(ROLE_LADDER)}",
+        )
+    bucket, obj = _require_gcs_for_roles()
+    guest = get_current_guest()
+    append_role_row(
+        bucket,
+        obj,
+        {
+            "v": 1,
+            "timestamp": utc_now_iso(),
+            "token": req.token,
+            "role": req.role,
+            "changed_by": (guest.recipient if guest else None),
+            "note": req.note,
+        },
+    )
+    return RoleChangeResponse(token=req.token, role=req.role)
+
+
+@app.post(
+    "/admin/roles/{token}/reset",
+    response_model=RoleChangeResponse,
+    dependencies=[Depends(require_role("superuser"))],
+)
+def admin_reset_role(token: str) -> RoleChangeResponse:
+    """Clear a token's override; role falls back to the env seed (or novice)."""
+    bucket, obj = _require_gcs_for_roles()
+    guest = get_current_guest()
+    append_role_row(
+        bucket,
+        obj,
+        {
+            "v": 1,
+            "timestamp": utc_now_iso(),
+            "token": token,
+            "role": RESET_SENTINEL,
+            "changed_by": (guest.recipient if guest else None),
+            "note": None,
+        },
+    )
+    return RoleChangeResponse(token=token, role=resolve_role(token))
+
+
+@app.get("/admin/golds", response_model=AdminGoldListResponse, dependencies=[Depends(require_role("admin"))])
 def admin_list_golds() -> AdminGoldListResponse:
     """Merged view of gold.jsonl + gold_curation.jsonl.
 
@@ -465,14 +634,14 @@ def admin_list_golds() -> AdminGoldListResponse:
     return AdminGoldListResponse(golds=rows)
 
 
-@app.post("/admin/gold-curation", response_model=GoldCurationResponse)
+@app.post("/admin/gold-curation", response_model=GoldCurationResponse, dependencies=[Depends(require_role("admin"))])
 def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
     """Toggle whether a gold is included in the next index rebuild."""
     log_gold_curation(req.qa_id, included=req.included)
     return GoldCurationResponse()
 
 
-@app.get("/admin/feedback", response_model=AdminFeedbackListResponse)
+@app.get("/admin/feedback", response_model=AdminFeedbackListResponse, dependencies=[Depends(require_role("admin"))])
 def admin_list_feedback() -> AdminFeedbackListResponse:
     """List the latest feedback event per qa_id, sorted newest-first.
 
@@ -500,7 +669,7 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
     return AdminFeedbackListResponse(feedback=rows)
 
 
-@app.get("/admin/sources", response_model=AdminSourceListResponse)
+@app.get("/admin/sources", response_model=AdminSourceListResponse, dependencies=[Depends(require_role("admin"))])
 def admin_list_sources() -> AdminSourceListResponse:
     """List every source file under rules/<sport>/ with its inclusion state.
 
@@ -533,14 +702,14 @@ def admin_list_sources() -> AdminSourceListResponse:
     return AdminSourceListResponse(sources=rows)
 
 
-@app.post("/admin/source-curation", response_model=SourceCurationResponse)
+@app.post("/admin/source-curation", response_model=SourceCurationResponse, dependencies=[Depends(require_role("admin"))])
 def admin_set_source_curation(req: SourceCurationRequest) -> SourceCurationResponse:
     """Toggle whether a source file is included in the next index rebuild."""
     log_source_curation(req.path, included=req.included)
     return SourceCurationResponse()
 
 
-@app.post("/admin/rebuild-index", response_model=RebuildIndexResponse)
+@app.post("/admin/rebuild-index", response_model=RebuildIndexResponse, dependencies=[Depends(require_role("admin"))])
 def admin_rebuild_index() -> RebuildIndexResponse:
     """Run scripts/build_index.py synchronously and return its outcome.
 
