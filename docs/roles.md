@@ -2,7 +2,16 @@
 
 _Last updated: 2026-08-10_
 
-Design doc — not yet implemented. Captures the planned role model layered on top of `guest-auth`, so `feedback`, `gold`, admin actions, and role changes themselves are gated by what the caller is allowed to do.
+> **Status:** Backend implemented (`rulebook.roles`, `/me`, `/admin/roles*`,
+> `require_role` gating, seed via `RULEBOOK_INITIAL_ROLES`, live overrides in
+> the GCS `roles.jsonl`). Two deltas from the design below: `require_role`
+> **fails closed** for privileged tiers when `demo_mode` is off (a public
+> deploy allows only the novice tier — /gold and /admin/* are denied, not
+> open); and the durable store is the GCS-object stopgap (not `jsonl-log`
+> v0.2). **Frontend UI gating + the superuser "Users/Roles" tab are not yet
+> built** — those coordinate with the web work.
+
+Captures the role model layered on top of `guest-auth`, so `feedback`, `gold`, admin actions, and role changes themselves are gated by what the caller is allowed to do.
 
 ## Why
 

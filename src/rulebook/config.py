@@ -37,7 +37,22 @@ class Settings(BaseSettings):
     claude_model: str = "claude-sonnet-5"
 
     # --- Storage -----------------------------------------------------------
+    # Where the vector index lives on the local filesystem. Local dev leaves
+    # this relative (resolved under repo_root); a hosted container sets an
+    # absolute INDEX_PATH (e.g. /tmp/rulebook/index) that index_sync.py
+    # populates from GCS at startup — repo_root is unwritable there.
     index_path: Path = Field(default=Path("./data/index"))
+
+    # Writable root for app-owned mutable scratch (cost counter JSON when
+    # local, JSONL logs). Defaults to <repo>/data for dev. Hosted deploys
+    # point RULEBOOK_DATA_DIR at a writable location (e.g. /tmp/rulebook)
+    # because the installed-package repo_root resolves into an unwritable
+    # site-packages ancestor. Durable state (cost counter) still routes
+    # through the GCS StateBackend; only transient scratch lives here.
+    data_root: Path | None = Field(
+        default=None,
+        validation_alias="RULEBOOK_DATA_DIR",
+    )
 
     # --- Guardrails (llm-cost-governor library) ---------------------------
     # Master gate. When False the CostCounter and IP rate limit are
@@ -66,21 +81,46 @@ class Settings(BaseSettings):
     # Opt-in invite-token gate for pre-production demos. When demo_mode
     # is False the middleware is a complete pass-through — local dev
     # and any public deploy without an allowlist keep the current
-    # no-auth behaviour. Field names (demo_mode, invite_tokens) match
-    # the GuestAuthConfig Protocol so the Settings instance can be
-    # handed to InviteAuthMiddleware(config=...) directly.
+    # no-auth behaviour. `demo_mode` + the `invite_tokens` property match
+    # the GuestAuthConfig Protocol so the Settings instance can be handed
+    # to InviteAuthMiddleware(config=...) directly.
     demo_mode: bool = Field(
         default=False,
         validation_alias="RULEBOOK_DEMO_MODE",
     )
-    # JSON map of {token: recipient-label}. Read at request time from
-    # this attribute, so tests can monkeypatch it on the live app.
-    # Mint tokens with any opaque generator (e.g. `uuidgen`) prefixed
-    # with `tok_` for readability, then set:
+    # Static seed of {token: recipient-label}. The historical env var —
+    # still the whole allowlist in local dev. Mint tokens with any opaque
+    # generator (e.g. `uuidgen`) prefixed with `tok_`, then set:
     #   RULEBOOK_INVITE_TOKENS='{"tok_abc123": "eric-test"}'
-    invite_tokens: dict[str, str] = Field(
+    # A hosted (gcs) deploy layers a mutable GCS object OVER this seed —
+    # see the `invite_tokens` property and tokens.py.
+    invite_tokens_seed: dict[str, str] = Field(
         default_factory=dict,
         validation_alias="RULEBOOK_INVITE_TOKENS",
+    )
+    # Name of the GCS object (in gcs_state_bucket) holding the mutable
+    # allowlist. Read per request with a short TTL when state_backend_kind
+    # is "gcs"; ignored otherwise. Adding a user = rewriting this object,
+    # no redeploy (see scripts/invite_tokens.py).
+    invite_tokens_object: str = Field(
+        default="invite_tokens.json",
+        validation_alias="RULEBOOK_INVITE_TOKENS_OBJECT",
+    )
+
+    # --- Roles / RBAC (see docs/roles.md, rulebook.roles) -----------------
+    # Seed role assignments {token: role}. Baseline resolved under the live
+    # roles.jsonl overrides; must include at least one `superuser` to
+    # bootstrap (no self-promotion endpoint exists). Redeploy to change.
+    #   RULEBOOK_INITIAL_ROLES='{"tok_alice": "superuser"}'
+    initial_roles: dict[str, str] = Field(
+        default_factory=dict,
+        validation_alias="RULEBOOK_INITIAL_ROLES",
+    )
+    # GCS object holding the append-only role-change log, written by the
+    # superuser /admin/roles API. Live overrides over the seed.
+    roles_object: str = Field(
+        default="roles.jsonl",
+        validation_alias="RULEBOOK_ROLES_OBJECT",
     )
 
     @property
@@ -95,13 +135,53 @@ class Settings(BaseSettings):
         return p if p.is_absolute() else self.repo_root / p
 
     @property
+    def invite_tokens(self) -> dict[str, str]:
+        """Effective {token: recipient-label} allowlist for guest-auth.
+
+        Local dev: just ``invite_tokens_seed``. Hosted (gcs): the seed with
+        the mutable GCS object merged over it, refreshed on a short TTL so a
+        newly-added user works within seconds and no redeploy is needed.
+        Read per request by InviteAuthMiddleware (only when demo_mode is on).
+        """
+        from .tokens import get_invite_tokens
+
+        return get_invite_tokens(
+            kind=self.state_backend_kind,
+            bucket=self.gcs_state_bucket,
+            object_name=self.invite_tokens_object,
+            seed=self.invite_tokens_seed,
+        )
+
+    @property
+    def rules_dir(self) -> Path:
+        """Source rulebooks (rules/<sport>/…), read by diagnostics + admin.
+
+        ``repo_root/rules`` in local dev. In an installed-package container
+        ``repo_root`` points into an unwritable site-packages ancestor with
+        no ``rules/``; the image ships the sources under ``WORKDIR=/app``,
+        so fall back to the CWD-relative ``rules/`` — same trick main.py
+        uses for ``web/dist``.
+        """
+        candidate = self.repo_root / "rules"
+        return candidate if candidate.is_dir() else Path("rules").resolve()
+
+    @property
     def data_dir(self) -> Path:
         """Root of app-owned mutable state — cost counter JSON, JSONL logs, etc.
 
-        Currently a subdir of the repo, matching how the rest of the app
-        already writes to ``data/``. When we host, this moves to a
-        container-mounted volume or a GCS bucket via a StateBackend.
+        Defaults to a subdir of the repo, matching how the rest of the app
+        already writes to ``data/`` in local dev. Hosted deploys override via
+        RULEBOOK_DATA_DIR (``data_root``) to a writable path, because the
+        installed-package ``repo_root`` resolves to an unwritable
+        site-packages ancestor. Durable state routes through the GCS
+        StateBackend; this is scratch.
         """
+        if self.data_root is not None:
+            return (
+                self.data_root
+                if self.data_root.is_absolute()
+                else self.repo_root / self.data_root
+            )
         return self.repo_root / "data"
 
 

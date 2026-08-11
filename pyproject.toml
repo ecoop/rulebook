@@ -42,9 +42,16 @@ dependencies = [
     # LLM cost caps, rate limiting, and event logging. Shared library —
     # renamed from llm-guardrails; see docs/integration.md in that repo.
     # [fastapi] extra pulls in the request-scoped IP-rate-limit dependency
-    # factory. GCS/OTel extras deferred until we host. Published to PyPI,
-    # so a plain version pin rather than a git URL.
-    "llm-cost-governor[fastapi]>=0.3.3",
+    # factory; [gcs] pulls the GCS StateBackend (google-cloud-storage) now
+    # that we host on Cloud Run — cost-counter state persists in a bucket.
+    # Published to PyPI, so a plain version pin rather than a git URL.
+    "llm-cost-governor[fastapi,gcs]>=0.3.3",
+
+    # GCS access for the vector index and (Track B) the invite-token
+    # allowlist. index_sync.py pulls the index into a writable path at
+    # startup; declared directly because we import google.cloud.storage
+    # ourselves rather than leaning on the llm-cost-governor[gcs] transitive.
+    "google-cloud-storage>=2.10",
 
     # Invite-token gate for pre-production demos. Opt-in via
     # RULEBOOK_DEMO_MODE=true; a pure pass-through when off, so local
