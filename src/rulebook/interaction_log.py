@@ -79,7 +79,7 @@ SOURCE_CURATION_SCHEMA_VERSION = 1
 
 
 def _log_dir() -> Path:
-    return settings.repo_root / "data" / "logs"
+    return settings.data_dir / "logs"
 
 
 def log_qa(
