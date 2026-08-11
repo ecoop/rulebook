@@ -82,6 +82,12 @@ def test_failure_reuses_last_good(monkeypatch, clock):
     assert out == {"tok_s": "s", "tok_a": "alice"}  # last-good overrides kept
 
 
+def test_mint_token_shape():
+    t1, t2 = tokens.mint_token(), tokens.mint_token()
+    assert t1.startswith("tok_") and len(t1) > 8
+    assert t1 != t2  # unique
+
+
 def test_cold_start_failure_falls_back_to_seed(monkeypatch, clock):
     _stub_read(monkeypatch, RuntimeError("gcs down"))
     out = tokens.get_invite_tokens(

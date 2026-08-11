@@ -64,6 +64,11 @@ from rulebook.roles import (  # noqa: E402
     resolve_role,
 )
 from rulebook.store import list_sports  # noqa: E402
+from rulebook.tokens import (  # noqa: E402
+    mint_token,
+    read_tokens_object,
+    write_tokens_object,
+)
 from jsonl_log import utc_now_iso  # noqa: E402
 
 app = FastAPI(title="rulebook", description="RAG over disc-sport rules.")
@@ -241,6 +246,31 @@ class RoleChangeResponse(BaseModel):
     ok: bool = True
     token: str
     role: str = Field(..., description="Effective role after the change.")
+
+
+class InviteTokenOut(BaseModel):
+    token: str
+    label: str = Field(..., description="Human-readable recipient label.")
+
+
+class InviteTokensResponse(BaseModel):
+    tokens: list[InviteTokenOut]
+
+
+class AddInviteTokenRequest(BaseModel):
+    label: str = Field(..., min_length=1, description="Recipient label, e.g. 'alice'.")
+    token: str | None = Field(default=None, description="Optional explicit token; minted if omitted.")
+
+
+class AddInviteTokenResponse(BaseModel):
+    token: str
+    label: str
+
+
+class RemoveInviteTokenResponse(BaseModel):
+    ok: bool = True
+    token: str
+    label: str
 
 
 class MetaResponse(BaseModel):
@@ -611,6 +641,73 @@ def admin_reset_role(token: str) -> RoleChangeResponse:
         },
     )
     return RoleChangeResponse(token=token, role=resolve_role(token))
+
+
+def _require_gcs_for_invite_tokens() -> tuple[str, str]:
+    if settings.state_backend_kind != "gcs" or not settings.gcs_state_bucket:
+        raise HTTPException(
+            status_code=400,
+            detail="invite-token management requires the gcs state backend.",
+        )
+    return settings.gcs_state_bucket, settings.invite_tokens_object
+
+
+@app.get(
+    "/admin/invite-tokens",
+    response_model=InviteTokensResponse,
+    dependencies=[Depends(require_role("superuser"))],
+)
+def admin_list_invite_tokens() -> InviteTokensResponse:
+    """Current GCS invite allowlist. Powers the Users tab's list."""
+    bucket, obj = _require_gcs_for_invite_tokens()
+    tokens = read_tokens_object(bucket, obj)
+    return InviteTokensResponse(
+        tokens=[
+            InviteTokenOut(token=tok, label=label)
+            for tok, label in sorted(tokens.items(), key=lambda kv: kv[1])
+        ]
+    )
+
+
+@app.post(
+    "/admin/invite-tokens",
+    response_model=AddInviteTokenResponse,
+    dependencies=[Depends(require_role("superuser"))],
+)
+def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse:
+    """Create a user: mint (or accept) a token and add it to the allowlist.
+
+    Takes effect within the token source's TTL — immediately on this
+    instance (cache is dropped on write), within ~30s elsewhere.
+    """
+    bucket, obj = _require_gcs_for_invite_tokens()
+    tokens = read_tokens_object(bucket, obj)
+    token = req.token or mint_token()
+    if token in tokens:
+        raise HTTPException(status_code=409, detail=f"token already exists ({tokens[token]!r}).")
+    tokens[token] = req.label
+    write_tokens_object(bucket, obj, tokens)
+    return AddInviteTokenResponse(token=token, label=req.label)
+
+
+@app.delete(
+    "/admin/invite-tokens/{token}",
+    response_model=RemoveInviteTokenResponse,
+    dependencies=[Depends(require_role("superuser"))],
+)
+def admin_remove_invite_token(token: str) -> RemoveInviteTokenResponse:
+    """Remove a user from the allowlist (their cookie stops resolving).
+
+    Note: this is hard removal. For a reversible, audit-preserving block,
+    set the user's role to `suspended` via /admin/roles instead.
+    """
+    bucket, obj = _require_gcs_for_invite_tokens()
+    tokens = read_tokens_object(bucket, obj)
+    if token not in tokens:
+        raise HTTPException(status_code=404, detail="token not found.")
+    label = tokens.pop(token)
+    write_tokens_object(bucket, obj, tokens)
+    return RemoveInviteTokenResponse(token=token, label=label)
 
 
 @app.get("/admin/golds", response_model=AdminGoldListResponse, dependencies=[Depends(require_role("admin"))])

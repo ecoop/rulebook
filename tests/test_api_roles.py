@@ -67,3 +67,17 @@ def test_unauthenticated_is_gated(client):
     client.cookies.clear()
     # No valid cookie in demo_mode → middleware blocks before the route.
     assert client.get("/me", follow_redirects=False).status_code != 200
+
+
+def test_invite_tokens_superuser_only(client):
+    _as(client, "tok_nov")
+    assert client.get("/admin/invite-tokens").status_code == 403
+    assert client.post("/admin/invite-tokens", json={"label": "x"}).status_code == 403
+
+
+def test_invite_tokens_need_gcs(client):
+    # superuser is authorized, but the local backend has no allowlist object.
+    _as(client, "tok_super")
+    assert client.get("/admin/invite-tokens").status_code == 400
+    assert client.post("/admin/invite-tokens", json={"label": "x"}).status_code == 400
+    assert client.delete("/admin/invite-tokens/tok_x").status_code == 400

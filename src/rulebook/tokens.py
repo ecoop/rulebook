@@ -23,10 +23,16 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 import time
 from collections.abc import Mapping
 
 log = logging.getLogger(__name__)
+
+
+def mint_token() -> str:
+    """A fresh opaque, URL-safe invite token, `tok_`-prefixed for readability."""
+    return "tok_" + secrets.token_urlsafe(16)
 
 # Default refresh window for the GCS object. Short enough that a
 # just-added user can sign in within seconds across every instance,
@@ -115,3 +121,6 @@ def write_tokens_object(bucket: str, object_name: str, mapping: Mapping[str, str
         json.dumps(dict(mapping), indent=2, sort_keys=True),
         content_type="application/json",
     )
+    # Drop the read cache so an add/remove in this process takes effect
+    # immediately (other instances still refresh within their TTL).
+    _overrides_cache.pop((bucket, object_name), None)
