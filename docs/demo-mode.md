@@ -1,68 +1,44 @@
 # Demo mode on Cloud Run
 
-_Last updated: 2026-08-10_
+_Last updated: 2026-08-11_
 
-Design doc — not yet implemented. How to run an **invite-only public demo** of Rulebook on Cloud Run: minting per-guest tokens, keeping them out of git and the image, and injecting them at deploy.
+**Mostly implemented.** The RBAC backend and a GCS-backed, live-editable invite allowlist shipped in #18; the demo is live at <https://rulebook.cooper.nu>. This is the operator runbook plus the short list of what's left (frontend gating / Users tab, web lane).
 
-## What already exists
+## How it works (shipped in #18)
 
-Invite-gated demo mode ships today via [`guest-auth`](https://github.com/ecoop/guest-auth) ([README](../README.md#invite-gated-demo-mode-optional), [config.py](../src/rulebook/config.py)):
+- **Gate:** `RULEBOOK_DEMO_MODE=true`. Off → no auth (local dev unchanged). Guests visit `?token=…` → httpOnly `Secure` cookie → clean-URL redirect.
+- **Invite allowlist `{token: label}` — two sources merged per request:** env seed `RULEBOOK_INVITE_TOKENS` ⊕ a **live GCS object** (`RULEBOOK_INVITE_TOKENS_OBJECT`, default `invite_tokens.json`) read with a ~30s TTL when `STATE_BACKEND_KIND=gcs`. So **adding/removing invitees is redeploy-free** — this is what [#20](https://github.com/ecoop/rulebook/issues/20) (Option C) planned, now shipped.
+- **Roles (authZ):** `RULEBOOK_INITIAL_ROLES` seed ⊕ live `roles.jsonl` (`RULEBOOK_ROLES_OBJECT`). `require_role` gates endpoints per [roles.md](roles.md): novice for `/ask` `/feedback` `/usage` `/diagnostics` `/meta` `/me`; evaluator for `/gold`; admin for `/admin/*`; superuser for `/admin/roles*`. Unassigned tokens default to `novice`. **Promote/demote/suspend is live** via `POST /admin/roles` — no redeploy.
 
-- `RULEBOOK_DEMO_MODE=true` turns the gate on (off by default → no auth).
-- `RULEBOOK_INVITE_TOKENS` is a JSON `{token: name}` map read from an **env var**. Guests visit `?token=…` → httpOnly cookie → clean-URL redirect. The name is used for logging, the Demo widget, and per-guest cost attribution.
+## Managing invitees (live, no redeploy)
 
-Because tokens come from an env var, **do not bake a token file into the image** (`COPY . /app` would leak secrets into image layers and force a rebuild per guest-list change). Generate locally → gitignored file → inject at deploy.
-
-## Two independent axes — don't conflate them
-
-- **Who can get in (authN)** — the invite-token allowlist `{token: name}` below. *How it reaches the container* is Option A/B/C.
-- **What a signed-in user can do (authZ)** — their **role** (novice → superuser), managed live via `roles.jsonl` per [roles.md](roles.md).
-
-These are orthogonal. **Option A fully supports live promote/demote/suspend** — role changes are a `POST /admin/roles` write, never a redeploy. Under A the *only* things needing a redeploy are edits to the raw allowlist itself: adding a new person, or **renaming a token's label** (e.g. repurposing an unused invite from one person to another). Revocation dodges even that via the `suspended` role. Making allowlist edits redeploy-free is Option C ([#20](https://github.com/ecoop/rulebook/issues/20)), independent of RBAC.
-
-## Prerequisite: minimal RBAC (audience is untrusted)
-
-Today **any valid token grants full access** — including `/admin`, `/gold`, and everyone's `/feedback` ([roles.md](roles.md) is design-only). Cost caps (Track A) bound *spend*, but not data integrity or privacy. For an outside audience, land [roles.md](roles.md) steps 1–2 first:
-
-- `require_role` dependency; demo tokens default to `novice`.
-- Gate `/admin*` at `admin`, `/gold` at `evaluator`. Non-permitted UI hidden.
-
-This is the blocking item — everything below assumes it (or an accepted risk sign-off).
-
-## Token minting
-
-`scripts/mint_invite_tokens.py`:
-
-- Input: gitignored `secrets/demo_guests.txt` (one name per line) or CLI args.
-- Per name: `tok_` + `secrets.token_hex(16)`. **Merge, don't regenerate** — keep existing tokens for known names so shared links keep working.
-- Outputs (gitignored, under `secrets/`):
-  - `invite_tokens.json` — the `{token: name}` map.
-  - `invite_links.md` — `name → https://<host>/?token=…` for distribution.
-- Add `secrets/` to both `.gitignore` and `.dockerignore`.
-
-## Injection: Secret Manager → env var (Option A)
-
-Best design for Cloud Run: no code change (config already reads the env var), secrets never touch the image or git, IAM-controlled, versioned rotation.
+`scripts/invite_tokens.py` writes the GCS allowlist object:
 
 ```bash
-gcloud secrets create rulebook-invite-tokens --data-file=secrets/invite_tokens.json
-# (later updates: gcloud secrets versions add rulebook-invite-tokens --data-file=...)
-
-gcloud run deploy rulebook \
-  --set-secrets=RULEBOOK_INVITE_TOKENS=rulebook-invite-tokens:latest \
-  --set-env-vars=RULEBOOK_DEMO_MODE=true \
-  --max-instances=1
+uv run python -m scripts.invite_tokens list
+uv run python -m scripts.invite_tokens add "Alice"          # mints tok_...
+uv run python -m scripts.invite_tokens add "Bob" --token tok_custom
+uv run python -m scripts.invite_tokens rm tok_abc123
 ```
 
-**Later — Option C ([#20](https://github.com/ecoop/rulebook/issues/20)):** move the allowlist to a mounted file or the GCS state bucket so allowlist edits — adding a person, or renaming a token's label — become redeploy-free too. This is *not* a prerequisite for RBAC and A does not block it; it's natural to fold onto the same GCS live-config path `roles.jsonl` uses. Not now.
+Needs `STATE_BACKEND_KIND=gcs`, `GCS_STATE_BUCKET`, and ADC (`gcloud auth application-default login`). Share links as `https://rulebook.cooper.nu/?token=<tok>`.
 
-## Cloud Run must-dos
+**Repurposing a token's label** (e.g. an unused invite → a new person): fine when unused. If the token was *used*, the new name inherits its weekly cost, an existing cookie keeps resolving to it, and past log rows keep the old label — mint a fresh token and `suspended` the old one instead. Tooling should challenge (warn, not block) a used-token rename — see [#20](https://github.com/ecoop/rulebook/issues/20).
 
-- **State backend = GCS.** The image ships no index (`data/` is dockerignored); each instance starts fresh. Set `state_backend_kind=gcs` + `gcs_state_bucket` (Track B) or the demo can't answer, and feedback/usage won't persist.
-- **`--max-instances=1`.** The cost counter is per-instance in-memory; multiple instances under-count caps.
-- **HTTPS** — required for `Secure` cookies; Cloud Run provides it.
-- **Token in first-request logs** — `?token=` hits request logs once before the redirect. Low risk for demo tokens.
+## Deploy config (Cloud Run)
 
-## Revocation
+- `STATE_BACKEND_KIND=gcs`, `GCS_STATE_BUCKET=…` — index, logs, cost counter, allowlist, and roles persist across instances (image ships no state).
+- `RULEBOOK_DEMO_MODE=true`.
+- **Bootstrap a superuser** (only way to seed the first one): `RULEBOOK_INITIAL_ROLES='{"tok_you":"superuser"}'`.
+- `--max-instances=1` — the cost counter is per-instance in-memory; more instances under-count caps.
+- Keep seed roles/tokens in **Secret Manager → env** (`--set-secrets`), never baked into the image. HTTPS (for `Secure` cookies) is provided by Cloud Run.
 
-Today: drop the entry from the secret (new version) + redeploy — cookies aren't signed, so the allowlist is re-checked every request. Once RBAC's `roles.jsonl` lands, the `suspended` role gives redeploy-free revocation.
+## Remaining work (web lane)
+
+- **Frontend role-gating** ([roles.md](roles.md) step 4): fetch `/me`, hide admin link / tags / notes / gold by role; `suspended` → no app shell. Depends on #19 merging first.
+- **Users tab:** superuser UI over `/admin/roles` + the invite write-path ([users-tab.md](users-tab.md)).
+- **Option C polish** ([#20](https://github.com/ecoop/rulebook/issues/20)): explicit label-edit + used-token challenge in the CLI.
+
+## Host
+
+Live: <https://rulebook.cooper.nu> — CNAME → `ghs.googlehosted.com`, HTTPS with valid cert. DNS/hosting lane complete.
