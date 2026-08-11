@@ -22,10 +22,11 @@ then push it live. `gen` is offline (no GCS); only `push` touches the bucket:
     uv run python -m scripts.invite_tokens push --dry-run # preview
     uv run python -m scripts.invite_tokens push           # upsert into the live allowlist
 
-`gen` reads one name per line from secrets/demo_guests.txt and writes
-secrets/invite_tokens.local.json ({token: label}, your source of truth) plus
-secrets/invite_links.md. It MERGES — a name already in the JSON keeps its
-token, so shared links never break. `push` is ADD-ONLY: it upserts every
+`gen` reads one name per line from secrets/demo_guests.txt (an inline `#`
+adds a private note — kept in the links file, never sent to Rulebook) and
+writes secrets/invite_tokens.local.json ({token: label}, your source of
+truth) plus secrets/invite_links.md. It MERGES — a name already in the JSON
+keeps its token, so shared links never break. `push` is ADD-ONLY: it upserts every
 local entry and never deletes a token that only exists live (e.g. one an
 admin added via the Users tab).
 """
@@ -67,14 +68,21 @@ def _mint() -> str:
     return "tok_" + secrets.token_urlsafe(16)
 
 
-def _read_names(path: Path) -> list[str]:
-    names: list[str] = []
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+def _read_entries(path: Path) -> list[tuple[str, str]]:
+    """(label, note) for each non-comment line.
+
+    An inline ``#`` starts a private note — everything before it is the
+    label (what Rulebook sees), everything after is a note kept only in the
+    local links file. A line whose label is empty is a plain comment.
+    """
+    entries: list[tuple[str, str]] = []
+    for raw in path.read_text().splitlines():
+        label, _, note = raw.partition("#")
+        label, note = label.strip(), note.strip()
+        if not label:
             continue
-        names.append(line)
-    return names
+        entries.append((label, note))
+    return entries
 
 
 def cmd_list(_args: argparse.Namespace) -> None:
@@ -119,14 +127,16 @@ def cmd_gen(args: argparse.Namespace) -> None:
     if not names_path.exists():
         names_path.parent.mkdir(parents=True, exist_ok=True)
         names_path.write_text(
-            "# One recipient per line. Blank lines and #comments are ignored.\n"
-            "# Re-run `gen` after editing; names already minted keep their token.\n"
-            "# e.g.\n# Eric\n# Alice\n"
+            "# One recipient per line. Blank lines and #-only lines are ignored.\n"
+            "# An inline '#' adds a private note (kept local, NOT sent to Rulebook):\n"
+            "#   Mike   # last name Goodwin, met at worlds\n"
+            "# Re-run `gen` after editing; a name already minted keeps its token.\n"
+            "# e.g.\n# Eric\n# Alice   # from the Tuesday league\n"
         )
         sys.exit(f"created template {names_path} — add one name per line, then re-run `gen`.")
 
-    names = _read_names(names_path)
-    if not names:
+    entries = _read_entries(names_path)
+    if not entries:
         sys.exit(f"{names_path} has no names (blank/comment-only).")
 
     # {token: label}; reverse map to keep a known name's existing token.
@@ -136,25 +146,30 @@ def cmd_gen(args: argparse.Namespace) -> None:
     name_to_token = {label: tok for tok, label in existing.items()}
 
     result = dict(existing)
+    notes: dict[str, str] = {}
     minted = 0
-    for name in names:
-        if name in name_to_token:
+    for label, note in entries:
+        if note:
+            notes[label] = note
+        if label in name_to_token:
             continue  # preserve the existing token — don't break shared links
         token = _mint()
-        result[token] = name
-        name_to_token[name] = token
+        result[token] = label
+        name_to_token[label] = token
         minted += 1
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
 
     md = ["# Invite links", "", f"_Base: {args.base_url}_", ""]
-    for token, name in sorted(result.items(), key=lambda kv: kv[1].lower()):
-        md.append(f"- **{name}** — {args.base_url}/?token={token}")
+    for token, label in sorted(result.items(), key=lambda kv: kv[1].lower()):
+        note = notes.get(label, "")
+        shown = f"**{label}**" + (f" ({note})" if note else "")
+        md.append(f"- {shown} — {args.base_url}/?token={token}")
     links_path.write_text("\n".join(md) + "\n")
 
     print(
-        f"gen: {len(names)} name(s) in {names_path.name}; minted {minted} new, "
+        f"gen: {len(entries)} name(s) in {names_path.name}; minted {minted} new, "
         f"{len(result)} total."
     )
     print(f"  tokens → {out_path}")
