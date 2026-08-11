@@ -155,6 +155,7 @@ export default function AdminApp() {
   // Users tab (superuser). `me` powers tab visibility; the table joins the
   // invite allowlist with role assignments.
   const [me, setMe] = useState<MeResponse | null>(null)
+  const [meForbidden, setMeForbidden] = useState(false)
   const [inviteTokens, setInviteTokens] = useState<InviteTokenOut[] | null>(null)
   const [roles, setRoles] = useState<RoleAssignmentOut[] | null>(null)
   const [ladder, setLadder] = useState<string[]>([])
@@ -164,18 +165,27 @@ export default function AdminApp() {
   const [userPending, setUserPending] = useState<Set<string>>(() => new Set())
   const [copied, setCopied] = useState<string | null>(null)
 
+  // The admin surface requires an admin+ role on a gated (demo_mode) deploy —
+  // the backend /admin/* endpoints 403 otherwise. Gate the whole page on this
+  // so non-admins get a friendly message instead of raw error banners.
+  const canUseAdmin =
+    !!me && me.demo_mode && (me.role === 'admin' || me.role === 'superuser')
+  const isSuperuser = !!me && me.role === 'superuser'
+
   useEffect(() => {
-    void refresh()
-    void refreshSources()
-    void refreshFeedback()
     void refreshMe()
   }, [])
 
-  // Load the user table only when it's actually usable — superuser on a
-  // gated (demo_mode) deploy. Otherwise the tab shows an explanatory note.
+  // Only fetch admin data once /me confirms access — avoids the 403 banners a
+  // non-admin (or demo-off) deploy would otherwise surface on every tab.
   useEffect(() => {
-    if (me?.role === 'superuser' && me.demo_mode) void refreshUsers()
-  }, [me])
+    if (!canUseAdmin) return
+    void refresh()
+    void refreshSources()
+    void refreshFeedback()
+    if (isSuperuser) void refreshUsers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUseAdmin, isSuperuser])
 
   async function refresh() {
     setError(null)
@@ -201,13 +211,18 @@ export default function AdminApp() {
   }
 
   async function refreshMe() {
-    // Non-fatal: if /me fails we simply don't show the Users tab.
+    // /me is gated at novice, so a 403 means the guest is suspended — show
+    // the suspended screen rather than the admin surface.
     try {
       const resp = await fetch('/me')
+      if (resp.status === 403) {
+        setMeForbidden(true)
+        return
+      }
       if (!resp.ok) return
       setMe(await resp.json())
     } catch {
-      /* ignore */
+      /* ignore — page renders its "checking access" state */
     }
   }
 
@@ -528,10 +543,10 @@ export default function AdminApp() {
       return { token: t.token, label: t.label, role: r?.role ?? 'novice', source: r?.source ?? '—' }
     })
     .sort((a, b) => a.label.localeCompare(b.label))
-  // Tab visible to a superuser, or on an ungated deploy (demo_mode off) where
-  // the whole admin surface is already open — there it shows a note.
-  const showUsersTab = !!me && (me.role === 'superuser' || !me.demo_mode)
-  const canManageUsers = me?.role === 'superuser' && me.demo_mode
+  // The page is already gated on admin+ (canUseAdmin); within it the Users tab
+  // is superuser-only.
+  const showUsersTab = isSuperuser
+  const canManageUsers = isSuperuser
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -561,6 +576,37 @@ export default function AdminApp() {
           </div>
         )}
 
+        {!me && !meForbidden && !error && (
+          <div className="text-sm text-slate-500">Checking access…</div>
+        )}
+
+        {meForbidden && (
+          <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+            Your access has been suspended. Contact an admin if you think this is a mistake.
+          </div>
+        )}
+
+        {me && !meForbidden && !canUseAdmin && (
+          <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+            {!me.demo_mode ? (
+              <>
+                The admin panel isn't available on this deploy. It needs a gated deploy
+                (<span className="font-mono">RULEBOOK_DEMO_MODE=true</span> with{' '}
+                <span className="font-mono">STATE_BACKEND_KIND=gcs</span>) and an{' '}
+                <span className="font-mono">admin</span> role.
+              </>
+            ) : (
+              <>
+                You need the <span className="font-mono">admin</span> role to use this page.
+                Your role is <span className="font-mono">{me.role}</span> — ask a superuser
+                to promote you.
+              </>
+            )}
+          </div>
+        )}
+
+        {me && canUseAdmin && (
+          <>
         {/* Rebuild control — global, applies to whichever tab is active. */}
         <div className="flex items-center justify-end">
           <button
@@ -1122,6 +1168,8 @@ export default function AdminApp() {
               </section>
             )}
           </div>
+        )}
+          </>
         )}
       </main>
     </div>
