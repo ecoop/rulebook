@@ -53,8 +53,10 @@ export function UsageSummaryLine({ usage }: { usage: UsageSnapshot | null }) {
   if (!usage) return <span className="text-muted-foreground">…</span>
   const p = pct(usage.daily_usd, usage.caps.daily_usd)
   return (
-    <span className="flex items-center gap-1.5">
-      <span className="font-mono tabular-nums">{money(usage.daily_usd)}</span>
+    <span className="flex items-center gap-1.5 text-[11px] font-medium">
+      <span className="font-mono font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+        {money(usage.daily_usd)}
+      </span>
       <span className="text-muted-foreground">/ {money(usage.caps.daily_usd)} today</span>
       <span
         className={
@@ -90,14 +92,15 @@ function CapBar({
           </Info>
         </span>
         <span className="font-mono tabular-nums">
-          {money(spent)} <span className="text-muted-foreground">/ {money(cap)}</span>
+          <span className="text-emerald-600 dark:text-emerald-400">{money(spent)}</span>{' '}
+          <span className="text-muted-foreground">/ {money(cap)}</span>
         </span>
       </div>
       <div className="h-1 overflow-hidden rounded-full bg-border">
         <div
           className={
             'h-full transition-all ' +
-            (p >= 100 ? 'bg-red-500' : p >= 80 ? 'bg-amber-500' : 'bg-blue-500')
+            (p >= 100 ? 'bg-red-500' : p >= 80 ? 'bg-amber-500' : 'bg-emerald-500')
           }
           style={{ width: `${p}%` }}
         />
@@ -144,7 +147,9 @@ export function UsageBody({ usage }: { usage: UsageSnapshot | null }) {
             .map(([provider, usd]) => (
               <div key={provider} className="flex items-baseline justify-between pl-3">
                 <span className="text-muted-foreground">{provider}</span>
-                <span className="font-mono tabular-nums">{moneyPrecise(usd)}</span>
+                <span className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {moneyPrecise(usd)}
+                </span>
               </div>
             ))}
         </div>
@@ -171,7 +176,9 @@ export function UsageBody({ usage }: { usage: UsageSnapshot | null }) {
               </Info>
             </span>
             <span className="font-mono tabular-nums">
-              {money(usage.caller_weekly_usd)}{' '}
+              <span className="text-emerald-600 dark:text-emerald-400">
+                {money(usage.caller_weekly_usd)}
+              </span>{' '}
               <span className="text-muted-foreground">
                 / {money(usage.caps.per_token_usd)}
               </span>
