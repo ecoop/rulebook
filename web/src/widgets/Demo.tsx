@@ -14,11 +14,25 @@ function money(n: number): string {
 }
 
 export function DemoSummaryLine({ usage }: { usage: UsageSnapshot | null }) {
-  if (!usage) return <span className="text-muted-foreground">…</span>
+  if (!usage)
+    return (
+      <span className="text-[11px] font-medium">
+        Demo <span className="text-muted-foreground">…</span>
+      </span>
+    )
   if (!usage.guest_recipient) {
-    return <span className="text-[11px] font-medium text-muted-foreground">not signed in</span>
+    return (
+      <span className="text-[11px] font-medium">
+        Demo <span className="text-muted-foreground">not signed in</span>
+      </span>
+    )
   }
-  return <span className="truncate text-[11px] font-medium">{usage.guest_recipient}</span>
+  return (
+    <span className="flex items-center gap-1.5 text-[11px] font-medium">
+      <span>Demo</span>
+      <span className="truncate text-muted-foreground">{usage.guest_recipient}</span>
+    </span>
+  )
 }
 
 export function DemoBody({ usage }: { usage: UsageSnapshot | null }) {
