@@ -312,7 +312,7 @@ export default function App() {
       <StackOriginReporter headerRef={headerRef} />
       <div className="min-h-screen bg-background text-foreground">
         <header ref={headerRef} className="border-b border-border bg-card">
-          <div className="mx-auto flex max-w-4xl items-start justify-between gap-4 px-6 py-4">
+          <div className="flex items-start justify-between gap-4 px-6 py-4">
             <div className="min-w-0">
               <h1 className="text-xl font-medium">Rulebook</h1>
               <p className="text-sm text-muted-foreground">
@@ -368,7 +368,7 @@ export default function App() {
           </div>
         </header>
 
-      <main className="mx-auto max-w-4xl space-y-6 px-6 py-8 lg:pr-[19rem]">
+      <main className="space-y-6 px-6 py-8 lg:pr-[19rem]">
         <form onSubmit={submit} className="space-y-3">
           <textarea
             value={question}
@@ -614,7 +614,7 @@ export default function App() {
       </main>
 
       {meta && (
-        <footer className="mx-auto max-w-4xl px-6 py-4 text-xs text-muted-foreground">
+        <footer className="px-6 py-4 text-xs text-muted-foreground lg:pr-[19rem]">
           embeddings: {meta.embedding_provider}/{meta.embedding_model} · gen:{' '}
           {meta.claude_model}
           <span className="mx-2 opacity-50">·</span>
