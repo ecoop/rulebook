@@ -32,6 +32,7 @@ from rulebook import app_state  # noqa: E402
 from rulebook.build_info import BUILD_INFO
 from rulebook.config import settings
 from rulebook.index_sync import sync_index_from_gcs
+from rulebook.log_sync import sync_logs_from_gcs
 
 app_state.initialize(settings)
 
@@ -39,6 +40,11 @@ app_state.initialize(settings)
 # under repo_root; pull it into the writable INDEX_PATH before any request.
 # No-op in local dev (state_backend_kind="local"); best-effort otherwise.
 sync_index_from_gcs()
+
+# Same story for the append-only JSONL logs: on gcs the log dir is ephemeral
+# /tmp, so pull prior feedback/gold/qa rows in at boot. Each append then
+# writes through to GCS (interaction_log._append). No-op in local dev.
+sync_logs_from_gcs()
 
 from rulebook.interaction_log import (  # noqa: E402
     log_feedback,
