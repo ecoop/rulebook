@@ -49,7 +49,42 @@ interface AdminFeedbackListResponse {
   feedback: AdminFeedbackRow[]
 }
 
-type AdminTab = 'feedback' | 'golds' | 'sources'
+// --- Users tab (superuser) — invite allowlist × role assignments ------------
+interface MeResponse {
+  recipient: string | null
+  role: string
+  demo_mode: boolean
+}
+
+interface InviteTokenOut {
+  token: string
+  label: string
+}
+
+interface InviteTokensResponse {
+  tokens: InviteTokenOut[]
+}
+
+interface RoleAssignmentOut {
+  token: string
+  role: string
+  source: string
+}
+
+interface AdminRolesResponse {
+  roles: RoleAssignmentOut[]
+  ladder: string[]
+}
+
+// One row per invite token, joined with its effective role.
+interface UserRow {
+  token: string
+  label: string
+  role: string
+  source: string
+}
+
+type AdminTab = 'feedback' | 'golds' | 'sources' | 'users'
 
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
@@ -117,12 +152,30 @@ export default function AdminApp() {
     col: 'sport',
     dir: 'asc',
   })
+  // Users tab (superuser). `me` powers tab visibility; the table joins the
+  // invite allowlist with role assignments.
+  const [me, setMe] = useState<MeResponse | null>(null)
+  const [inviteTokens, setInviteTokens] = useState<InviteTokenOut[] | null>(null)
+  const [roles, setRoles] = useState<RoleAssignmentOut[] | null>(null)
+  const [ladder, setLadder] = useState<string[]>([])
+  const [addLabel, setAddLabel] = useState('')
+  const [addPending, setAddPending] = useState(false)
+  const [newInvite, setNewInvite] = useState<InviteTokenOut | null>(null)
+  const [userPending, setUserPending] = useState<Set<string>>(() => new Set())
+  const [copied, setCopied] = useState<string | null>(null)
 
   useEffect(() => {
     void refresh()
     void refreshSources()
     void refreshFeedback()
+    void refreshMe()
   }, [])
+
+  // Load the user table only when it's actually usable — superuser on a
+  // gated (demo_mode) deploy. Otherwise the tab shows an explanatory note.
+  useEffect(() => {
+    if (me?.role === 'superuser' && me.demo_mode) void refreshUsers()
+  }, [me])
 
   async function refresh() {
     setError(null)
@@ -144,6 +197,135 @@ export default function AdminApp() {
       setFeedback(data.feedback)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function refreshMe() {
+    // Non-fatal: if /me fails we simply don't show the Users tab.
+    try {
+      const resp = await fetch('/me')
+      if (!resp.ok) return
+      setMe(await resp.json())
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function refreshUsers() {
+    try {
+      const [tResp, rResp] = await Promise.all([
+        fetch('/admin/invite-tokens'),
+        fetch('/admin/roles'),
+      ])
+      if (!tResp.ok) throw new Error(`invite-tokens ${tResp.status}: ${await tResp.text()}`)
+      if (!rResp.ok) throw new Error(`roles ${rResp.status}: ${await rResp.text()}`)
+      const t: InviteTokensResponse = await tResp.json()
+      const r: AdminRolesResponse = await rResp.json()
+      setInviteTokens(t.tokens)
+      setRoles(r.roles)
+      setLadder(r.ladder)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function addUser() {
+    const label = addLabel.trim()
+    if (!label || addPending) return
+    setAddPending(true)
+    setError(null)
+    setNewInvite(null)
+    try {
+      const resp = await fetch('/admin/invite-tokens', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ label }),
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      setNewInvite((await resp.json()) as InviteTokenOut)
+      setAddLabel('')
+      await refreshUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAddPending(false)
+    }
+  }
+
+  function markPending(token: string, on: boolean) {
+    setUserPending((prev) => {
+      const next = new Set(prev)
+      if (on) next.add(token)
+      else next.delete(token)
+      return next
+    })
+  }
+
+  async function changeRole(token: string, role: string) {
+    markPending(token, true)
+    setError(null)
+    try {
+      const resp = await fetch('/admin/roles', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token, role }),
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      await refreshUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      markPending(token, false)
+    }
+  }
+
+  async function resetRole(token: string) {
+    markPending(token, true)
+    setError(null)
+    try {
+      const resp = await fetch(`/admin/roles/${encodeURIComponent(token)}/reset`, {
+        method: 'POST',
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      await refreshUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      markPending(token, false)
+    }
+  }
+
+  async function removeUser(token: string, label: string) {
+    // Nudge toward the reversible option — Suspend keeps audit; Remove is a
+    // hard delete of the invite.
+    if (
+      !window.confirm(
+        `Remove "${label}"? This hard-deletes their invite token and they can no longer sign in.\n\nFor a reversible block, cancel and set their role to "suspended" instead.`,
+      )
+    )
+      return
+    markPending(token, true)
+    setError(null)
+    try {
+      const resp = await fetch(`/admin/invite-tokens/${encodeURIComponent(token)}`, {
+        method: 'DELETE',
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      await refreshUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      markPending(token, false)
+    }
+  }
+
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(text)
+      window.setTimeout(() => setCopied((c) => (c === text ? null : c)), 1500)
+    } catch {
+      /* clipboard unavailable — ignore */
     }
   }
 
@@ -336,6 +518,21 @@ export default function AdminApp() {
     return 0
   })
 
+  // Users tab: join the allowlist (who can log in) with role assignments,
+  // keyed by token. Base rows on the allowlist — a role without an invite
+  // entry can't sign in, so it isn't a "user" here.
+  const roleByToken = new Map((roles ?? []).map((r) => [r.token, r]))
+  const userRows: UserRow[] = (inviteTokens ?? [])
+    .map((t) => {
+      const r = roleByToken.get(t.token)
+      return { token: t.token, label: t.label, role: r?.role ?? 'novice', source: r?.source ?? '—' }
+    })
+    .sort((a, b) => a.label.localeCompare(b.label))
+  // Tab visible to a superuser, or on an ungated deploy (demo_mode off) where
+  // the whole admin surface is already open — there it shows a note.
+  const showUsersTab = !!me && (me.role === 'superuser' || !me.demo_mode)
+  const canManageUsers = me?.role === 'superuser' && me.demo_mode
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
@@ -398,14 +595,23 @@ export default function AdminApp() {
 
         {/* Tab bar — counts baked into labels so both are visible regardless of active tab. */}
         <div className="flex gap-1 border-b border-slate-200 text-sm">
-          {(['feedback', 'golds', 'sources'] as AdminTab[]).map((t) => {
+          {([
+            'feedback',
+            'golds',
+            'sources',
+            ...(showUsersTab ? (['users'] as AdminTab[]) : []),
+          ] as AdminTab[]).map((t) => {
             const active = activeTab === t
             const label =
               t === 'feedback'
                 ? `Feedback (${feedbackNeedsAttention} to review · ${feedbackTotal})`
                 : t === 'golds'
                   ? `Golds (${goldIncluded}/${goldTotal})`
-                  : `Sources (${sourceIncluded}/${sourceTotal})`
+                  : t === 'sources'
+                    ? `Sources (${sourceIncluded}/${sourceTotal})`
+                    : canManageUsers
+                      ? `Users (${userRows.length})`
+                      : 'Users'
             return (
               <button
                 key={t}
@@ -768,6 +974,154 @@ export default function AdminApp() {
               </tbody>
             </table>
           </section>
+        )}
+
+        {activeTab === 'users' && !canManageUsers && (
+          <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+            User management applies to a gated demo deploy. Set{' '}
+            <span className="font-mono">RULEBOOK_DEMO_MODE=true</span> with{' '}
+            <span className="font-mono">STATE_BACKEND_KIND=gcs</span>, and sign in as a{' '}
+            <span className="font-mono">superuser</span>, to add invitees and change roles here.
+          </div>
+        )}
+
+        {activeTab === 'users' && canManageUsers && (
+          <div className="space-y-4">
+            {/* Add invitee — allowlist entry (defaults to novice until promoted). */}
+            <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="flex-1">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Add invitee</span>
+                  <input
+                    type="text"
+                    value={addLabel}
+                    onChange={(e) => setAddLabel(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void addUser()
+                    }}
+                    placeholder="Name or label, e.g. Alice"
+                    className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void addUser()}
+                  disabled={addPending || !addLabel.trim()}
+                  className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {addPending ? 'Adding…' : 'Add'}
+                </button>
+              </div>
+              {newInvite &&
+                (() => {
+                  const link = `${window.location.origin}/?token=${newInvite.token}`
+                  return (
+                    <div className="mt-3 rounded-md border border-green-300 bg-green-50 p-3 text-xs text-green-900">
+                      <div className="mb-1 font-medium">
+                        Added {newInvite.label}. Share this invite link:
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 truncate rounded bg-white px-2 py-1 font-mono text-[11px] text-slate-700">
+                          {link}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => void copy(link)}
+                          className="rounded-md border border-green-300 bg-white px-2 py-1 font-medium text-green-800 hover:bg-green-100"
+                        >
+                          {copied === link ? 'Copied' : 'Copy link'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })()}
+            </section>
+
+            {inviteTokens === null && !error && (
+              <div className="text-sm text-slate-500">Loading users…</div>
+            )}
+            {inviteTokens !== null && userRows.length === 0 && (
+              <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                No invitees yet. Add one above.
+              </div>
+            )}
+            {inviteTokens !== null && userRows.length > 0 && (
+              <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2">label</th>
+                      <th className="w-40 px-3 py-2">token</th>
+                      <th className="w-36 px-3 py-2">role</th>
+                      <th className="w-20 px-3 py-2">source</th>
+                      <th className="w-40 px-3 py-2 text-right">actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {userRows.map((u) => {
+                      const busy = userPending.has(u.token)
+                      const isSelf = me?.recipient != null && me.recipient === u.label
+                      return (
+                        <tr
+                          key={u.token}
+                          className={'hover:bg-slate-50' + (busy ? ' opacity-50' : '')}
+                        >
+                          <td className="px-3 py-2 text-slate-800">{u.label}</td>
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              onClick={() => void copy(u.token)}
+                              title="Click to copy token"
+                              className="font-mono text-xs text-slate-500 hover:text-blue-600"
+                            >
+                              {u.token.slice(0, 12)}…{copied === u.token ? ' ✓' : ''}
+                            </button>
+                          </td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={u.role}
+                              disabled={busy}
+                              onChange={(e) => void changeRole(u.token, e.target.value)}
+                              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                            >
+                              {ladder.map((r) => (
+                                <option key={r} value={r}>
+                                  {r}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-slate-400">{u.source}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex justify-end gap-2 text-xs">
+                              <button
+                                type="button"
+                                onClick={() => void resetRole(u.token)}
+                                disabled={busy || u.source !== 'override'}
+                                title="Clear the override → fall back to the env seed (or novice)"
+                                className="rounded-md border border-slate-300 bg-white px-2 py-1 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Reset
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void removeUser(u.token, u.label)}
+                                disabled={busy || isSelf}
+                                title={isSelf ? "You can't remove yourself" : 'Hard-delete this invite'}
+                                className="rounded-md border border-red-300 bg-white px-2 py-1 font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </section>
+            )}
+          </div>
         )}
       </main>
     </div>
