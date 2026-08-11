@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Local invite-token workspace (names, minted tokens, invite links)
+secrets/
+
 # Python
 __pycache__/
 *.py[cod]
