@@ -85,6 +85,28 @@ interface Meta {
   started_at: string
 }
 
+// Effective role for the current guest — powers UI gating (roles.md step 4).
+// The ladder is monotonic; gating only applies in demo_mode (a public/dev
+// deploy has no identities, so everything stays visible, matching the backend
+// which no-ops role checks when demo_mode is off).
+interface Me {
+  recipient: string | null
+  role: string
+  demo_mode: boolean
+}
+
+const ROLE_RANK: Record<string, number> = {
+  suspended: 0,
+  novice: 1,
+  evaluator: 2,
+  admin: 3,
+  superuser: 4,
+}
+
+function atLeast(role: string, min: string): boolean {
+  return (ROLE_RANK[role] ?? 1) >= (ROLE_RANK[min] ?? 1)
+}
+
 // Format the ISO server-start timestamp for the footer. Uses the viewer's
 // locale so a bug reporter sees a time they can reason about.
 function formatStartedAt(iso: string): string {
@@ -133,6 +155,9 @@ export default function App() {
   // Usage and Diagnostics reflect live state without a page reload.
   const [usage, setUsage] = useState<UsageSnapshot | null>(null)
   const [diag, setDiag] = useState<DiagnosticsSnapshot | null>(null)
+  // Current guest's effective role (UI gating) + suspended flag.
+  const [me, setMe] = useState<Me | null>(null)
+  const [meForbidden, setMeForbidden] = useState(false)
   const headerRef = useRef<HTMLElement>(null)
   const stackRef = useRef<FloatingWidgetStackHandle>(null)
 
@@ -144,8 +169,26 @@ export default function App() {
         // Non-fatal — the app is still usable, we just won't populate the
         // sport dropdown from the server's view.
       })
+    void refreshMe()
     void refreshWidgetData()
   }, [])
+
+  async function refreshMe() {
+    // /me is gated at novice, so a 403 means the guest is suspended — render
+    // the suspended screen instead of the app. Other failures are non-fatal:
+    // we don't gate (the backend still enforces).
+    try {
+      const resp = await fetch('/me')
+      if (resp.status === 403) {
+        setMeForbidden(true)
+        return
+      }
+      if (!resp.ok) return
+      setMe(await resp.json())
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function refreshWidgetData() {
     // Fetches for the widgets. Called on mount and after every /ask so
@@ -306,6 +349,26 @@ export default function App() {
     ],
     [],
   )
+
+  // UI gating (roles.md step 4), active only in demo_mode. Novices may rate
+  // but not tag/note/author gold; the admin link is admin+ only.
+  const gatingActive = !!me && me.demo_mode
+  const canEvaluate = !gatingActive || (me != null && atLeast(me.role, 'evaluator'))
+  const showAdminLink = !!me && (!me.demo_mode || atLeast(me.role, 'admin'))
+
+  if (meForbidden) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center text-foreground">
+        <div className="max-w-md space-y-2">
+          <h1 className="text-xl font-medium">Access suspended</h1>
+          <p className="text-sm text-muted-foreground">
+            Your access to Rulebook has been suspended. If you think this is a
+            mistake, contact whoever sent your invite.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <LayoutProvider>
@@ -489,7 +552,7 @@ export default function App() {
                     </span>
                   )}
                 </div>
-                {rating != null && (
+                {rating != null && canEvaluate && (
                   <div className="mt-3 space-y-2">
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
                       <span className="text-muted-foreground">Issue tags:</span>
@@ -542,6 +605,7 @@ export default function App() {
                   </div>
                 )}
               </div>
+              {canEvaluate && (
               <div className="mt-4 border-t border-border pt-3">
                 <label className="flex flex-wrap items-baseline gap-2 text-xs">
                   <span className="text-muted-foreground">Gold answer</span>
@@ -586,6 +650,7 @@ export default function App() {
                   )}
                 </div>
               </div>
+              )}
             </section>
 
             <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
@@ -617,10 +682,14 @@ export default function App() {
         <footer className="px-6 py-4 text-xs text-muted-foreground lg:pr-[19rem]">
           embeddings: {meta.embedding_provider}/{meta.embedding_model} · gen:{' '}
           {meta.claude_model}
-          <span className="mx-2 opacity-50">·</span>
-          <a href="#/admin" className="hover:text-foreground hover:underline">
-            admin
-          </a>
+          {showAdminLink && (
+            <>
+              <span className="mx-2 opacity-50">·</span>
+              <a href="#/admin" className="hover:text-foreground hover:underline">
+                admin
+              </a>
+            </>
+          )}
         </footer>
       )}
       <FloatingWidgetStack<WidgetCtx>
