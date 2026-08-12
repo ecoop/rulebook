@@ -64,6 +64,19 @@ def test_gold_curation_last_wins(log_dir):
     assert il.read_latest_curation() == {"q1": False}
 
 
+def test_audit_appends_every_row(log_dir):
+    il.log_audit(actor="alice", action="golds.curate", target="g1", detail={"included": False})
+    il.log_audit(actor="bob", action="index.rebuild", detail={"ok": True})
+
+    rows = il.read_audit()
+    assert {r["action"] for r in rows} == {"golds.curate", "index.rebuild"}
+    g = next(r for r in rows if r["action"] == "golds.curate")
+    assert g["actor"] == "alice"
+    assert g["target"] == "g1"
+    assert g["detail"]["included"] is False
+    assert len(il.read_audit(limit=1)) == 1  # cap honored
+
+
 def test_source_curation_last_wins(log_dir):
     il.log_source_curation("rules/ultimate/x.md", included=True)
     il.log_source_curation("rules/ultimate/x.md", included=False)

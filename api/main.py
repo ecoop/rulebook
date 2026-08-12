@@ -47,11 +47,13 @@ sync_index_from_gcs()
 sync_logs_from_gcs()
 
 from rulebook.interaction_log import (  # noqa: E402
+    log_audit,
     log_feedback,
     log_gold,
     log_gold_curation,
     log_qa,
     log_source_curation,
+    read_audit,
     read_latest_curation,
     read_latest_feedback,
     read_latest_golds,
@@ -61,6 +63,7 @@ from rulebook.interaction_log import (  # noqa: E402
 from rulebook.pipeline import DEFAULT_SPORTS, ask  # noqa: E402
 from rulebook.roles import (  # noqa: E402
     CAP_ASK,
+    CAP_ATTRIBUTION_VIEW,
     CAP_FEEDBACK_COMMENT,
     CAP_FEEDBACK_TAG,
     CAP_FEEDBACK_VIEW,
@@ -205,6 +208,18 @@ class GoldCurationRequest(BaseModel):
 class CloneGoldResponse(BaseModel):
     gold_id: str = Field(..., description="Id of the new gold, now owned by the caller.")
     ok: bool = True
+
+
+class AuditRow(BaseModel):
+    timestamp: str
+    actor: str | None = None
+    action: str = Field(..., description="The capability the write exercised, e.g. 'golds.curate'.")
+    target: str | None = Field(default=None, description="Affected id — gold_id, source path, token…")
+    detail: dict = Field(default_factory=dict, description="Before→after specifics.")
+
+
+class AuditListResponse(BaseModel):
+    audit: list[AuditRow]
 
 
 class GoldCurationResponse(BaseModel):
@@ -681,6 +696,7 @@ def admin_set_role(req: RoleChangeRequest) -> RoleChangeResponse:
             "note": req.note,
         },
     )
+    _audit(CAP_USERS_CHANGE_ROLE, target=req.token, detail={"role": req.role})
     return RoleChangeResponse(token=req.token, role=req.role)
 
 
@@ -705,6 +721,7 @@ def admin_reset_role(token: str) -> RoleChangeResponse:
             "note": None,
         },
     )
+    _audit(CAP_USERS_CHANGE_ROLE, target=token, detail={"role": "reset"})
     return RoleChangeResponse(token=token, role=resolve_role(token))
 
 
@@ -752,6 +769,7 @@ def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse
         raise HTTPException(status_code=409, detail=f"token already exists ({tokens[token]!r}).")
     tokens[token] = req.label
     write_tokens_object(bucket, obj, tokens)
+    _audit(CAP_USERS_ADD, target=token, detail={"label": req.label})
     return AddInviteTokenResponse(token=token, label=req.label)
 
 
@@ -772,6 +790,7 @@ def admin_remove_invite_token(token: str) -> RemoveInviteTokenResponse:
         raise HTTPException(status_code=404, detail="token not found.")
     label = tokens.pop(token)
     write_tokens_object(bucket, obj, tokens)
+    _audit(CAP_USERS_REMOVE, target=token, detail={"label": label})
     return RemoveInviteTokenResponse(token=token, label=label)
 
 
@@ -794,6 +813,7 @@ def admin_rename_invite_token(token: str, req: RenameInviteTokenRequest) -> Invi
         raise HTTPException(status_code=404, detail="token not found.")
     tokens[token] = req.label
     write_tokens_object(bucket, obj, tokens)
+    _audit(CAP_USERS_RENAME, target=token, detail={"label": req.label})
     return InviteTokenOut(token=token, label=req.label)
 
 
@@ -809,6 +829,18 @@ def _view_scope(view_all_cap: str) -> tuple[bool, str | None]:
     if has_capability(role, view_all_cap):
         return True, None
     return False, (guest.recipient if guest else None)
+
+
+def _audit(action: str, *, target: str | None = None, detail: dict | None = None) -> None:
+    """Record a shared-state mutation to the audit trail (§5). Call AFTER the
+    write succeeds so only committed actions are logged."""
+    guest = get_current_guest()
+    log_audit(
+        actor=(guest.recipient if guest else None),
+        action=action,
+        target=target,
+        detail=detail,
+    )
 
 
 @app.get("/admin/golds", response_model=AdminGoldListResponse, dependencies=[Depends(require_capability(CAP_GOLDS_VIEW))])
@@ -846,6 +878,7 @@ def admin_list_golds() -> AdminGoldListResponse:
 def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
     """Toggle whether a specific gold is included in the next index rebuild."""
     log_gold_curation(req.gold_id, included=req.included)
+    _audit(CAP_GOLDS_CURATE, target=req.gold_id, detail={"included": req.included})
     return GoldCurationResponse()
 
 
@@ -874,7 +907,32 @@ def admin_clone_gold(gold_id: str) -> CloneGoldResponse:
         gold_answer=src["gold_answer"],
         author=(guest.recipient if guest else None),
     )
+    _audit(CAP_GOLDS_CLONE, target=gold_id, detail={"new_gold_id": new_id})
     return CloneGoldResponse(gold_id=new_id)
+
+
+@app.get(
+    "/admin/audit",
+    response_model=AuditListResponse,
+    dependencies=[Depends(require_capability(CAP_ATTRIBUTION_VIEW))],
+)
+def admin_list_audit(limit: int = 200) -> AuditListResponse:
+    """Recent shared-state mutations, newest-first.
+
+    Gated on `attribution.view` (level 6+): seeing who did what is the same
+    trust tier as seeing who authored what (the §5 attribution wall).
+    """
+    rows = [
+        AuditRow(
+            timestamp=r["timestamp"],
+            actor=r.get("actor"),
+            action=r["action"],
+            target=r.get("target"),
+            detail=r.get("detail") or {},
+        )
+        for r in read_audit(limit=limit)
+    ]
+    return AuditListResponse(audit=rows)
 
 
 @app.get("/admin/feedback", response_model=AdminFeedbackListResponse, dependencies=[Depends(require_capability(CAP_FEEDBACK_VIEW))])
@@ -947,6 +1005,7 @@ def admin_list_sources() -> AdminSourceListResponse:
 def admin_set_source_curation(req: SourceCurationRequest) -> SourceCurationResponse:
     """Toggle whether a source file is included in the next index rebuild."""
     log_source_curation(req.path, included=req.included)
+    _audit(CAP_SOURCES_CURATE, target=req.path, detail={"included": req.included})
     return SourceCurationResponse()
 
 
@@ -977,8 +1036,10 @@ def admin_rebuild_index() -> RebuildIndexResponse:
     def _tail(s: str, lines: int = 20) -> str:
         return "\n".join(s.strip().splitlines()[-lines:])
 
+    ok = proc.returncode == 0
+    _audit(CAP_INDEX_REBUILD, detail={"ok": ok, "duration_seconds": round(elapsed, 2)})
     return RebuildIndexResponse(
-        ok=(proc.returncode == 0),
+        ok=ok,
         duration_seconds=round(elapsed, 2),
         stdout_tail=_tail(proc.stdout),
         stderr_tail=_tail(proc.stderr) if proc.returncode != 0 else "",

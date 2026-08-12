@@ -79,6 +79,14 @@ GOLD_CURATION_SCHEMA_VERSION = 2
 #   v1  {path, included: bool, timestamp} (current)
 SOURCE_CURATION_SCHEMA_VERSION = 1
 
+# Audit trail — an append-only record of shared-state mutations (curate,
+# clone, rebuild, user/role changes), so "who changed the shared system, and
+# when" is answerable (docs/rbac-capabilities.md §5). Self-scoped writes
+# (ratings, own golds) are already on the record via their own logs, so this
+# captures only the actions that touch others' / shared state.
+#   v1  {actor, action, target, detail, timestamp}
+AUDIT_SCHEMA_VERSION = 1
+
 # Append + last-row-wins reads come from the shared `jsonl-log` library
 # (jsonl_log.append_jsonl / read_latest / read_latest_list). It serializes
 # writes under an in-process lock — the same single-process semantics the
@@ -291,6 +299,48 @@ def read_latest_source_curation() -> dict[str, bool]:
     """
     latest = read_latest(_log_dir() / "source_curation.jsonl", "path")
     return {path: bool(row["included"]) for path, row in latest.items()}
+
+
+def log_audit(
+    *,
+    actor: str | None,
+    action: str,
+    target: str | None = None,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    """Append one row to the audit trail for a shared-state mutation.
+
+    `actor` is the guest recipient label, `action` the capability the write
+    exercised (e.g. "golds.curate"), `target` the affected id (gold_id, source
+    path, token…), `detail` any before→after specifics. Append-only; every row
+    is kept (this is the record, not a latest-wins state).
+    """
+    _append(
+        "audit.jsonl",
+        {
+            "v": AUDIT_SCHEMA_VERSION,
+            "timestamp": utc_now_iso(timespec="auto", z=False),
+            "actor": actor,
+            "action": action,
+            "target": target,
+            "detail": detail or {},
+        },
+    )
+
+
+def read_audit(limit: int | None = None) -> list[dict[str, Any]]:
+    """Return audit rows, newest-first (optionally capped at `limit`)."""
+    path = _log_dir() / "audit.jsonl"
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    with path.open() as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(json.loads(line))
+    rows.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
+    return rows[:limit] if limit is not None else rows
 
 
 def log_feedback(

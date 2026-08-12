@@ -219,6 +219,13 @@ action, target, timestamp, before→after) to a dedicated `audit.jsonl`. Level-i
 cheap (append-only), and it dissolves "where does audit start?" — it starts at the first
 action that touches something other than your own, which is exactly rung #6.
 
+> **Landed.** `log_audit(actor, action, target, detail)` writes to `audit.jsonl`; every
+> shared-state endpoint calls it after the write commits (`golds.curate`, `golds.clone`,
+> `sources.curate`, `index.rebuild`, `users.change_role`/`add`/`remove`/`rename`).
+> `GET /admin/audit` returns the trail newest-first, gated on `attribution.view` (level
+> 6+) — seeing who did what is the same trust tier as the attribution wall. An Audit
+> *tab* is a frontend follow-up; the record exists now.
+
 ## 6. Enforcement — one source of truth
 
 - **Backend.** `require_capability(cap)` gates every endpoint; `ROLE_CAPABILITIES:
@@ -291,7 +298,8 @@ The mechanism has landed; the rest is slices. The frontend ones edit
    caller's own gold, `POST /admin/golds/{gold_id}/clone`, curation + index keyed by
    `gold_id`. The Golds-tab Edit-vs-Clone buttons (via `is_own`) ride with the frontend
    slice.
-5. **Audit log** — `audit.jsonl` + a write on every shared-state mutation.
+5. ✅ **Audit log** — `audit.jsonl` + a write on every shared-state mutation;
+   `GET /admin/audit` (attribution.view). The Audit tab rides with the frontend slice.
 6. **Frontend gating** — tabs/columns/buttons by capability; retire `ROLE_RANK` /
    `ROLE_LADDER_FALLBACK`; the atomic **Admin→Advanced** relabel; the passages-panel
    redesign; the new rungs in the picker.

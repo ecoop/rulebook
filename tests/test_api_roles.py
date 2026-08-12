@@ -142,6 +142,7 @@ def test_clone_gold_creates_owned_copy(client, monkeypatch):
         "gold_answer": "orig", "timestamp": "t", "author": "gina",
     }
     monkeypatch.setattr(main, "read_latest_golds", lambda: [src])
+    monkeypatch.setattr(main, "log_audit", lambda **kw: None)
     calls: list = []
     monkeypatch.setattr(main, "log_gold", lambda qa_id, **kw: calls.append((qa_id, kw)))
 
@@ -160,6 +161,27 @@ def test_clone_gold_creates_owned_copy(client, monkeypatch):
     # a role without golds.clone (level1 novice) is refused.
     _as(client, "tok_nov")
     assert client.post("/admin/golds/gsrc/clone").status_code == 403
+
+
+def test_mutation_is_audited_and_audit_is_gated(client, monkeypatch):
+    import api.main as main
+
+    audited: list = []
+    monkeypatch.setattr(main, "log_audit", lambda **kw: audited.append(kw))
+    monkeypatch.setattr(main, "log_gold_curation", lambda *a, **k: None)
+
+    # A shared-state mutation records one audit row (actor / action / target).
+    _as(client, "tok_super")
+    assert client.post("/admin/gold-curation", json={"gold_id": "g9", "included": False}).status_code == 200
+    assert audited[-1]["action"] == "golds.curate"
+    assert audited[-1]["target"] == "g9"
+    assert audited[-1]["actor"] == "boss"
+
+    # Reading the trail needs attribution.view (level 6+): level8 ok, level4 denied.
+    monkeypatch.setattr(main, "read_audit", lambda limit=None: [])
+    assert client.get("/admin/audit").status_code == 200
+    _as(client, "tok_l4")
+    assert client.get("/admin/audit").status_code == 403
 
 
 def test_invite_tokens_superuser_only(client):
