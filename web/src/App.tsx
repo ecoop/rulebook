@@ -95,18 +95,18 @@ interface Me {
   demo_mode: boolean
 }
 
-// Judo belt ranks (docs/rbac-capabilities.md §4). /me returns a belt; the
-// backend normalizes any legacy name (superuser→red, …) before it reaches us.
+// Numbered levels (docs/rbac-capabilities.md §4). /me returns a level id
+// (level0 … level8) plus its numeric `level`.
 const ROLE_RANK: Record<string, number> = {
-  suspended: 0,
-  white: 1,
-  yellow: 2,
-  orange: 3,
-  green: 4,
-  blue: 5,
-  brown: 6,
-  black: 7,
-  red: 8,
+  level0: 0,
+  level1: 1,
+  level2: 2,
+  level3: 3,
+  level4: 4,
+  level5: 5,
+  level6: 6,
+  level7: 7,
+  level8: 8,
 }
 
 function atLeast(role: string, min: string): boolean {
@@ -359,8 +359,8 @@ export default function App() {
   // UI gating (roles.md step 4), active only in demo_mode. Novices may rate
   // but not tag/note/author gold; the admin link is admin+ only.
   const gatingActive = !!me && me.demo_mode
-  const canEvaluate = !gatingActive || (me != null && atLeast(me.role, 'orange'))
-  const showAdminLink = !!me && (!me.demo_mode || atLeast(me.role, 'black'))
+  const canEvaluate = !gatingActive || (me != null && atLeast(me.role, 'level3'))
+  const showAdminLink = !!me && (!me.demo_mode || atLeast(me.role, 'level7'))
 
   if (meForbidden) {
     return (

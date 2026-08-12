@@ -27,124 +27,121 @@ def local_backend(monkeypatch):
 
 
 def test_ladder_monotonic():
-    assert roles.at_least("admin", "novice")
-    assert roles.at_least("novice", "novice")
-    assert not roles.at_least("novice", "admin")
-    assert not roles.at_least("suspended", "novice")
+    assert roles.at_least("level7", "level1")
+    assert roles.at_least("level1", "level1")
+    assert not roles.at_least("level1", "level7")
+    assert not roles.at_least("level0", "level1")
     # Unknown role never counts as elevated.
-    assert not roles.at_least("wizard", "novice")
+    assert not roles.at_least("wizard", "level1")
+
+
+def test_level_number():
+    assert roles.level_number("level0") == 0
+    assert roles.level_number("level8") == 8
+    assert roles.level_number("wizard") == 0   # unknown → floor
+    # every level carries a color + description for the badge
+    assert set(roles.ROLE_LEVELS["level5"]) == {"level", "color", "description"}
 
 
 def test_overrides_from_rows_replay():
     rows = [
-        {"token": "a", "role": "novice"},
-        {"token": "a", "role": "evaluator"},   # latest wins
-        {"token": "b", "role": "admin"},
-        {"token": "b", "role": "reset"},        # cleared
-        {"token": "c", "role": "bogus"},        # invalid ignored
+        {"token": "a", "role": "level1"},
+        {"token": "a", "role": "level3"},   # latest wins
+        {"token": "b", "role": "level7"},
+        {"token": "b", "role": "reset"},     # cleared
+        {"token": "c", "role": "bogus"},     # invalid ignored
     ]
-    assert roles.overrides_from_rows(rows) == {"a": "evaluator"}
+    assert roles.overrides_from_rows(rows) == {"a": "level3"}
 
 
 def test_resolve_prefers_override_then_seed_then_default(local_backend, monkeypatch):
-    # Seed uses a legacy name; resolve_role normalizes it to the belt.
-    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_seed": "admin"})
-    assert roles.resolve_role("tok_seed") == "black"        # seed (admin → black)
-    assert roles.resolve_role("tok_unknown") == "white"     # default
-    assert roles.resolve_role(None) == "white"
+    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_seed": "level7"})
+    assert roles.resolve_role("tok_seed") == "level7"       # seed
+    assert roles.resolve_role("tok_unknown") == "level1"    # default
+    assert roles.resolve_role(None) == "level1"
 
 
-def test_legacy_names_alias_to_belts():
-    assert roles.normalize_role("superuser") == "red"
-    assert roles.normalize_role("novice") == "white"
-    assert roles.normalize_role("green") == "green"   # a belt passes through
-    assert roles.is_valid_role("admin") and roles.is_valid_role("black")
-    # A legacy name resolves to the same bundle as its belt.
-    assert roles.capabilities_for("superuser") == roles.capabilities_for("red")
-
-
-def test_public_mode_allows_novice_denies_privileged(monkeypatch):
+def test_public_mode_allows_default_denies_privileged(monkeypatch):
     monkeypatch.setattr(roles.settings, "demo_mode", False)
     monkeypatch.setattr(roles, "get_current_guest", lambda: None)
     # Public tier stays open so /ask works with no auth...
-    roles.require_role("novice")()  # does not raise
+    roles.require_role("level1")()  # does not raise
     # ...but privileged tiers fail closed (no anonymous admin/role writes).
-    for tier in ("evaluator", "admin", "superuser"):
+    for tier in ("level3", "level7", "level8"):
         with pytest.raises(HTTPException) as ei:
             roles.require_role(tier)()
         assert ei.value.status_code == 403
 
 
 def test_require_role_enforced_in_demo(local_backend, monkeypatch):
-    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_ev": "evaluator"})
+    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_ev": "level3"})
     monkeypatch.setattr(
         roles, "get_current_guest", lambda: GuestIdentity(token="tok_ev", recipient="ev")
     )
-    roles.require_role("novice")()      # evaluator ≥ novice
-    roles.require_role("evaluator")()   # equal
+    roles.require_role("level1")()   # level3 ≥ level1
+    roles.require_role("level3")()   # equal
     with pytest.raises(HTTPException) as ei:
-        roles.require_role("admin")()   # evaluator < admin
+        roles.require_role("level7")()   # level3 < level7
     assert ei.value.status_code == 403
 
 
 def test_suspended_blocked_everywhere(local_backend, monkeypatch):
-    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_x": "suspended"})
+    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_x": "level0"})
     monkeypatch.setattr(
         roles, "get_current_guest", lambda: GuestIdentity(token="tok_x", recipient="x")
     )
     with pytest.raises(HTTPException):
-        roles.require_role("novice")()  # suspended fails the floor
+        roles.require_role("level1")()  # suspended (level0) fails the floor
 
 
 # ── Capabilities ────────────────────────────────────────────────────────────
 
 
 def test_rungs_are_monotonic():
-    # Each belt must be a strict superset of the one below it (§4).
-    belts = ["suspended", "white", "yellow", "orange", "green",
-             "blue", "brown", "black", "red"]
-    for lower, higher in zip(belts, belts[1:]):  # noqa: B905 — offset pairs, unequal by design
+    # Each level must be a strict superset of the one below it (§4).
+    levels = [f"level{n}" for n in range(9)]
+    for lower, higher in zip(levels, levels[1:]):  # noqa: B905 — offset pairs, unequal by design
         lo, hi = roles.capabilities_for(lower), roles.capabilities_for(higher)
         assert lo < hi, f"{higher} must strictly extend {lower}"
-    # red (superuser) is the top and holds every capability.
-    assert roles.capabilities_for("red") == roles.CAPABILITIES
+    # level8 (superuser) is the top and holds every capability.
+    assert roles.capabilities_for("level8") == roles.CAPABILITIES
 
 
 def test_rung_boundaries():
     has = roles.has_capability
-    # #1 white: ask/rate/tag, but no comment and nothing behind the curtain.
-    assert has("white", roles.CAP_FEEDBACK_TAG)
-    assert not has("white", roles.CAP_FEEDBACK_COMMENT)
-    assert not has("white", roles.CAP_ADVANCED_VIEW)
-    # #2 yellow gains the comment; #3 orange gains gold authoring.
-    assert has("yellow", roles.CAP_FEEDBACK_COMMENT)
-    assert not has("yellow", roles.CAP_GOLD_AUTHOR)
-    assert has("orange", roles.CAP_GOLD_AUTHOR)
-    assert not has("orange", roles.CAP_ADVANCED_VIEW)
-    # #4 green: behind the curtain, self, read-mostly — edits own, not curate.
-    assert has("green", roles.CAP_ADVANCED_VIEW)
-    assert has("green", roles.CAP_PASSAGES_VIEW)
-    assert has("green", roles.CAP_GOLDS_EDIT_OWN)
+    # level1: ask/rate/tag, but no comment and nothing behind the curtain.
+    assert has("level1", roles.CAP_FEEDBACK_TAG)
+    assert not has("level1", roles.CAP_FEEDBACK_COMMENT)
+    assert not has("level1", roles.CAP_ADVANCED_VIEW)
+    # level2 gains the comment; level3 gains gold authoring.
+    assert has("level2", roles.CAP_FEEDBACK_COMMENT)
+    assert not has("level2", roles.CAP_GOLD_AUTHOR)
+    assert has("level3", roles.CAP_GOLD_AUTHOR)
+    assert not has("level3", roles.CAP_ADVANCED_VIEW)
+    # level4: behind the curtain, self, read-mostly — edits own, not curate.
+    assert has("level4", roles.CAP_ADVANCED_VIEW)
+    assert has("level4", roles.CAP_PASSAGES_VIEW)
+    assert has("level4", roles.CAP_GOLDS_EDIT_OWN)
     for cap in (roles.CAP_GOLDS_VIEW_ALL, roles.CAP_GOLDS_CURATE, roles.CAP_ATTRIBUTION_VIEW):
-        assert not has("green", cap)
-    # #5 blue: self → all (read), still no curate/clone/attribution.
-    assert has("blue", roles.CAP_GOLDS_VIEW_ALL)
-    assert has("blue", roles.CAP_FEEDBACK_VIEW_ALL)
-    assert not has("blue", roles.CAP_GOLDS_CURATE)
-    assert not has("blue", roles.CAP_ATTRIBUTION_VIEW)
-    # #6 brown: curate/clone/rebuild + the attribution wall — but no Users.
+        assert not has("level4", cap)
+    # level5: self → all (read), still no curate/clone/attribution.
+    assert has("level5", roles.CAP_GOLDS_VIEW_ALL)
+    assert has("level5", roles.CAP_FEEDBACK_VIEW_ALL)
+    assert not has("level5", roles.CAP_GOLDS_CURATE)
+    assert not has("level5", roles.CAP_ATTRIBUTION_VIEW)
+    # level6: curate/clone/rebuild + the attribution wall — but no Users.
     for cap in (roles.CAP_GOLDS_CURATE, roles.CAP_GOLDS_CLONE, roles.CAP_INDEX_REBUILD,
                 roles.CAP_SOURCES_CURATE, roles.CAP_ATTRIBUTION_VIEW):
-        assert has("brown", cap)
-    assert not has("brown", roles.CAP_USERS_VIEW)
-    # #7 black (admin): Users tab, change role, add invitees — but not remove/rename.
+        assert has("level6", cap)
+    assert not has("level6", roles.CAP_USERS_VIEW)
+    # level7 (admin): Users tab, change role, add invitees — but not remove/rename.
     for cap in (roles.CAP_USERS_VIEW, roles.CAP_USERS_CHANGE_ROLE, roles.CAP_USERS_ADD):
-        assert has("black", cap)
+        assert has("level7", cap)
     for cap in (roles.CAP_USERS_REMOVE, roles.CAP_USERS_RENAME, roles.CAP_ROLES_MANAGE):
-        assert not has("black", cap)
-    # #8 red (superuser): the destructive ops + the RBAC-config editor.
+        assert not has("level7", cap)
+    # level8 (superuser): the destructive ops + the RBAC-config editor.
     for cap in (roles.CAP_USERS_REMOVE, roles.CAP_USERS_RENAME, roles.CAP_ROLES_MANAGE):
-        assert has("red", cap)
+        assert has("level8", cap)
     # No role edits another's gold in place — clone replaced edit.any.
     assert not hasattr(roles, "CAP_GOLDS_EDIT_ANY")
 
@@ -168,11 +165,11 @@ def test_require_capability_public_mode(monkeypatch):
 
 
 def test_require_capability_enforced_in_demo(local_backend, monkeypatch):
-    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_g": "green"})
+    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_g": "level4"})
     monkeypatch.setattr(
         roles, "get_current_guest", lambda: GuestIdentity(token="tok_g", recipient="g")
     )
-    roles.require_capability(roles.CAP_GOLDS_VIEW)()   # green (#4) may view
+    roles.require_capability(roles.CAP_GOLDS_VIEW)()   # level4 may view
     with pytest.raises(HTTPException) as ei:
         roles.require_capability(roles.CAP_GOLDS_CURATE)()  # but not curate
     assert ei.value.status_code == 403

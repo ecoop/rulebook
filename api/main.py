@@ -83,7 +83,7 @@ from rulebook.roles import (  # noqa: E402
     capabilities_for,
     has_capability,
     is_valid_role,
-    normalize_role,
+    level_number,
     overrides_from_rows,
     read_role_rows,
     require_capability,
@@ -247,7 +247,8 @@ class MeResponse(BaseModel):
         default=None,
         description="Guest label; null outside demo_mode / when unauthenticated.",
     )
-    role: str = Field(..., description="Effective role — a judo belt (white|yellow|orange|green|blue|brown|black|red) or 'suspended'; legacy names are normalized to their belt.")
+    role: str = Field(..., description="Effective role — a level id, level0 (suspended) … level8 (superuser).")
+    level: int = Field(..., description="Numeric level 0–8, for ordering and the level badge.")
     capabilities: list[str] = Field(
         default_factory=list,
         description="Sorted capability strings the effective role grants. The UI renders tabs/columns/buttons off these; the backend enforces them per-endpoint.",
@@ -597,6 +598,7 @@ def me_endpoint() -> MeResponse:
     return MeResponse(
         recipient=(guest.recipient if guest else None),
         role=role,
+        level=level_number(role),
         capabilities=sorted(capabilities_for(role)),
         demo_mode=settings.demo_mode,
     )
@@ -618,17 +620,15 @@ def _require_gcs_for_roles() -> tuple[str, str]:
 )
 def admin_list_roles() -> AdminRolesResponse:
     """Merged role assignments (env seed ⊕ live roles.jsonl overrides)."""
-    # Normalize any legacy machine names (superuser→red, …) to belts for display,
-    # so the Users-tab picker (options are belts) shows a matching value.
     merged: dict[str, tuple[str, str]] = {
-        tok: (normalize_role(role), "seed") for tok, role in settings.initial_roles.items()
+        tok: (role, "seed") for tok, role in settings.initial_roles.items()
     }
     if settings.state_backend_kind == "gcs" and settings.gcs_state_bucket:
         overrides = overrides_from_rows(
             read_role_rows(settings.gcs_state_bucket, settings.roles_object)
         )
         for tok, role in overrides.items():
-            merged[tok] = (normalize_role(role), "override")
+            merged[tok] = (role, "override")
     rows = [
         RoleAssignmentOut(token=tok, role=role, source=src)
         for tok, (role, src) in sorted(merged.items())

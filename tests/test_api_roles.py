@@ -25,7 +25,7 @@ def client(monkeypatch):
         {"tok_super": "boss", "tok_admin": "chief", "tok_nov": "newbie"},
     )
     monkeypatch.setattr(
-        settings, "initial_roles", {"tok_super": "superuser", "tok_admin": "admin"}
+        settings, "initial_roles", {"tok_super": "level8", "tok_admin": "level7"}
     )
 
     import api.main as main
@@ -43,20 +43,21 @@ def test_me_reports_seed_role(client):
     _as(client, "tok_super")
     body = client.get("/me").json()
     assert body["recipient"] == "boss"
-    # The seed says "superuser"; resolve_role normalizes it to the red belt.
-    assert body["role"] == "red"
+    assert body["role"] == "level8"
+    assert body["level"] == 8
     assert body["demo_mode"] is True
     # /me carries the effective role's full capability bundle, sorted — this is
     # the contract the frontend renders tabs/columns/buttons against.
-    assert body["capabilities"] == sorted(roles.ROLE_CAPABILITIES["red"])
+    assert body["capabilities"] == sorted(roles.ROLE_CAPABILITIES["level8"])
     assert "roles.manage" in body["capabilities"]
 
 
-def test_me_defaults_to_white(client):
+def test_me_defaults_to_level1(client):
     _as(client, "tok_nov")
     body = client.get("/me").json()
-    assert body["role"] == "white"
-    # The casual tier (#1): ask, rate, and issue tags — nothing behind the curtain.
+    assert body["role"] == "level1"
+    assert body["level"] == 1
+    # The casual tier: ask, rate, and issue tags — nothing behind the curtain.
     assert body["capabilities"] == ["ask", "feedback.tag", "rate"]
 
 
@@ -65,7 +66,7 @@ def test_users_split_admin_vs_superuser(client):
     # are authorized and fail only for lack of the gcs backend (400), not authz.
     _as(client, "tok_admin")
     assert client.get("/admin/invite-tokens").status_code == 400
-    assert client.post("/admin/roles", json={"token": "tok_nov", "role": "yellow"}).status_code == 400
+    assert client.post("/admin/roles", json={"token": "tok_nov", "role": "level2"}).status_code == 400
     assert client.post("/admin/invite-tokens", json={"label": "x"}).status_code == 400
     # ...but the destructive ops (remove / rename) stay superuser-only → 403.
     assert client.delete("/admin/invite-tokens/tok_x").status_code == 403
@@ -87,14 +88,14 @@ def test_admin_roles_superuser_only(client):
     resp = client.get("/admin/roles")
     assert resp.status_code == 200
     roles = {r["token"]: r for r in resp.json()["roles"]}
-    assert roles["tok_super"]["role"] == "red"   # normalized from the "superuser" seed
+    assert roles["tok_super"]["role"] == "level8"
     assert roles["tok_super"]["source"] == "seed"
 
 
 def test_post_role_needs_gcs(client):
     # superuser is authorized, but role writes require the gcs backend.
     _as(client, "tok_super")
-    resp = client.post("/admin/roles", json={"token": "tok_nov", "role": "admin"})
+    resp = client.post("/admin/roles", json={"token": "tok_nov", "role": "level7"})
     assert resp.status_code == 400
 
 

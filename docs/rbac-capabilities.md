@@ -2,18 +2,22 @@
 
 _Last updated: 2026-08-12_
 
-> **Status: bundles match the eight rungs (belt-named); behaviours follow.** The
-> capability *mechanism* **and** the eight-rung *bundles* now ship in `roles.py` +
+> **Status: bundles match the eight rungs (numbered levels); behaviours follow.** The
+> capability *mechanism* **and** the eight-rung *bundles* ship in `roles.py` +
 > `api/main.py`: every endpoint gates on a capability, `/me` returns the caller's
-> bundle, and `ROLE_CAPABILITIES` encodes rungs #1–#8 as **judo belts** (white→red,
-> §4). Legacy machine names (`novice`/`evaluator`/`admin`/`superuser`) alias to their
-> belt via `ROLE_ALIASES`, so the live seed and `roles.jsonl` keep resolving with **no
-> data migration** — `resolve_role` normalizes them, and the frontend's role checks
-> read belts. The four interior belts (yellow/green/blue/brown) exist as bundles but
-> aren't in the picker yet. What's still ahead is **behaviour**, not vocabulary:
-> self→all filtering, the clone flow (golds as owned entities), the attribution wall,
-> the audit log, and the rest of the frontend — sequenced in §9. Extends
+> `role` (a level id, `level0`…`level8`), numeric `level`, and capability bundle.
+> `ROLE_CAPABILITIES` is keyed by level; `ROLE_LEVELS` carries each level's color +
+> description for the badge. **The old names (`superuser`, `novice`, …) are gone** — no
+> aliases; the seed and any `roles.jsonl` are migrated to level ids (a one-time step at
+> deploy — see below). What's still ahead is **behaviour**, not vocabulary: self→all
+> filtering, the clone flow (golds as owned entities), the attribution wall, the audit
+> log, the level badge, and the rest of the frontend — sequenced in §9. Extends
 > [`roles.md`](roles.md) (the original ladder; still used for role ordering).
+>
+> **Deploy migration (one-time).** Since aliases are gone, the seed secret must use
+> level ids before this deploys, or `superuser` resolves to nothing and Coop loses
+> access. Map `novice`→`level1`, `evaluator`→`level3`, `admin`→`level7`,
+> `superuser`→`level8` in `RULEBOOK_INITIAL_ROLES` (and any `roles.jsonl` rows).
 
 ## 1. The ladder wasn't wrong — it was too coarse
 
@@ -98,32 +102,33 @@ Routes stay `/admin/*` (an internal management-API namespace, never shown on the
 Note there is no `golds.edit.any`: nobody edits another person's gold **in place** —
 you **clone** it (§5). Feedback is **never editable** at any rung; it's read-only data.
 
-## 4. The eight rungs
+## 4. The eight rungs (levels)
 
-The rungs are named for **Kodokan judo belts** (white → red). White-through-black darkens
-as a steady progression; **red (superuser) breaks the ramp on purpose** — an honorary
-grade that signals "not simply the next rung up," which is exactly how superuser sits
-apart from the ladder. Every higher rung includes everything below it; the table lists
-only **what each rung adds**.
+Roles are **numbered levels 0–8**. The number makes the ordering self-evident (level 5
+outranks level 4, no lore required) — the concern any color/word scheme can't answer on
+its own. **Level 0 is a suspended account** (no access); 1–8 are the rungs. Each level
+also carries a **color** (a judo-belt palette, for a fun badge) and a one-line
+description — see the palette below. Every higher level includes everything below it; the
+table lists only **what each level adds**.
 
-| # | Belt | Description | Adds |
-|---|---|---|---|
-| **1** | ⬜ white | casual player | `ask`, `rate`, `feedback.tag` |
-| **2** | 🟨 yellow | + explain a rating | `feedback.comment` |
-| **3** | 🟧 orange | + suggest answers | `gold.author` |
-| **4** | 🟩 green | peek behind the curtain — self, read-mostly | `advanced.view`, `passages.view`, `feedback.view`, `golds.view`, `golds.edit.own`, `sources.view` |
-| **5** | 🟦 blue | read all, write own | `feedback.view.all`, `golds.view.all` |
-| **6** | 🟫 brown | operator | `golds.curate`, `golds.clone`, `sources.curate`, `index.rebuild`, `attribution.view` *(+ audit — §5)* |
-| **7** | ⬛ black | admin | `users.view`, `users.change_role`, `users.add` |
-| **8** | 🟥 red | superuser | `users.remove`, `users.rename`, `roles.manage` |
+| Level | Description | Adds |
+|---|---|---|
+| **0** | suspended — no access | *(none)* |
+| **1** | beginner — ask and rate | `ask`, `rate`, `feedback.tag` |
+| **2** | + explain a rating | `feedback.comment` |
+| **3** | + suggest answers | `gold.author` |
+| **4** | peek behind the curtain — self, read-mostly | `advanced.view`, `passages.view`, `feedback.view`, `golds.view`, `golds.edit.own`, `sources.view` |
+| **5** | read all, write own | `feedback.view.all`, `golds.view.all` |
+| **6** | operator | `golds.curate`, `golds.clone`, `sources.curate`, `index.rebuild`, `attribution.view` *(+ audit — §5)* |
+| **7** | admin | `users.view`, `users.change_role`, `users.add` |
+| **8** | superuser | `users.remove`, `users.rename`, `roles.manage` |
 
-`suspended` is the **non-belt floor** — blocked from play, below white. The four legacy
-machine names map to belts and stay valid via aliases (see below): `novice`→white,
-`evaluator`→orange, `admin`→black, `superuser`→red.
+Machine names are `level0` … `level8`; there are no aliases (the earlier
+novice/evaluator/… names were migrated — see the status note).
 
-Reference matrix (✓ = has it; columns are cumulative left→right):
+Reference matrix (✓ = has it; columns are cumulative left→right, by level):
 
-| Capability | 1 w | 2 y | 3 o | 4 g | 5 bl | 6 br | 7 bk | 8 r |
+| Capability | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `ask`, `rate`, `feedback.tag` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `feedback.comment` | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -139,37 +144,38 @@ Reference matrix (✓ = has it; columns are cumulative left→right):
 | `users.remove` · `users.rename` · `roles.manage` | | | | | | | | ✓ |
 
 What each boundary means, in one line:
-- **orange→green (#3→#4)** is the Advanced button appearing — the first "behind the
-  curtain" rung.
-- **green→blue (#4→#5)** is scope: self → all (read). Green sees only its own
-  feedback/golds; blue sees everyone's. Tab counts read "your X" at green, the global
-  total at blue.
-- **blue→brown (#5→#6)** is two things at once: **write on others' assets** (curate,
-  clone, rebuild) *and* the **attribution wall** (§5). The boundary to be most deliberate
-  about.
-- **brown→black (#6→#7)** is people: the Users tab, role changes, and inviting users.
-- **black→red (#7→#8)** is the **destructive** roster ops (remove, rename) plus editing
-  the RBAC config itself. Black adds *and* adjusts users; red is the only rung that can
-  *delete or rename* one — matching red's honorary, apart-from-the-ladder status.
+- **3→4** is the Advanced button appearing — the first "behind the curtain" level.
+- **4→5** is scope: self → all (read). Level 4 sees only its own feedback/golds; level 5
+  sees everyone's. Tab counts read "your X" at 4, the global total at 5.
+- **5→6** is two things at once: **write on others' assets** (curate, clone, rebuild) *and*
+  the **attribution wall** (§5). The boundary to be most deliberate about.
+- **6→7** is people: the Users tab, role changes, and inviting users.
+- **7→8** is the **destructive** roster ops (remove, rename) plus editing the RBAC config
+  itself. Level 7 adds *and* adjusts users; level 8 is the only one that can *delete or
+  rename* one.
 
-### Belt palette (for role badges)
+### Level palette (for the badge)
 
-Role names are near-invisible — a player never sees their belt; only #6+ (brown+) see
-roles at all, in the Users tab. So the belt shows up as a small colored badge there (and
-at a future "level up" moment). Colors chosen for contrast; red/brown/green collide under
-common colorblindness, so a badge always pairs the color with the belt name.
+Role names are near-invisible — a player never sees their level; only #6+ see roles at
+all (in the Users tab). So the level shows as a small **colored badge** — the color is
+judo-belt flavor, and the rung number is prefixed so the order is unambiguous
+(`4 · green`). Red/brown/green collide under common colorblindness, so the badge always
+pairs color with the number + label. Colors + descriptions live in `ROLE_LEVELS`
+(`roles.py`) as the single source; `/me` returns the caller's `level`.
 
-| Belt | Hex | | Belt | Hex |
-|---|---|---|---|---|
-| white | `#E8E8E8` | | blue | `#2C64B4` |
-| yellow | `#E5B80B` | | brown | `#7A4A2B` |
-| orange | `#E07A20` | | black | `#1A1A1A` |
-| green | `#3A8C3A` | | red | `#C4272E` |
+| Level | Color | Description | | Level | Color | Description |
+|---|---|---|---|---|---|---|
+| 0 | `#9AA0A6` | suspended — no access | | 5 | `#2C64B4` | reviews everyone's items |
+| 1 | `#E8E8E8` | beginner — ask and rate | | 6 | `#7A4A2B` | operator — curates, rebuilds |
+| 2 | `#E5B80B` | can comment on answers | | 7 | `#1A1A1A` | admin — manages users |
+| 3 | `#E07A20` | can suggest gold answers | | 8 | `#C4272E` | superuser — full control |
+| 4 | `#3A8C3A` | sees the workings (own) | | | | |
 
-**Level up (future).** The one place a belt might be *earned* rather than assigned: a
-promotion mechanic that bumps a player a rung on sustained activity (e.g. asked 10
-questions *and* rated 10 answers → white → yellow). Noted so the model leaves room for
-it; assignment today is manual (seed ⊕ `roles.jsonl`).
+**Level up (future).** The one place a level might be *earned* rather than assigned: a
+promotion mechanic that bumps a player a level on sustained activity (e.g. asked 10
+questions *and* rated 10 answers → level 1 → level 2). The number makes "leveling up"
+read naturally. Noted so the model leaves room for it; assignment today is manual
+(seed ⊕ `roles.jsonl`).
 
 ## 5. Cross-cutting behaviors
 
