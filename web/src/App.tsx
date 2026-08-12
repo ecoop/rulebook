@@ -95,12 +95,18 @@ interface Me {
   demo_mode: boolean
 }
 
+// Judo belt ranks (docs/rbac-capabilities.md §4). /me returns a belt; the
+// backend normalizes any legacy name (superuser→red, …) before it reaches us.
 const ROLE_RANK: Record<string, number> = {
   suspended: 0,
-  novice: 1,
-  evaluator: 2,
-  admin: 3,
-  superuser: 4,
+  white: 1,
+  yellow: 2,
+  orange: 3,
+  green: 4,
+  blue: 5,
+  brown: 6,
+  black: 7,
+  red: 8,
 }
 
 function atLeast(role: string, min: string): boolean {
@@ -353,8 +359,8 @@ export default function App() {
   // UI gating (roles.md step 4), active only in demo_mode. Novices may rate
   // but not tag/note/author gold; the admin link is admin+ only.
   const gatingActive = !!me && me.demo_mode
-  const canEvaluate = !gatingActive || (me != null && atLeast(me.role, 'evaluator'))
-  const showAdminLink = !!me && (!me.demo_mode || atLeast(me.role, 'admin'))
+  const canEvaluate = !gatingActive || (me != null && atLeast(me.role, 'orange'))
+  const showAdminLink = !!me && (!me.demo_mode || atLeast(me.role, 'black'))
 
   if (meForbidden) {
     return (

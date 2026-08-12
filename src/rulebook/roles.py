@@ -12,7 +12,8 @@ guest-auth answers *who is this token?* (identity). This module answers
                changes live (no redeploy) — the durability stopgap from
                docs/roles.md ("direct-to-GCS for roles").
 
-Effective role = override(token) or seed(token) or "novice".
+Effective role = override(token) or seed(token) or default, normalized to a belt
+(white … red; legacy names alias via ROLE_ALIASES, so no data migration).
 
 The ladder answers "how privileged?" as a single rank, which can't express
 per-feature asks like "see the Advanced page but not the Users tab" or "edit
@@ -40,11 +41,31 @@ from .config import settings
 
 log = logging.getLogger(__name__)
 
-# Monotonic ladder, lowest → highest. Index is the rank used for comparison.
-# `suspended` is a floor (rank 0) that fails every `require_role(novice+)`.
-ROLE_LADDER: tuple[str, ...] = ("suspended", "novice", "evaluator", "admin", "superuser")
-DEFAULT_ROLE = "novice"
+# Kodokan judo belt ranks name the eight rungs (docs/rbac-capabilities.md §4);
+# `suspended` is the non-belt floor (blocked from play), below white.
+#
+# Legacy machine names (novice/evaluator/admin/superuser) stay valid via
+# ROLE_ALIASES, so existing env seeds and roles.jsonl overrides keep resolving
+# with NO data migration — resolve_role normalizes them to their belt.
+ROLE_ALIASES: dict[str, str] = {
+    "novice": "white",
+    "evaluator": "orange",
+    "admin": "black",
+    "superuser": "red",
+}
+
+# Picker-visible order, lowest → highest: the floor + the four currently-
+# assignable belts (= the legacy tiers, renamed). The four interior belts
+# (yellow/green/blue/brown) exist as bundles but join the picker with the
+# capability-gated frontend slice. Index is the rank for `_rank`/`at_least`.
+ROLE_LADDER: tuple[str, ...] = ("suspended", "white", "orange", "black", "red")
+DEFAULT_ROLE = "white"
 RESET_SENTINEL = "reset"  # a roles.jsonl row role that clears an override
+
+
+def normalize_role(role: str) -> str:
+    """Map a legacy machine name to its belt; pass belts (and unknowns) through."""
+    return ROLE_ALIASES.get(role, role)
 
 
 # ── Capabilities ───────────────────────────────────────────────────────────
@@ -110,27 +131,23 @@ _R6 = _R5 | {                                                    # operator
     CAP_GOLDS_CURATE, CAP_GOLDS_CLONE, CAP_SOURCES_CURATE,
     CAP_INDEX_REBUILD, CAP_ATTRIBUTION_VIEW,
 }
-_R7 = _R6 | {CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE}              # admin
-_R8 = _R7 | {                                                    # superuser
-    CAP_USERS_ADD, CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE,
-}
+_R7 = _R6 | {CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE, CAP_USERS_ADD}  # admin
+_R8 = _R7 | {CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE}  # superuser
 
-# Role → capability bundle. The four brand-new rungs (#2/#4/#5/#6) carry
-# PLACEHOLDER machine names — rename once the human names are chosen; they aren't
-# offered in the picker yet (that shows ROLE_LADDER), so nothing depends on them.
-# Note the policy this encodes: admin (#7) now DOES manage users (view + change
-# role), and the destructive/identity ops (add/remove/rename) plus the future
-# RBAC-config editor (roles.manage) are superuser-only (#8).
+# Role → capability bundle, keyed by belt (§4). Policy encoded here: black (#7,
+# admin) manages users — view, change role, add invitees; red (#8, superuser)
+# holds the destructive ops (remove/rename) plus the future RBAC-config editor
+# (roles.manage). Legacy names resolve to these via ROLE_ALIASES.
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
-    "suspended": frozenset(),
-    "novice": _R1,        # #1
-    "commenter": _R2,     # #2  (placeholder name)
-    "evaluator": _R3,     # #3
-    "observer": _R4,      # #4  (placeholder name)
-    "reviewer": _R5,      # #5  (placeholder name)
-    "operator": _R6,      # #6  (placeholder name)
-    "admin": _R7,         # #7
-    "superuser": _R8,     # #8
+    "suspended": frozenset(),  # non-belt floor
+    "white": _R1,   # #1  casual player
+    "yellow": _R2,  # #2  + explain a rating
+    "orange": _R3,  # #3  + suggest answers
+    "green": _R4,   # #4  behind the curtain (self)
+    "blue": _R5,    # #5  read all, write own
+    "brown": _R6,   # #6  operator
+    "black": _R7,   # #7  admin
+    "red": _R8,     # #8  superuser
 }
 
 # What a public (demo_mode off) deploy allows anonymously — the novice tier.
@@ -144,16 +161,15 @@ _overrides_cache: dict[tuple[str, str], tuple[float, dict[str, str]]] = {}
 
 
 def is_valid_role(role: str) -> bool:
-    # Any role with a defined capability bundle is assignable — this now
-    # includes the capability-only roles (observer/…), not just the ladder.
-    return role in ROLE_CAPABILITIES
+    # Any belt (or a legacy alias for one) is assignable.
+    return normalize_role(role) in ROLE_CAPABILITIES
 
 
 def _rank(role: str) -> int:
     try:
-        return ROLE_LADDER.index(role)
+        return ROLE_LADDER.index(normalize_role(role))
     except ValueError:
-        # Unknown role string → treat as the safe floor, never as elevated.
+        # Unknown / not-yet-picker belt → the safe floor, never elevated.
         return 0
 
 
@@ -163,7 +179,7 @@ def at_least(role: str, minimum: str) -> bool:
 
 def capabilities_for(role: str) -> frozenset[str]:
     """The capability bundle for a role; empty for unknown roles (fail closed)."""
-    return ROLE_CAPABILITIES.get(role, frozenset())
+    return ROLE_CAPABILITIES.get(normalize_role(role), frozenset())
 
 
 def has_capability(role: str, capability: str) -> bool:
@@ -174,13 +190,12 @@ def has_capability(role: str, capability: str) -> bool:
 
 
 def resolve_role(token: str | None) -> str:
-    """Effective role for a token: override ▸ seed ▸ novice."""
+    """Effective belt for a token: override ▸ seed ▸ white, normalized to a belt."""
     if token is None:
         return DEFAULT_ROLE
     overrides = _effective_overrides()
-    if token in overrides:
-        return overrides[token]
-    return settings.initial_roles.get(token, DEFAULT_ROLE)
+    raw = overrides.get(token) or settings.initial_roles.get(token, DEFAULT_ROLE)
+    return normalize_role(raw)
 
 
 def _effective_overrides() -> dict[str, str]:

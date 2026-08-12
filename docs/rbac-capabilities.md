@@ -2,14 +2,17 @@
 
 _Last updated: 2026-08-12_
 
-> **Status: bundles match the eight rungs; behaviours follow.** The capability
-> *mechanism* **and** the eight-rung *bundles* now ship in `roles.py` + `api/main.py`:
-> every endpoint gates on a capability via `require_capability`, `/me` returns the
-> caller's bundle, and `ROLE_CAPABILITIES` encodes rungs #1–#8 (the four new rungs
-> carry placeholder machine names — §4). What's still ahead is **behaviour**, not
-> vocabulary: self→all filtering, the clone flow (golds as owned entities), the
-> attribution wall, the audit log, and the whole frontend — sequenced in §9. The new
-> rungs aren't offered in the picker yet, so nothing depends on their names. Extends
+> **Status: bundles match the eight rungs (belt-named); behaviours follow.** The
+> capability *mechanism* **and** the eight-rung *bundles* now ship in `roles.py` +
+> `api/main.py`: every endpoint gates on a capability, `/me` returns the caller's
+> bundle, and `ROLE_CAPABILITIES` encodes rungs #1–#8 as **judo belts** (white→red,
+> §4). Legacy machine names (`novice`/`evaluator`/`admin`/`superuser`) alias to their
+> belt via `ROLE_ALIASES`, so the live seed and `roles.jsonl` keep resolving with **no
+> data migration** — `resolve_role` normalizes them, and the frontend's role checks
+> read belts. The four interior belts (yellow/green/blue/brown) exist as bundles but
+> aren't in the picker yet. What's still ahead is **behaviour**, not vocabulary:
+> self→all filtering, the clone flow (golds as owned entities), the attribution wall,
+> the audit log, and the rest of the frontend — sequenced in §9. Extends
 > [`roles.md`](roles.md) (the original ladder; still used for role ordering).
 
 ## 1. The ladder wasn't wrong — it was too coarse
@@ -97,24 +100,30 @@ you **clone** it (§5). Feedback is **never editable** at any rung; it's read-on
 
 ## 4. The eight rungs
 
-Descriptions, not final names — the four brand-new rungs (#2, #4, #5, #6) still need
-machine names (novice/evaluator/admin/superuser already exist and map as shown). Every
-higher rung includes everything below it; the table lists only **what each rung adds**.
+The rungs are named for **Kodokan judo belts** (white → red). White-through-black darkens
+as a steady progression; **red (superuser) breaks the ramp on purpose** — an honorary
+grade that signals "not simply the next rung up," which is exactly how superuser sits
+apart from the ladder. Every higher rung includes everything below it; the table lists
+only **what each rung adds**.
 
-| # | Description | Adds |
-|---|---|---|
-| **1** | casual player *(= `novice`)* | `ask`, `rate`, `feedback.tag` |
-| **2** | + explain a rating | `feedback.comment` |
-| **3** | + suggest answers *(= `evaluator`)* | `gold.author` |
-| **4** | peek behind the curtain — self, read-mostly | `advanced.view`, `passages.view`, `feedback.view`, `golds.view`, `golds.edit.own`, `sources.view` |
-| **5** | read all, write own | `feedback.view.all`, `golds.view.all` |
-| **6** | operator | `golds.curate`, `golds.clone`, `sources.curate`, `index.rebuild`, `attribution.view` *(+ audit — §5)* |
-| **7** | admin *(= `admin`)* | `users.view`, `users.change_role` |
-| **8** | superuser *(= `superuser`)* | `users.add`, `users.remove`, `users.rename`, `roles.manage` |
+| # | Belt | Description | Adds |
+|---|---|---|---|
+| **1** | ⬜ white | casual player | `ask`, `rate`, `feedback.tag` |
+| **2** | 🟨 yellow | + explain a rating | `feedback.comment` |
+| **3** | 🟧 orange | + suggest answers | `gold.author` |
+| **4** | 🟩 green | peek behind the curtain — self, read-mostly | `advanced.view`, `passages.view`, `feedback.view`, `golds.view`, `golds.edit.own`, `sources.view` |
+| **5** | 🟦 blue | read all, write own | `feedback.view.all`, `golds.view.all` |
+| **6** | 🟫 brown | operator | `golds.curate`, `golds.clone`, `sources.curate`, `index.rebuild`, `attribution.view` *(+ audit — §5)* |
+| **7** | ⬛ black | admin | `users.view`, `users.change_role`, `users.add` |
+| **8** | 🟥 red | superuser | `users.remove`, `users.rename`, `roles.manage` |
+
+`suspended` is the **non-belt floor** — blocked from play, below white. The four legacy
+machine names map to belts and stay valid via aliases (see below): `novice`→white,
+`evaluator`→orange, `admin`→black, `superuser`→red.
 
 Reference matrix (✓ = has it; columns are cumulative left→right):
 
-| Capability | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+| Capability | 1 w | 2 y | 3 o | 4 g | 5 bl | 6 br | 7 bk | 8 r |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `ask`, `rate`, `feedback.tag` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `feedback.comment` | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -126,26 +135,41 @@ Reference matrix (✓ = has it; columns are cumulative left→right):
 | `golds.curate` · `golds.clone` | | | | | | ✓ | ✓ | ✓ |
 | `sources.curate` · `index.rebuild` | | | | | | ✓ | ✓ | ✓ |
 | `attribution.view` | | | | | | ✓ | ✓ | ✓ |
-| `users.view` · `users.change_role` | | | | | | | ✓ | ✓ |
-| `users.add` · `users.remove` · `users.rename` · `roles.manage` | | | | | | | | ✓ |
+| `users.view` · `users.change_role` · `users.add` | | | | | | | ✓ | ✓ |
+| `users.remove` · `users.rename` · `roles.manage` | | | | | | | | ✓ |
 
 What each boundary means, in one line:
-- **#3→#4** is the Advanced button appearing — the first "behind the curtain" rung.
-- **#4→#5** is scope: self → all (read). #4 sees only its own feedback/golds; #5 sees
-  everyone's. Tab counts read "your X" at #4, the global total at #5.
-- **#5→#6** is two things at once: **write on others' assets** (curate, clone, rebuild)
-  *and* the **attribution wall** (§5). This is the boundary to be most deliberate about.
-- **#6→#7** is people: the Users tab and role changes.
-- **#7→#8** is the roster/identity mutations — add, remove, rename a user — plus editing
-  the RBAC config itself. #7 adjusts *existing* users (roles); #8 changes *who's on the
-  roster*. (Whether `users.add` belongs at #7 is an easy later move — see below.)
+- **orange→green (#3→#4)** is the Advanced button appearing — the first "behind the
+  curtain" rung.
+- **green→blue (#4→#5)** is scope: self → all (read). Green sees only its own
+  feedback/golds; blue sees everyone's. Tab counts read "your X" at green, the global
+  total at blue.
+- **blue→brown (#5→#6)** is two things at once: **write on others' assets** (curate,
+  clone, rebuild) *and* the **attribution wall** (§5). The boundary to be most deliberate
+  about.
+- **brown→black (#6→#7)** is people: the Users tab, role changes, and inviting users.
+- **black→red (#7→#8)** is the **destructive** roster ops (remove, rename) plus editing
+  the RBAC config itself. Black adds *and* adjusts users; red is the only rung that can
+  *delete or rename* one — matching red's honorary, apart-from-the-ladder status.
 
-**Role names are mostly invisible.** A player never sees their rung name; only #6+ see
-roles at all (in the Users tab). So the placeholder machine names cost little. The one
-other place a name might surface is a future **"level up"** moment — auto-promoting a
-player a rung on sustained activity (e.g. asked 10 questions *and* rated 10 answers →
-#1 → #2). That's a promotion *mechanic* layered on assignment, noted here so the model
-leaves room for it; assignment today is manual (seed ⊕ `roles.jsonl`).
+### Belt palette (for role badges)
+
+Role names are near-invisible — a player never sees their belt; only #6+ (brown+) see
+roles at all, in the Users tab. So the belt shows up as a small colored badge there (and
+at a future "level up" moment). Colors chosen for contrast; red/brown/green collide under
+common colorblindness, so a badge always pairs the color with the belt name.
+
+| Belt | Hex | | Belt | Hex |
+|---|---|---|---|---|
+| white | `#E8E8E8` | | blue | `#2C64B4` |
+| yellow | `#E5B80B` | | brown | `#7A4A2B` |
+| orange | `#E07A20` | | black | `#1A1A1A` |
+| green | `#3A8C3A` | | red | `#C4272E` |
+
+**Level up (future).** The one place a belt might be *earned* rather than assigned: a
+promotion mechanic that bumps a player a rung on sustained activity (e.g. asked 10
+questions *and* rated 10 answers → white → yellow). Noted so the model leaves room for
+it; assignment today is manual (seed ⊕ `roles.jsonl`).
 
 ## 5. Cross-cutting behaviors
 

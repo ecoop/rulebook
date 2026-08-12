@@ -91,9 +91,9 @@ type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
 type SourceSortCol = 'included' | 'sport' | 'path' | 'size_bytes' | 'modified_at'
 type UserSortCol = 'label' | 'role' | 'source'
 
-// Logical role ordering (low→high), used as a fallback when the backend
-// ladder from GET /admin/roles hasn't loaded yet.
-const ROLE_LADDER_FALLBACK = ['suspended', 'novice', 'evaluator', 'admin', 'superuser']
+// Logical role ordering (low→high) — judo belts (docs/rbac-capabilities.md §4),
+// used as a fallback when the backend ladder from GET /admin/roles hasn't loaded.
+const ROLE_LADDER_FALLBACK = ['suspended', 'white', 'orange', 'black', 'red']
 
 // Generic click handler for a sortable table column: same column → flip
 // direction, new column → default to ascending. Keeps the per-table sort
@@ -182,8 +182,8 @@ export default function AdminApp() {
   // the backend /admin/* endpoints 403 otherwise. Gate the whole page on this
   // so non-admins get a friendly message instead of raw error banners.
   const canUseAdmin =
-    !!me && me.demo_mode && (me.role === 'admin' || me.role === 'superuser')
-  const isSuperuser = !!me && me.role === 'superuser'
+    !!me && me.demo_mode && (me.role === 'black' || me.role === 'red')
+  const isSuperuser = !!me && me.role === 'red'
 
   useEffect(() => {
     void refreshMe()
@@ -595,7 +595,7 @@ export default function AdminApp() {
   const userRows: UserRow[] = (inviteTokens ?? [])
     .map((t) => {
       const r = roleByToken.get(t.token)
-      return { token: t.token, label: t.label, role: r?.role ?? 'novice', source: r?.source ?? '—' }
+      return { token: t.token, label: t.label, role: r?.role ?? 'white', source: r?.source ?? '—' }
     })
     .sort((a, b) => {
       const { col, dir } = userSort

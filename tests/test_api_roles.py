@@ -43,30 +43,31 @@ def test_me_reports_seed_role(client):
     _as(client, "tok_super")
     body = client.get("/me").json()
     assert body["recipient"] == "boss"
-    assert body["role"] == "superuser"
+    # The seed says "superuser"; resolve_role normalizes it to the red belt.
+    assert body["role"] == "red"
     assert body["demo_mode"] is True
     # /me carries the effective role's full capability bundle, sorted — this is
     # the contract the frontend renders tabs/columns/buttons against.
-    assert body["capabilities"] == sorted(roles.ROLE_CAPABILITIES["superuser"])
+    assert body["capabilities"] == sorted(roles.ROLE_CAPABILITIES["red"])
     assert "roles.manage" in body["capabilities"]
 
 
-def test_me_defaults_to_novice(client):
+def test_me_defaults_to_white(client):
     _as(client, "tok_nov")
     body = client.get("/me").json()
-    assert body["role"] == "novice"
+    assert body["role"] == "white"
     # The casual tier (#1): ask, rate, and issue tags — nothing behind the curtain.
     assert body["capabilities"] == ["ask", "feedback.tag", "rate"]
 
 
 def test_users_split_admin_vs_superuser(client):
-    # #7 admin manages users (view + change role) — authorized, so these fail
-    # only for lack of the gcs backend (400), not authorization (403)...
+    # #7 black (admin) manages users — view, change role, ADD invitees — so these
+    # are authorized and fail only for lack of the gcs backend (400), not authz.
     _as(client, "tok_admin")
     assert client.get("/admin/invite-tokens").status_code == 400
-    assert client.post("/admin/roles", json={"token": "tok_nov", "role": "commenter"}).status_code == 400
-    # ...but the roster mutations (add / remove / rename) are superuser-only → 403.
-    assert client.post("/admin/invite-tokens", json={"label": "x"}).status_code == 403
+    assert client.post("/admin/roles", json={"token": "tok_nov", "role": "yellow"}).status_code == 400
+    assert client.post("/admin/invite-tokens", json={"label": "x"}).status_code == 400
+    # ...but the destructive ops (remove / rename) stay superuser-only → 403.
     assert client.delete("/admin/invite-tokens/tok_x").status_code == 403
     assert client.patch("/admin/invite-tokens/tok_nov", json={"label": "y"}).status_code == 403
 
@@ -86,7 +87,7 @@ def test_admin_roles_superuser_only(client):
     resp = client.get("/admin/roles")
     assert resp.status_code == 200
     roles = {r["token"]: r for r in resp.json()["roles"]}
-    assert roles["tok_super"]["role"] == "superuser"
+    assert roles["tok_super"]["role"] == "red"   # normalized from the "superuser" seed
     assert roles["tok_super"]["source"] == "seed"
 
 
