@@ -89,6 +89,11 @@ type AdminTab = 'feedback' | 'golds' | 'sources' | 'users'
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
 type SourceSortCol = 'included' | 'sport' | 'path' | 'size_bytes' | 'modified_at'
+type UserSortCol = 'label' | 'role' | 'source'
+
+// Logical role ordering (low→high), used as a fallback when the backend
+// ladder from GET /admin/roles hasn't loaded yet.
+const ROLE_LADDER_FALLBACK = ['suspended', 'novice', 'evaluator', 'admin', 'superuser']
 
 // Generic click handler for a sortable table column: same column → flip
 // direction, new column → default to ascending. Keeps the per-table sort
@@ -150,6 +155,10 @@ export default function AdminApp() {
   })
   const [sourceSort, setSourceSort] = useState<{ col: SourceSortCol; dir: SortDir }>({
     col: 'sport',
+    dir: 'asc',
+  })
+  const [userSort, setUserSort] = useState<{ col: UserSortCol; dir: SortDir }>({
+    col: 'label',
     dir: 'asc',
   })
   // Users tab (superuser). `me` powers tab visibility; the table joins the
@@ -537,12 +546,25 @@ export default function AdminApp() {
   // keyed by token. Base rows on the allowlist — a role without an invite
   // entry can't sign in, so it isn't a "user" here.
   const roleByToken = new Map((roles ?? []).map((r) => [r.token, r]))
+  // Rank a role by its position in the logical ladder (low→high) so Role
+  // sorts by seniority, not alphabetically. Unknown roles sort last.
+  const roleOrder = ladder.length > 0 ? ladder : ROLE_LADDER_FALLBACK
+  const roleRank = (role: string): number => {
+    const i = roleOrder.indexOf(role)
+    return i === -1 ? roleOrder.length : i
+  }
   const userRows: UserRow[] = (inviteTokens ?? [])
     .map((t) => {
       const r = roleByToken.get(t.token)
       return { token: t.token, label: t.label, role: r?.role ?? 'novice', source: r?.source ?? '—' }
     })
-    .sort((a, b) => a.label.localeCompare(b.label))
+    .sort((a, b) => {
+      const { col, dir } = userSort
+      const mult = dir === 'asc' ? 1 : -1
+      if (col === 'role') return (roleRank(a.role) - roleRank(b.role)) * mult
+      // Label and Source are case-insensitive alphabetical.
+      return a[col].localeCompare(b[col], undefined, { sensitivity: 'base' }) * mult
+    })
   // The page is already gated on admin+ (canUseAdmin); within it the Users tab
   // is superuser-only.
   const showUsersTab = isSuperuser
@@ -1096,10 +1118,34 @@ export default function AdminApp() {
                 <table className="w-full text-sm">
                   <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2">label</th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => setUserSort((s) => nextSort(s, 'label'))}
+                          className="hover:text-foreground"
+                        >
+                          label{sortIndicator(userSort.col === 'label', userSort.dir)}
+                        </button>
+                      </th>
                       <th className="w-40 px-3 py-2">token</th>
-                      <th className="w-36 px-3 py-2">role</th>
-                      <th className="w-20 px-3 py-2">source</th>
+                      <th className="w-36 px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => setUserSort((s) => nextSort(s, 'role'))}
+                          className="hover:text-foreground"
+                        >
+                          role{sortIndicator(userSort.col === 'role', userSort.dir)}
+                        </button>
+                      </th>
+                      <th className="w-20 px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => setUserSort((s) => nextSort(s, 'source'))}
+                          className="hover:text-foreground"
+                        >
+                          source{sortIndicator(userSort.col === 'source', userSort.dir)}
+                        </button>
+                      </th>
                       <th className="w-40 px-3 py-2 text-right">actions</th>
                     </tr>
                   </thead>
