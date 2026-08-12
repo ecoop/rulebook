@@ -64,9 +64,11 @@ from rulebook.roles import (  # noqa: E402
     CAP_FEEDBACK_COMMENT,
     CAP_FEEDBACK_TAG,
     CAP_FEEDBACK_VIEW,
+    CAP_FEEDBACK_VIEW_ALL,
     CAP_GOLD_AUTHOR,
     CAP_GOLDS_CURATE,
     CAP_GOLDS_VIEW,
+    CAP_GOLDS_VIEW_ALL,
     CAP_INDEX_REBUILD,
     CAP_RATE,
     CAP_SOURCES_CURATE,
@@ -778,14 +780,33 @@ def admin_rename_invite_token(token: str, req: RenameInviteTokenRequest) -> Invi
     return InviteTokenOut(token=token, label=req.label)
 
 
+def _view_scope(view_all_cap: str) -> tuple[bool, str | None]:
+    """Self/all scoping for an Advanced list (docs/rbac-capabilities.md §5).
+
+    Returns (see_all, author): with the `.all` capability the caller sees
+    everyone's rows (True, None); otherwise only their own, matched on the
+    author label stored with each row (False, <recipient>).
+    """
+    guest = get_current_guest()
+    role = resolve_role(guest.token if guest else None)
+    if has_capability(role, view_all_cap):
+        return True, None
+    return False, (guest.recipient if guest else None)
+
+
 @app.get("/admin/golds", response_model=AdminGoldListResponse, dependencies=[Depends(require_capability(CAP_GOLDS_VIEW))])
 def admin_list_golds() -> AdminGoldListResponse:
     """Merged view of gold.jsonl + gold_curation.jsonl.
 
     Latest gold per qa_id joined with latest curation decision (default
-    included=True when no curation row exists).
+    included=True when no curation row exists). Self-scoped without
+    `golds.view.all`: the caller sees only golds they authored.
     """
     curation = read_latest_curation()
+    see_all, author = _view_scope(CAP_GOLDS_VIEW_ALL)
+    golds = read_latest_golds()
+    if not see_all:
+        golds = [g for g in golds if g.get("author") == author]
     rows = [
         AdminGoldRow(
             qa_id=g["qa_id"],
@@ -794,7 +815,7 @@ def admin_list_golds() -> AdminGoldListResponse:
             timestamp=g["timestamp"],
             included=curation.get(g["qa_id"], True),
         )
-        for g in read_latest_golds()
+        for g in golds
     ]
     return AdminGoldListResponse(golds=rows)
 
@@ -814,12 +835,17 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
     UI can flag which rated answers already have a curator-authored
     correction. Legacy v1 (binary up/down) feedback rows are filtered
     out — they don't have tag/comment fields and would render as noise.
+    Self-scoped without `feedback.view.all`: the caller sees only feedback
+    they authored.
     """
     questions = read_qa_questions()
     gold_qa_ids = {g["qa_id"] for g in read_latest_golds()}
 
+    see_all, author = _view_scope(CAP_FEEDBACK_VIEW_ALL)
     rows: list[AdminFeedbackRow] = []
     for r in read_latest_feedback():
+        if not see_all and r.get("author") != author:
+            continue
         rows.append(
             AdminFeedbackRow(
                 qa_id=r["qa_id"],

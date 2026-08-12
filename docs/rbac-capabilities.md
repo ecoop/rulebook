@@ -271,11 +271,13 @@ The mechanism has landed; the rest is slices. The frontend ones edit
 `web/src/AdminApp.tsx`, so they follow the sorting + rename work already on `main`.
 
 1. ✅ **Capability mechanism** — `require_capability`, `ROLE_CAPABILITIES`,
-   `has_capability`, `/me` carries `capabilities`. (First-cut roles; realign to §4.)
-2. **Realign bundles to the eight rungs** — the tag/comment split, `passages.view`,
-   `.all` capabilities, clone/attribution capabilities in `ROLE_CAPABILITIES`; name the
-   four new rungs.
-3. **Self→all filtering** — owner filter + per-user counts on the Advanced list endpoints.
+   `has_capability`, `/me` carries `capabilities` + numbered levels + the badge.
+2. ✅ **Realign bundles to the eight rungs** — tag/comment split, `passages.view`,
+   `.all` capabilities, clone/attribution capabilities; numbered-level names.
+3. ✅ **Self→all filtering** — `GET /admin/golds` and `/admin/feedback` return only the
+   caller's own rows without `*.view.all` (matched on the `author` label). Behaviour-
+   preserving today (only level7/8 reach those tabs, and they hold `.all`); the "your X"
+   count labels land with the frontend-gating slice.
 4. **Golds as owned entities + clone** — the schema change (§5) and the `POST /gold`
    ownership check; Edit vs Clone in the Golds tab.
 5. **Audit log** — `audit.jsonl` + a write on every shared-state mutation.

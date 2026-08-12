@@ -22,10 +22,12 @@ def client(monkeypatch):
     monkeypatch.setattr(
         settings,
         "invite_tokens_seed",
-        {"tok_super": "boss", "tok_admin": "chief", "tok_nov": "newbie"},
+        {"tok_super": "boss", "tok_admin": "chief", "tok_l4": "gina", "tok_nov": "newbie"},
     )
     monkeypatch.setattr(
-        settings, "initial_roles", {"tok_super": "level8", "tok_admin": "level7"}
+        settings,
+        "initial_roles",
+        {"tok_super": "level8", "tok_admin": "level7", "tok_l4": "level4"},
     )
 
     import api.main as main
@@ -103,6 +105,33 @@ def test_unauthenticated_is_gated(client):
     client.cookies.clear()
     # No valid cookie in demo_mode → middleware blocks before the route.
     assert client.get("/me", follow_redirects=False).status_code != 200
+
+
+def test_golds_and_feedback_self_scoped(client, monkeypatch):
+    import api.main as main
+
+    golds = [
+        {"qa_id": "q1", "question": "?", "gold_answer": "a", "timestamp": "t", "author": "gina"},
+        {"qa_id": "q2", "question": "?", "gold_answer": "b", "timestamp": "t", "author": "boss"},
+    ]
+    feedback = [
+        {"qa_id": "q1", "timestamp": "t", "rating": 5, "author": "gina"},
+        {"qa_id": "q2", "timestamp": "t", "rating": 2, "author": "boss"},
+    ]
+    monkeypatch.setattr(main, "read_latest_golds", lambda: golds)
+    monkeypatch.setattr(main, "read_latest_curation", lambda: {})
+    monkeypatch.setattr(main, "read_latest_feedback", lambda: feedback)
+    monkeypatch.setattr(main, "read_qa_questions", lambda: {})
+
+    # level4 lacks *.view.all → sees only its own (author == "gina") rows.
+    _as(client, "tok_l4")
+    assert [g["qa_id"] for g in client.get("/admin/golds").json()["golds"]] == ["q1"]
+    assert [f["qa_id"] for f in client.get("/admin/feedback").json()["feedback"]] == ["q1"]
+
+    # level8 has *.view.all → sees everyone's.
+    _as(client, "tok_super")
+    assert {g["qa_id"] for g in client.get("/admin/golds").json()["golds"]} == {"q1", "q2"}
+    assert {f["qa_id"] for f in client.get("/admin/feedback").json()["feedback"]} == {"q1", "q2"}
 
 
 def test_invite_tokens_superuser_only(client):
