@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useState } from 'react'
 import { LevelBadge, levelLabel, levelNumber } from './levels'
 
-// Admin surface for grooming user-authored gold answers before the next
-// index rebuild. Deliberately kept small: this is a curator's workflow,
-// not a casual-user surface. Reached via URL hash `#/admin` — see main.tsx.
+// Advanced surface — capability-gated tabs (feedback / golds / sources / users
+// / audit) for reviewers, operators, and admins. Reached via URL hash
+// `#/advanced` — see main.tsx.
 
 interface AdminGoldRow {
   gold_id: string
@@ -106,7 +106,7 @@ type SourceSortCol = 'included' | 'sport' | 'path' | 'size_bytes' | 'modified_at
 type UserSortCol = 'label' | 'role' | 'source'
 
 // Logical role ordering (low→high) — numbered levels (docs/rbac-capabilities.md
-// §4), a fallback when the backend ladder from GET /admin/roles hasn't loaded.
+// §4), a fallback when the backend ladder from GET /advanced/roles hasn't loaded.
 const ROLE_LADDER_FALLBACK = [
   'level0', 'level1', 'level2', 'level3', 'level4',
   'level5', 'level6', 'level7', 'level8',
@@ -146,7 +146,7 @@ function formatWhen(iso: string): string {
   })
 }
 
-export default function AdminApp() {
+export default function AdvancedApp() {
   const [rows, setRows] = useState<AdminGoldRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
@@ -222,7 +222,7 @@ export default function AdminApp() {
   async function refresh() {
     setError(null)
     try {
-      const resp = await fetch('/admin/golds')
+      const resp = await fetch('/advanced/golds')
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: AdminGoldListResponse = await resp.json()
       setRows(data.golds)
@@ -233,7 +233,7 @@ export default function AdminApp() {
 
   async function refreshFeedback() {
     try {
-      const resp = await fetch('/admin/feedback')
+      const resp = await fetch('/advanced/feedback')
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: AdminFeedbackListResponse = await resp.json()
       setFeedback(data.feedback)
@@ -244,7 +244,7 @@ export default function AdminApp() {
 
   async function refreshAudit() {
     try {
-      const resp = await fetch('/admin/audit')
+      const resp = await fetch('/advanced/audit')
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: { audit: AuditRow[] } = await resp.json()
       setAudit(data.audit)
@@ -272,8 +272,8 @@ export default function AdminApp() {
   async function refreshUsers() {
     try {
       const [tResp, rResp] = await Promise.all([
-        fetch('/admin/invite-tokens'),
-        fetch('/admin/roles'),
+        fetch('/advanced/invite-tokens'),
+        fetch('/advanced/roles'),
       ])
       if (!tResp.ok) throw new Error(`invite-tokens ${tResp.status}: ${await tResp.text()}`)
       if (!rResp.ok) throw new Error(`roles ${rResp.status}: ${await rResp.text()}`)
@@ -294,7 +294,7 @@ export default function AdminApp() {
     setError(null)
     setNewInvite(null)
     try {
-      const resp = await fetch('/admin/invite-tokens', {
+      const resp = await fetch('/advanced/invite-tokens', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ label }),
@@ -323,7 +323,7 @@ export default function AdminApp() {
     markPending(token, true)
     setError(null)
     try {
-      const resp = await fetch('/admin/roles', {
+      const resp = await fetch('/advanced/roles', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ token, role }),
@@ -357,7 +357,7 @@ export default function AdminApp() {
     markPending(token, true)
     setError(null)
     try {
-      const resp = await fetch(`/admin/invite-tokens/${encodeURIComponent(token)}`, {
+      const resp = await fetch(`/advanced/invite-tokens/${encodeURIComponent(token)}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ label }),
@@ -376,7 +376,7 @@ export default function AdminApp() {
     markPending(token, true)
     setError(null)
     try {
-      const resp = await fetch(`/admin/roles/${encodeURIComponent(token)}/reset`, {
+      const resp = await fetch(`/advanced/roles/${encodeURIComponent(token)}/reset`, {
         method: 'POST',
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
@@ -400,7 +400,7 @@ export default function AdminApp() {
     markPending(token, true)
     setError(null)
     try {
-      const resp = await fetch(`/admin/invite-tokens/${encodeURIComponent(token)}`, {
+      const resp = await fetch(`/advanced/invite-tokens/${encodeURIComponent(token)}`, {
         method: 'DELETE',
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
@@ -424,7 +424,7 @@ export default function AdminApp() {
 
   async function refreshSources() {
     try {
-      const resp = await fetch('/admin/sources')
+      const resp = await fetch('/advanced/sources')
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: AdminSourceListResponse = await resp.json()
       setSources(data.sources)
@@ -440,7 +440,7 @@ export default function AdminApp() {
     )
     setSourcePending((prev) => new Set(prev).add(row.path))
     try {
-      const resp = await fetch('/admin/source-curation', {
+      const resp = await fetch('/advanced/source-curation', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ path: row.path, included: next }),
@@ -472,7 +472,7 @@ export default function AdminApp() {
     )
     setPending((prev) => new Set(prev).add(row.qa_id))
     try {
-      const resp = await fetch('/admin/gold-curation', {
+      const resp = await fetch('/advanced/gold-curation', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ gold_id: row.gold_id, included: next }),
@@ -499,7 +499,7 @@ export default function AdminApp() {
     setRebuilding(true)
     setRebuildResult(null)
     try {
-      const resp = await fetch('/admin/rebuild-index', { method: 'POST' })
+      const resp = await fetch('/advanced/rebuild-index', { method: 'POST' })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: RebuildResult = await resp.json()
       setRebuildResult(data)
@@ -577,7 +577,7 @@ export default function AdminApp() {
   async function cloneGold(row: AdminGoldRow) {
     setError(null)
     try {
-      const resp = await fetch(`/admin/golds/${encodeURIComponent(row.gold_id)}/clone`, {
+      const resp = await fetch(`/advanced/golds/${encodeURIComponent(row.gold_id)}/clone`, {
         method: 'POST',
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
@@ -664,7 +664,7 @@ export default function AdminApp() {
           <div className="flex items-baseline justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold tracking-tight">
-                Rulebook <span className="text-muted-foreground">/ admin</span>
+                Rulebook <span className="text-muted-foreground">/ Advanced</span>
               </h1>
               <p className="text-sm text-muted-foreground">
                 Curate gold answers and source files. Excluded rows are skipped by the next index rebuild.
@@ -699,10 +699,10 @@ export default function AdminApp() {
           <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
             {!me.demo_mode ? (
               <>
-                The admin panel isn't available on this deploy. It needs a gated deploy
+                The Advanced page isn't available on this deploy. It needs a gated deploy
                 (<span className="font-mono">RULEBOOK_DEMO_MODE=true</span> with{' '}
-                <span className="font-mono">STATE_BACKEND_KIND=gcs</span>) and an{' '}
-                <span className="font-mono">admin</span> role.
+                <span className="font-mono">STATE_BACKEND_KIND=gcs</span>) and a role of{' '}
+                <span className="font-medium">Level 4</span> or higher.
               </>
             ) : (
               <>

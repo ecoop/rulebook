@@ -59,10 +59,10 @@ passages** (`passages.view`) — no collision, no rename.
 
 ## 3. The capability set
 
-A capability is a stable string guarding exactly one action. Names outlive UI labels: the
-Advanced page is guarded by `advanced.view` even while the HTTP route is still `/admin/*`
-and the page still reads "Admin" until the relabel — naming it `admin.*` would fossilize.
-Routes stay `/admin/*` (an internal management-API namespace, never shown on the page).
+A capability is a stable string guarding exactly one action. Names outlive UI labels:
+`advanced.view` was named for what it guards from the start, so the Admin→Advanced relabel
+(page title, component, `#/advanced` hash, `/advanced/*` routes) was a pure rename with no
+capability churn — the fossil an `admin.*` name would have left never happened.
 
 **Main page**
 
@@ -306,9 +306,11 @@ The mechanism has landed; the rest is slices. The frontend ones edit
    Golds shows **Edit** (own) vs **Clone** (others'), the **Audit tab** lands, and
    `App` gates the nav link + gold authoring on capabilities — `ROLE_RANK` retired.
    The surface now opens to levels 4–6.
-7. **Admin→Advanced relabel** (cosmetic, still open) — page title + nav link,
-   `AdminApp`→`AdvancedApp`, `#/admin`→`#/advanced` + redirect, `/admin/*`→`/advanced/*`
-   routes with their fetch calls; plus the passages-panel redesign.
+7. ✅ **Admin→Advanced relabel** — page title + a top-right "Advanced" button,
+   `AdminApp`→`AdvancedApp`, `#/admin`→`#/advanced` (old hash redirected),
+   `/admin/*`→`/advanced/*` routes with their fetch calls + tests. Internal `Admin*`
+   model/type names are left as a soft namespace (no behaviour, no user text).
+   *(Still open, separate: the retrieved-passages panel redesign — a main-page item.)*
 8. *(later)* **data-driven bundles**, then **the permissions editor** (§8).
 
 ## 10. Non-goals (for now)

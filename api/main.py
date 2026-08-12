@@ -594,7 +594,7 @@ def gold_endpoint(req: GoldRequest) -> GoldResponse:
     Ownership is intrinsic: this upserts the caller's *own* gold for the
     qa_id — it reuses their existing gold's id if they have one, else mints a
     new one, and never touches another author's gold. To fork someone else's
-    gold, use POST /admin/golds/{gold_id}/clone. Golds are picked up by
+    gold, use POST /advanced/golds/{gold_id}/clone. Golds are picked up by
     scripts/build_index.py on the next rebuild.
     """
     guest = get_current_guest()
@@ -648,7 +648,7 @@ def _require_gcs_for_roles() -> tuple[str, str]:
 
 
 @app.get(
-    "/admin/roles",
+    "/advanced/roles",
     response_model=AdminRolesResponse,
     dependencies=[Depends(require_capability(CAP_USERS_VIEW))],
 )
@@ -671,7 +671,7 @@ def admin_list_roles() -> AdminRolesResponse:
 
 
 @app.post(
-    "/admin/roles",
+    "/advanced/roles",
     response_model=RoleChangeResponse,
     dependencies=[Depends(require_capability(CAP_USERS_CHANGE_ROLE))],
 )
@@ -701,7 +701,7 @@ def admin_set_role(req: RoleChangeRequest) -> RoleChangeResponse:
 
 
 @app.post(
-    "/admin/roles/{token}/reset",
+    "/advanced/roles/{token}/reset",
     response_model=RoleChangeResponse,
     dependencies=[Depends(require_capability(CAP_USERS_CHANGE_ROLE))],
 )
@@ -735,7 +735,7 @@ def _require_gcs_for_invite_tokens() -> tuple[str, str]:
 
 
 @app.get(
-    "/admin/invite-tokens",
+    "/advanced/invite-tokens",
     response_model=InviteTokensResponse,
     dependencies=[Depends(require_capability(CAP_USERS_VIEW))],
 )
@@ -752,7 +752,7 @@ def admin_list_invite_tokens() -> InviteTokensResponse:
 
 
 @app.post(
-    "/admin/invite-tokens",
+    "/advanced/invite-tokens",
     response_model=AddInviteTokenResponse,
     dependencies=[Depends(require_capability(CAP_USERS_ADD))],
 )
@@ -774,7 +774,7 @@ def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse
 
 
 @app.delete(
-    "/admin/invite-tokens/{token}",
+    "/advanced/invite-tokens/{token}",
     response_model=RemoveInviteTokenResponse,
     dependencies=[Depends(require_capability(CAP_USERS_REMOVE))],
 )
@@ -782,7 +782,7 @@ def admin_remove_invite_token(token: str) -> RemoveInviteTokenResponse:
     """Remove a user from the allowlist (their cookie stops resolving).
 
     Note: this is hard removal. For a reversible, audit-preserving block,
-    set the user's role to `suspended` via /admin/roles instead.
+    set the user's role to `suspended` via /advanced/roles instead.
     """
     bucket, obj = _require_gcs_for_invite_tokens()
     tokens = read_tokens_object(bucket, obj)
@@ -795,7 +795,7 @@ def admin_remove_invite_token(token: str) -> RemoveInviteTokenResponse:
 
 
 @app.patch(
-    "/admin/invite-tokens/{token}",
+    "/advanced/invite-tokens/{token}",
     response_model=InviteTokenOut,
     dependencies=[Depends(require_capability(CAP_USERS_RENAME))],
 )
@@ -843,7 +843,7 @@ def _audit(action: str, *, target: str | None = None, detail: dict | None = None
     )
 
 
-@app.get("/admin/golds", response_model=AdminGoldListResponse, dependencies=[Depends(require_capability(CAP_GOLDS_VIEW))])
+@app.get("/advanced/golds", response_model=AdminGoldListResponse, dependencies=[Depends(require_capability(CAP_GOLDS_VIEW))])
 def admin_list_golds() -> AdminGoldListResponse:
     """Merged view of gold.jsonl + gold_curation.jsonl.
 
@@ -874,7 +874,7 @@ def admin_list_golds() -> AdminGoldListResponse:
     return AdminGoldListResponse(golds=rows)
 
 
-@app.post("/admin/gold-curation", response_model=GoldCurationResponse, dependencies=[Depends(require_capability(CAP_GOLDS_CURATE))])
+@app.post("/advanced/gold-curation", response_model=GoldCurationResponse, dependencies=[Depends(require_capability(CAP_GOLDS_CURATE))])
 def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
     """Toggle whether a specific gold is included in the next index rebuild."""
     log_gold_curation(req.gold_id, included=req.included)
@@ -883,7 +883,7 @@ def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
 
 
 @app.post(
-    "/admin/golds/{gold_id}/clone",
+    "/advanced/golds/{gold_id}/clone",
     response_model=CloneGoldResponse,
     dependencies=[Depends(require_capability(CAP_GOLDS_CLONE))],
 )
@@ -912,7 +912,7 @@ def admin_clone_gold(gold_id: str) -> CloneGoldResponse:
 
 
 @app.get(
-    "/admin/audit",
+    "/advanced/audit",
     response_model=AuditListResponse,
     dependencies=[Depends(require_capability(CAP_ATTRIBUTION_VIEW))],
 )
@@ -935,7 +935,7 @@ def admin_list_audit(limit: int = 200) -> AuditListResponse:
     return AuditListResponse(audit=rows)
 
 
-@app.get("/admin/feedback", response_model=AdminFeedbackListResponse, dependencies=[Depends(require_capability(CAP_FEEDBACK_VIEW))])
+@app.get("/advanced/feedback", response_model=AdminFeedbackListResponse, dependencies=[Depends(require_capability(CAP_FEEDBACK_VIEW))])
 def admin_list_feedback() -> AdminFeedbackListResponse:
     """List the latest feedback event per qa_id, sorted newest-first.
 
@@ -968,7 +968,7 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
     return AdminFeedbackListResponse(feedback=rows)
 
 
-@app.get("/admin/sources", response_model=AdminSourceListResponse, dependencies=[Depends(require_capability(CAP_SOURCES_VIEW))])
+@app.get("/advanced/sources", response_model=AdminSourceListResponse, dependencies=[Depends(require_capability(CAP_SOURCES_VIEW))])
 def admin_list_sources() -> AdminSourceListResponse:
     """List every source file under rules/<sport>/ with its inclusion state.
 
@@ -1001,7 +1001,7 @@ def admin_list_sources() -> AdminSourceListResponse:
     return AdminSourceListResponse(sources=rows)
 
 
-@app.post("/admin/source-curation", response_model=SourceCurationResponse, dependencies=[Depends(require_capability(CAP_SOURCES_CURATE))])
+@app.post("/advanced/source-curation", response_model=SourceCurationResponse, dependencies=[Depends(require_capability(CAP_SOURCES_CURATE))])
 def admin_set_source_curation(req: SourceCurationRequest) -> SourceCurationResponse:
     """Toggle whether a source file is included in the next index rebuild."""
     log_source_curation(req.path, included=req.included)
@@ -1009,7 +1009,7 @@ def admin_set_source_curation(req: SourceCurationRequest) -> SourceCurationRespo
     return SourceCurationResponse()
 
 
-@app.post("/admin/rebuild-index", response_model=RebuildIndexResponse, dependencies=[Depends(require_capability(CAP_INDEX_REBUILD))])
+@app.post("/advanced/rebuild-index", response_model=RebuildIndexResponse, dependencies=[Depends(require_capability(CAP_INDEX_REBUILD))])
 def admin_rebuild_index() -> RebuildIndexResponse:
     """Run scripts/build_index.py synchronously and return its outcome.
 

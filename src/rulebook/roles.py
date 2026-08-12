@@ -56,9 +56,8 @@ RESET_SENTINEL = "reset"  # a roles.jsonl row role that clears an override
 # ── Capabilities ───────────────────────────────────────────────────────────
 #
 # Named permissions a role either has or hasn't (docs/rbac-capabilities.md).
-# Capability strings are STABLE identifiers that outlive UI labels: the Advanced
-# surface is gated by `advanced.view` even while the HTTP route is still /admin/*
-# and the page still reads "Admin" — that relabel is cosmetic and lands later.
+# Capability strings are STABLE identifiers, independent of UI labels and routes:
+# the Advanced surface is gated by `advanced.view`, served under /advanced/*.
 #
 # The eight rungs (§4 of the doc) form a monotonic chain, so each bundle below is
 # the previous one plus more. Some capabilities are DEFINED here but their

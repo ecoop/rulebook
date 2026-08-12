@@ -413,6 +413,14 @@ export default function App() {
                   {me && me.demo_mode && <LevelBadge level={me.level} />}
                 </p>
               )}
+              {showAdminLink && (
+                <a
+                  href="#/advanced"
+                  className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
+                >
+                  Advanced <span aria-hidden>→</span>
+                </a>
+              )}
             </div>
             <button
               type="button"
@@ -677,14 +685,6 @@ export default function App() {
         <footer className="px-6 py-4 text-xs text-muted-foreground lg:pr-[19rem]">
           embeddings: {meta.embedding_provider}/{meta.embedding_model} · gen:{' '}
           {meta.claude_model}
-          {showAdminLink && (
-            <>
-              <span className="mx-2 opacity-50">·</span>
-              <a href="#/admin" className="hover:text-foreground hover:underline">
-                admin
-              </a>
-            </>
-          )}
         </footer>
       )}
       <FloatingWidgetStack<WidgetCtx>

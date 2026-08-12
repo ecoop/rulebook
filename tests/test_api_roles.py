@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Eric Cooper.
 """End-to-end gating: real InviteAuthMiddleware + require_role on the app.
 
-Uses the local backend so `invite_tokens` = the seed and `/admin/roles`
+Uses the local backend so `invite_tokens` = the seed and `/advanced/roles`
 needs no GCS. Proves the dependencies are actually wired to the routes,
 which the unit tests in test_roles.py can't see.
 """
@@ -67,27 +67,27 @@ def test_users_split_admin_vs_superuser(client):
     # #7 black (admin) manages users — view, change role, ADD invitees — so these
     # are authorized and fail only for lack of the gcs backend (400), not authz.
     _as(client, "tok_admin")
-    assert client.get("/admin/invite-tokens").status_code == 400
-    assert client.post("/admin/roles", json={"token": "tok_nov", "role": "level2"}).status_code == 400
-    assert client.post("/admin/invite-tokens", json={"label": "x"}).status_code == 400
+    assert client.get("/advanced/invite-tokens").status_code == 400
+    assert client.post("/advanced/roles", json={"token": "tok_nov", "role": "level2"}).status_code == 400
+    assert client.post("/advanced/invite-tokens", json={"label": "x"}).status_code == 400
     # ...but the destructive ops (remove / rename) stay superuser-only → 403.
-    assert client.delete("/admin/invite-tokens/tok_x").status_code == 403
-    assert client.patch("/admin/invite-tokens/tok_nov", json={"label": "y"}).status_code == 403
+    assert client.delete("/advanced/invite-tokens/tok_x").status_code == 403
+    assert client.patch("/advanced/invite-tokens/tok_nov", json={"label": "y"}).status_code == 403
 
 
 def test_admin_tabs_are_capability_gated(client):
-    # /admin/golds was admin-gated; a novice lacks golds.view → 403 (not a
+    # /advanced/golds was admin-gated; a novice lacks golds.view → 403 (not a
     # rank comparison anymore, but the same outcome).
     _as(client, "tok_nov")
-    assert client.get("/admin/golds").status_code == 403
+    assert client.get("/advanced/golds").status_code == 403
 
 
 def test_admin_roles_superuser_only(client):
     _as(client, "tok_nov")
-    assert client.get("/admin/roles").status_code == 403
+    assert client.get("/advanced/roles").status_code == 403
 
     _as(client, "tok_super")
-    resp = client.get("/admin/roles")
+    resp = client.get("/advanced/roles")
     assert resp.status_code == 200
     roles = {r["token"]: r for r in resp.json()["roles"]}
     assert roles["tok_super"]["role"] == "level8"
@@ -97,7 +97,7 @@ def test_admin_roles_superuser_only(client):
 def test_post_role_needs_gcs(client):
     # superuser is authorized, but role writes require the gcs backend.
     _as(client, "tok_super")
-    resp = client.post("/admin/roles", json={"token": "tok_nov", "role": "level7"})
+    resp = client.post("/advanced/roles", json={"token": "tok_nov", "role": "level7"})
     assert resp.status_code == 400
 
 
@@ -125,13 +125,13 @@ def test_golds_and_feedback_self_scoped(client, monkeypatch):
 
     # level4 lacks *.view.all → sees only its own (author == "gina") rows.
     _as(client, "tok_l4")
-    assert [g["qa_id"] for g in client.get("/admin/golds").json()["golds"]] == ["q1"]
-    assert [f["qa_id"] for f in client.get("/admin/feedback").json()["feedback"]] == ["q1"]
+    assert [g["qa_id"] for g in client.get("/advanced/golds").json()["golds"]] == ["q1"]
+    assert [f["qa_id"] for f in client.get("/advanced/feedback").json()["feedback"]] == ["q1"]
 
     # level8 has *.view.all → sees everyone's.
     _as(client, "tok_super")
-    assert {g["qa_id"] for g in client.get("/admin/golds").json()["golds"]} == {"q1", "q2"}
-    assert {f["qa_id"] for f in client.get("/admin/feedback").json()["feedback"]} == {"q1", "q2"}
+    assert {g["qa_id"] for g in client.get("/advanced/golds").json()["golds"]} == {"q1", "q2"}
+    assert {f["qa_id"] for f in client.get("/advanced/feedback").json()["feedback"]} == {"q1", "q2"}
 
 
 def test_clone_gold_creates_owned_copy(client, monkeypatch):
@@ -148,7 +148,7 @@ def test_clone_gold_creates_owned_copy(client, monkeypatch):
 
     # level8 holds golds.clone → forks the gold into a new one owned by the caller.
     _as(client, "tok_super")
-    resp = client.post("/admin/golds/gsrc/clone")
+    resp = client.post("/advanced/golds/gsrc/clone")
     assert resp.status_code == 200
     new_id = resp.json()["gold_id"]
     assert new_id != "gsrc"
@@ -160,7 +160,7 @@ def test_clone_gold_creates_owned_copy(client, monkeypatch):
 
     # a role without golds.clone (level1 novice) is refused.
     _as(client, "tok_nov")
-    assert client.post("/admin/golds/gsrc/clone").status_code == 403
+    assert client.post("/advanced/golds/gsrc/clone").status_code == 403
 
 
 def test_mutation_is_audited_and_audit_is_gated(client, monkeypatch):
@@ -172,30 +172,30 @@ def test_mutation_is_audited_and_audit_is_gated(client, monkeypatch):
 
     # A shared-state mutation records one audit row (actor / action / target).
     _as(client, "tok_super")
-    assert client.post("/admin/gold-curation", json={"gold_id": "g9", "included": False}).status_code == 200
+    assert client.post("/advanced/gold-curation", json={"gold_id": "g9", "included": False}).status_code == 200
     assert audited[-1]["action"] == "golds.curate"
     assert audited[-1]["target"] == "g9"
     assert audited[-1]["actor"] == "boss"
 
     # Reading the trail needs attribution.view (level 6+): level8 ok, level4 denied.
     monkeypatch.setattr(main, "read_audit", lambda limit=None: [])
-    assert client.get("/admin/audit").status_code == 200
+    assert client.get("/advanced/audit").status_code == 200
     _as(client, "tok_l4")
-    assert client.get("/admin/audit").status_code == 403
+    assert client.get("/advanced/audit").status_code == 403
 
 
 def test_invite_tokens_superuser_only(client):
     _as(client, "tok_nov")
-    assert client.get("/admin/invite-tokens").status_code == 403
-    assert client.post("/admin/invite-tokens", json={"label": "x"}).status_code == 403
-    assert client.patch("/admin/invite-tokens/tok_x", json={"label": "y"}).status_code == 403
-    assert client.delete("/admin/invite-tokens/tok_x").status_code == 403
+    assert client.get("/advanced/invite-tokens").status_code == 403
+    assert client.post("/advanced/invite-tokens", json={"label": "x"}).status_code == 403
+    assert client.patch("/advanced/invite-tokens/tok_x", json={"label": "y"}).status_code == 403
+    assert client.delete("/advanced/invite-tokens/tok_x").status_code == 403
 
 
 def test_invite_tokens_need_gcs(client):
     # superuser is authorized, but the local backend has no allowlist object.
     _as(client, "tok_super")
-    assert client.get("/admin/invite-tokens").status_code == 400
-    assert client.post("/admin/invite-tokens", json={"label": "x"}).status_code == 400
-    assert client.patch("/admin/invite-tokens/tok_x", json={"label": "y"}).status_code == 400
-    assert client.delete("/admin/invite-tokens/tok_x").status_code == 400
+    assert client.get("/advanced/invite-tokens").status_code == 400
+    assert client.post("/advanced/invite-tokens", json={"label": "x"}).status_code == 400
+    assert client.patch("/advanced/invite-tokens/tok_x", json={"label": "y"}).status_code == 400
+    assert client.delete("/advanced/invite-tokens/tok_x").status_code == 400
