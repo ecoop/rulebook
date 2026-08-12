@@ -73,6 +73,8 @@ def test_invite_tokens_superuser_only(client):
     _as(client, "tok_nov")
     assert client.get("/admin/invite-tokens").status_code == 403
     assert client.post("/admin/invite-tokens", json={"label": "x"}).status_code == 403
+    assert client.patch("/admin/invite-tokens/tok_x", json={"label": "y"}).status_code == 403
+    assert client.delete("/admin/invite-tokens/tok_x").status_code == 403
 
 
 def test_invite_tokens_need_gcs(client):
@@ -80,4 +82,5 @@ def test_invite_tokens_need_gcs(client):
     _as(client, "tok_super")
     assert client.get("/admin/invite-tokens").status_code == 400
     assert client.post("/admin/invite-tokens", json={"label": "x"}).status_code == 400
+    assert client.patch("/admin/invite-tokens/tok_x", json={"label": "y"}).status_code == 400
     assert client.delete("/admin/invite-tokens/tok_x").status_code == 400
