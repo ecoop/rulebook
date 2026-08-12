@@ -30,6 +30,7 @@ from typing import Any
 from jsonl_log import append_jsonl, read_latest, read_latest_list, utc_now_iso
 
 from .config import settings
+from .log_sync import persist_log
 
 # Schema version stamped into every row so readers can dispatch on
 # `v` rather than sniffing the shape. Bump whenever the row format
@@ -82,6 +83,16 @@ def _log_dir() -> Path:
     return settings.data_dir / "logs"
 
 
+def _append(filename: str, row: dict[str, Any]) -> None:
+    """Append one row to a log file, then write it through to GCS.
+
+    A single seam so every logger persists consistently. ``persist_log`` is a
+    no-op off the GCS backend, so local dev keeps plain file appends.
+    """
+    append_jsonl(_log_dir() / filename, row)
+    persist_log(filename)
+
+
 def log_qa(
     qa_id: str,
     *,
@@ -97,8 +108,8 @@ def log_qa(
     author: str | None = None,
 ) -> None:
     """Record one /ask interaction (question in, answer + chunks out)."""
-    append_jsonl(
-        _log_dir() / "qa_log.jsonl",
+    _append(
+        "qa_log.jsonl",
         {
             "v": QA_LOG_SCHEMA_VERSION,
             "qa_id": qa_id,
@@ -131,8 +142,8 @@ def log_gold(
     so gold.jsonl is self-contained for downstream consumers (the index
     builder, a future admin UI, etc).
     """
-    append_jsonl(
-        _log_dir() / "gold.jsonl",
+    _append(
+        "gold.jsonl",
         {
             "v": GOLD_SCHEMA_VERSION,
             "qa_id": qa_id,
@@ -152,8 +163,8 @@ def log_gold_curation(qa_id: str, *, included: bool) -> None:
     as "included by default" so a freshly-authored gold flows into the
     index without an admin having to approve it first.
     """
-    append_jsonl(
-        _log_dir() / "gold_curation.jsonl",
+    _append(
+        "gold_curation.jsonl",
         {
             "v": GOLD_CURATION_SCHEMA_VERSION,
             "qa_id": qa_id,
@@ -212,8 +223,8 @@ def log_source_curation(source_path: str, *, included: bool) -> None:
     (e.g. ``rules/ultimate/strategy.md``). Same append-only semantics
     as gold curation: latest row per path wins.
     """
-    append_jsonl(
-        _log_dir() / "source_curation.jsonl",
+    _append(
+        "source_curation.jsonl",
         {
             "v": SOURCE_CURATION_SCHEMA_VERSION,
             "path": source_path,
@@ -251,8 +262,8 @@ def log_feedback(
     with no validation here so the vocabulary can evolve without a
     logfile migration.
     """
-    append_jsonl(
-        _log_dir() / "feedback.jsonl",
+    _append(
+        "feedback.jsonl",
         {
             "v": FEEDBACK_SCHEMA_VERSION,
             "qa_id": qa_id,
