@@ -279,6 +279,10 @@ class RemoveInviteTokenResponse(BaseModel):
     label: str
 
 
+class RenameInviteTokenRequest(BaseModel):
+    label: str = Field(..., min_length=1, description="New recipient label for an existing token.")
+
+
 class MetaResponse(BaseModel):
     sports: list[str]
     embedding_provider: str
@@ -714,6 +718,28 @@ def admin_remove_invite_token(token: str) -> RemoveInviteTokenResponse:
     label = tokens.pop(token)
     write_tokens_object(bucket, obj, tokens)
     return RemoveInviteTokenResponse(token=token, label=label)
+
+
+@app.patch(
+    "/admin/invite-tokens/{token}",
+    response_model=InviteTokenOut,
+    dependencies=[Depends(require_role("superuser"))],
+)
+def admin_rename_invite_token(token: str, req: RenameInviteTokenRequest) -> InviteTokenOut:
+    """Rename a user's label, keeping the same token.
+
+    The token (identity) is unchanged, so the person's access, cookie, and
+    per-guest cost are unaffected — only the display label updates. Past log
+    rows keep the old label (audit trail). To hand a token to a *different*
+    person, remove it and mint a fresh one instead (see docs/demo-mode.md, #20).
+    """
+    bucket, obj = _require_gcs_for_invite_tokens()
+    tokens = read_tokens_object(bucket, obj)
+    if token not in tokens:
+        raise HTTPException(status_code=404, detail="token not found.")
+    tokens[token] = req.label
+    write_tokens_object(bucket, obj, tokens)
+    return InviteTokenOut(token=token, label=req.label)
 
 
 @app.get("/admin/golds", response_model=AdminGoldListResponse, dependencies=[Depends(require_role("admin"))])
