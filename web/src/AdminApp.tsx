@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
+import { LevelBadge, levelLabel, levelNumber } from './levels'
 
 // Admin surface for grooming user-authored gold answers before the next
 // index rebuild. Deliberately kept small: this is a curator's workflow,
@@ -53,6 +54,7 @@ interface AdminFeedbackListResponse {
 interface MeResponse {
   recipient: string | null
   role: string
+  level: number
   demo_mode: boolean
 }
 
@@ -661,9 +663,10 @@ export default function AdminApp() {
               </>
             ) : (
               <>
-                You need the <span className="font-mono">admin</span> role to use this page.
-                Your role is <span className="font-mono">{me.role}</span> — ask a superuser
-                to promote you.
+                You need at least a <span className="font-medium">Level 7 (admin)</span> role to
+                use this page. Your level is{' '}
+                <LevelBadge level={me.level} className="align-middle" /> — ask a superuser to
+                promote you.
               </>
             )}
           </div>
@@ -1256,18 +1259,21 @@ export default function AdminApp() {
                             </button>
                           </td>
                           <td className="px-3 py-2">
-                            <select
-                              value={u.role}
-                              disabled={busy}
-                              onChange={(e) => void changeRole(u.token, e.target.value)}
-                              className="rounded-md border border-input bg-card px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                            >
-                              {ladder.map((r) => (
-                                <option key={r} value={r}>
-                                  {r}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="flex items-center gap-2">
+                              <LevelBadge level={levelNumber(u.role)} />
+                              <select
+                                value={u.role}
+                                disabled={busy}
+                                onChange={(e) => void changeRole(u.token, e.target.value)}
+                                className="rounded-md border border-input bg-card px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                              >
+                                {ladder.map((r) => (
+                                  <option key={r} value={r}>
+                                    {levelLabel(levelNumber(r))}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{u.source}</td>
                           <td className="px-3 py-2">

@@ -15,6 +15,7 @@ import {
   type DiagnosticsSnapshot,
 } from './widgets/Diagnostics'
 import { DemoBody, DemoSummaryLine } from './widgets/Demo'
+import { LevelBadge } from './levels'
 
 // -----------------------------------------------------------------------------
 // Types mirroring the FastAPI response shape. Kept inline (rather than in a
@@ -92,6 +93,7 @@ interface Meta {
 interface Me {
   recipient: string | null
   role: string
+  level: number
   demo_mode: boolean
 }
 
@@ -418,10 +420,11 @@ export default function App() {
                 </p>
               )}
               {usage?.guest_recipient && (
-                <p className="text-sm text-muted-foreground">
-                  Demo
-                  <span className="text-muted-foreground/70"> · </span>
+                <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <span>Demo</span>
+                  <span className="text-muted-foreground/70">·</span>
                   <span className="font-medium text-foreground">{usage.guest_recipient}</span>
+                  {me && me.demo_mode && <LevelBadge level={me.level} />}
                 </p>
               )}
             </div>
