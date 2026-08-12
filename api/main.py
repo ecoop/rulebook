@@ -66,6 +66,7 @@ from rulebook.roles import (  # noqa: E402
     CAP_FEEDBACK_VIEW,
     CAP_FEEDBACK_VIEW_ALL,
     CAP_GOLD_AUTHOR,
+    CAP_GOLDS_CLONE,
     CAP_GOLDS_CURATE,
     CAP_GOLDS_VIEW,
     CAP_GOLDS_VIEW_ALL,
@@ -182,9 +183,12 @@ class GoldResponse(BaseModel):
 
 
 class AdminGoldRow(BaseModel):
+    gold_id: str = Field(..., description="Stable id for this gold (legacy golds: == qa_id).")
     qa_id: str
     question: str
     gold_answer: str
+    author: str | None = Field(default=None, description="Who authored this gold (recipient label).")
+    is_own: bool = Field(..., description="Whether the current caller authored it — drives Edit vs Clone.")
     timestamp: str
     included: bool = Field(..., description="Whether this gold is included in the next index rebuild.")
 
@@ -194,8 +198,13 @@ class AdminGoldListResponse(BaseModel):
 
 
 class GoldCurationRequest(BaseModel):
-    qa_id: str
+    gold_id: str
     included: bool
+
+
+class CloneGoldResponse(BaseModel):
+    gold_id: str = Field(..., description="Id of the new gold, now owned by the caller.")
+    ok: bool = True
 
 
 class GoldCurationResponse(BaseModel):
@@ -565,19 +574,27 @@ def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     dependencies=[Depends(require_capability(CAP_GOLD_AUTHOR))],
 )
 def gold_endpoint(req: GoldRequest) -> GoldResponse:
-    """Record a user-authored canonical answer for a prior qa_id.
+    """Author (or update) the caller's own gold for a qa_id.
 
-    Golds are picked up by scripts/build_index.py on the next rebuild —
-    each gold becomes retrievable chunks tagged by sport (via ## Sport
-    markdown headings) or as a shared/all-sports chunk if the answer
-    has no headings.
+    Ownership is intrinsic: this upserts the caller's *own* gold for the
+    qa_id — it reuses their existing gold's id if they have one, else mints a
+    new one, and never touches another author's gold. To fork someone else's
+    gold, use POST /admin/golds/{gold_id}/clone. Golds are picked up by
+    scripts/build_index.py on the next rebuild.
     """
     guest = get_current_guest()
+    author = guest.recipient if guest else None
+    mine = next(
+        (g for g in read_latest_golds() if g["qa_id"] == req.qa_id and g.get("author") == author),
+        None,
+    )
+    gold_id = mine["gold_id"] if mine else uuid.uuid4().hex
     log_gold(
         req.qa_id,
+        gold_id=gold_id,
         question=req.question,
         gold_answer=req.gold_answer,
-        author=(guest.recipient if guest else None),
+        author=author,
     )
     return GoldResponse()
 
@@ -803,17 +820,22 @@ def admin_list_golds() -> AdminGoldListResponse:
     `golds.view.all`: the caller sees only golds they authored.
     """
     curation = read_latest_curation()
-    see_all, author = _view_scope(CAP_GOLDS_VIEW_ALL)
+    guest = get_current_guest()
+    me_author = guest.recipient if guest else None
+    see_all = has_capability(resolve_role(guest.token if guest else None), CAP_GOLDS_VIEW_ALL)
     golds = read_latest_golds()
     if not see_all:
-        golds = [g for g in golds if g.get("author") == author]
+        golds = [g for g in golds if g.get("author") == me_author]
     rows = [
         AdminGoldRow(
+            gold_id=g["gold_id"],
             qa_id=g["qa_id"],
             question=g["question"],
             gold_answer=g["gold_answer"],
+            author=g.get("author"),
+            is_own=g.get("author") == me_author,
             timestamp=g["timestamp"],
-            included=curation.get(g["qa_id"], True),
+            included=curation.get(g["gold_id"], True),
         )
         for g in golds
     ]
@@ -822,9 +844,37 @@ def admin_list_golds() -> AdminGoldListResponse:
 
 @app.post("/admin/gold-curation", response_model=GoldCurationResponse, dependencies=[Depends(require_capability(CAP_GOLDS_CURATE))])
 def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
-    """Toggle whether a gold is included in the next index rebuild."""
-    log_gold_curation(req.qa_id, included=req.included)
+    """Toggle whether a specific gold is included in the next index rebuild."""
+    log_gold_curation(req.gold_id, included=req.included)
     return GoldCurationResponse()
+
+
+@app.post(
+    "/admin/golds/{gold_id}/clone",
+    response_model=CloneGoldResponse,
+    dependencies=[Depends(require_capability(CAP_GOLDS_CLONE))],
+)
+def admin_clone_gold(gold_id: str) -> CloneGoldResponse:
+    """Fork a gold into a new one owned by the caller (docs/rbac-capabilities.md §5).
+
+    Nothing is edited in place — the source gold is untouched; the caller gets
+    their own copy (same qa_id + question + text, new id, author = caller),
+    which they can then edit as their own. This is how #6 (operator) acts on
+    another user's gold: clone, then edit the clone.
+    """
+    src = next((g for g in read_latest_golds() if g["gold_id"] == gold_id), None)
+    if src is None:
+        raise HTTPException(status_code=404, detail="gold not found.")
+    guest = get_current_guest()
+    new_id = uuid.uuid4().hex
+    log_gold(
+        src["qa_id"],
+        gold_id=new_id,
+        question=src["question"],
+        gold_answer=src["gold_answer"],
+        author=(guest.recipient if guest else None),
+    )
+    return CloneGoldResponse(gold_id=new_id)
 
 
 @app.get("/admin/feedback", response_model=AdminFeedbackListResponse, dependencies=[Depends(require_capability(CAP_FEEDBACK_VIEW))])

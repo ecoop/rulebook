@@ -111,8 +111,8 @@ def test_golds_and_feedback_self_scoped(client, monkeypatch):
     import api.main as main
 
     golds = [
-        {"qa_id": "q1", "question": "?", "gold_answer": "a", "timestamp": "t", "author": "gina"},
-        {"qa_id": "q2", "question": "?", "gold_answer": "b", "timestamp": "t", "author": "boss"},
+        {"gold_id": "g1", "qa_id": "q1", "question": "?", "gold_answer": "a", "timestamp": "t", "author": "gina"},
+        {"gold_id": "g2", "qa_id": "q2", "question": "?", "gold_answer": "b", "timestamp": "t", "author": "boss"},
     ]
     feedback = [
         {"qa_id": "q1", "timestamp": "t", "rating": 5, "author": "gina"},
@@ -132,6 +132,34 @@ def test_golds_and_feedback_self_scoped(client, monkeypatch):
     _as(client, "tok_super")
     assert {g["qa_id"] for g in client.get("/admin/golds").json()["golds"]} == {"q1", "q2"}
     assert {f["qa_id"] for f in client.get("/admin/feedback").json()["feedback"]} == {"q1", "q2"}
+
+
+def test_clone_gold_creates_owned_copy(client, monkeypatch):
+    import api.main as main
+
+    src = {
+        "gold_id": "gsrc", "qa_id": "q1", "question": "Q?",
+        "gold_answer": "orig", "timestamp": "t", "author": "gina",
+    }
+    monkeypatch.setattr(main, "read_latest_golds", lambda: [src])
+    calls: list = []
+    monkeypatch.setattr(main, "log_gold", lambda qa_id, **kw: calls.append((qa_id, kw)))
+
+    # level8 holds golds.clone → forks the gold into a new one owned by the caller.
+    _as(client, "tok_super")
+    resp = client.post("/admin/golds/gsrc/clone")
+    assert resp.status_code == 200
+    new_id = resp.json()["gold_id"]
+    assert new_id != "gsrc"
+    qa_id, kw = calls[0]
+    assert qa_id == "q1"
+    assert kw["gold_id"] == new_id
+    assert kw["gold_answer"] == "orig"    # content copied from the source
+    assert kw["author"] == "boss"         # …but owned by the cloner (tok_super = "boss")
+
+    # a role without golds.clone (level1 novice) is refused.
+    _as(client, "tok_nov")
+    assert client.post("/admin/golds/gsrc/clone").status_code == 403
 
 
 def test_invite_tokens_superuser_only(client):

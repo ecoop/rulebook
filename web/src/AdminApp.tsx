@@ -6,9 +6,12 @@ import { LevelBadge, levelLabel, levelNumber } from './levels'
 // not a casual-user surface. Reached via URL hash `#/admin` — see main.tsx.
 
 interface AdminGoldRow {
+  gold_id: string
   qa_id: string
   question: string
   gold_answer: string
+  author: string | null
+  is_own: boolean
   timestamp: string
   included: boolean
 }
@@ -439,6 +442,9 @@ export default function AdminApp() {
   async function toggleInclusion(row: AdminGoldRow) {
     const next = !row.included
     // Optimistic — reflect the change immediately, revert if the POST fails.
+    // Curation is keyed by gold_id on the backend (row.gold_id in the body);
+    // the optimistic UI stays qa_id-keyed until the table is re-keyed to
+    // gold_id in the frontend-gating slice (one gold per qa_id today).
     setRows((prev) =>
       prev?.map((r) => (r.qa_id === row.qa_id ? { ...r, included: next } : r)) ?? prev,
     )
@@ -447,7 +453,7 @@ export default function AdminApp() {
       const resp = await fetch('/admin/gold-curation', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ qa_id: row.qa_id, included: next }),
+        body: JSON.stringify({ gold_id: row.gold_id, included: next }),
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
     } catch (err) {

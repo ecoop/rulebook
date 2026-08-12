@@ -196,6 +196,15 @@ a gold must be an **owned entity** (its own id + author + the `qa_id` it answers
 side effect — several candidate golds can coexist for one question and curation (`Incl.`)
 picks which feed the index.
 
+> **Landed (backend).** Golds now carry a `gold_id` (`v3` schema); legacy rows resolve
+> to `gold_id == qa_id`, so nothing needs migrating. `POST /gold` upserts the caller's
+> *own* gold for a qa_id (reuses their id, mints one otherwise) — it can never touch
+> another author's gold, which *is* the `edit.own` enforcement.
+> `POST /admin/golds/{gold_id}/clone` (gated `golds.clone`) forks a gold into a new one
+> owned by the caller. Curation and the index builder are keyed by `gold_id`. The
+> Golds-tab **Edit vs Clone** buttons (driven by the new `is_own` flag on each row) land
+> with the frontend-gating slice.
+
 **The attribution wall (#5 → #6).** Below the wall, #5 can read *everyone's* gold and
 feedback **content** but the rows are **anonymous** — no author shown (`attribution.view`
 is absent). At #6+ each row shows **who wrote it**. Knowing which player gave which
@@ -278,8 +287,10 @@ The mechanism has landed; the rest is slices. The frontend ones edit
    caller's own rows without `*.view.all` (matched on the `author` label). Behaviour-
    preserving today (only level7/8 reach those tabs, and they hold `.all`); the "your X"
    count labels land with the frontend-gating slice.
-4. **Golds as owned entities + clone** — the schema change (§5) and the `POST /gold`
-   ownership check; Edit vs Clone in the Golds tab.
+4. ✅ **Golds as owned entities + clone** — `gold_id` (`v3`), `POST /gold` upserts the
+   caller's own gold, `POST /admin/golds/{gold_id}/clone`, curation + index keyed by
+   `gold_id`. The Golds-tab Edit-vs-Clone buttons (via `is_own`) ride with the frontend
+   slice.
 5. **Audit log** — `audit.jsonl` + a write on every shared-state mutation.
 6. **Frontend gating** — tabs/columns/buttons by capability; retire `ROLE_RANK` /
    `ROLE_LADDER_FALLBACK`; the atomic **Admin→Advanced** relabel; the passages-panel
