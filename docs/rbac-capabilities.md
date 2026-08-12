@@ -300,10 +300,16 @@ The mechanism has landed; the rest is slices. The frontend ones edit
    slice.
 5. ✅ **Audit log** — `audit.jsonl` + a write on every shared-state mutation;
    `GET /admin/audit` (attribution.view). The Audit tab rides with the frontend slice.
-6. **Frontend gating** — tabs/columns/buttons by capability; retire `ROLE_RANK` /
-   `ROLE_LADDER_FALLBACK`; the atomic **Admin→Advanced** relabel; the passages-panel
-   redesign; the new rungs in the picker.
-7. *(later)* **data-driven bundles**, then **the permissions editor** (§8).
+6. ✅ **Frontend capability-gating** — `AdminApp` renders tabs/controls off
+   `/me`'s `capabilities` (page at `advanced.view`, each tab by its cap, Rebuild /
+   Incl. / source-toggle / role-picker / add / remove / rename each behind its cap),
+   Golds shows **Edit** (own) vs **Clone** (others'), the **Audit tab** lands, and
+   `App` gates the nav link + gold authoring on capabilities — `ROLE_RANK` retired.
+   The surface now opens to levels 4–6.
+7. **Admin→Advanced relabel** (cosmetic, still open) — page title + nav link,
+   `AdminApp`→`AdvancedApp`, `#/admin`→`#/advanced` + redirect, `/admin/*`→`/advanced/*`
+   routes with their fetch calls; plus the passages-panel redesign.
+8. *(later)* **data-driven bundles**, then **the permissions editor** (§8).
 
 ## 10. Non-goals (for now)
 

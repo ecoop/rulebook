@@ -58,7 +58,16 @@ interface MeResponse {
   recipient: string | null
   role: string
   level: number
+  capabilities: string[]
   demo_mode: boolean
+}
+
+interface AuditRow {
+  timestamp: string
+  actor: string | null
+  action: string
+  target: string | null
+  detail: Record<string, unknown>
 }
 
 interface InviteTokenOut {
@@ -89,7 +98,7 @@ interface UserRow {
   source: string
 }
 
-type AdminTab = 'feedback' | 'golds' | 'sources' | 'users'
+type AdminTab = 'feedback' | 'golds' | 'sources' | 'users' | 'audit'
 
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
@@ -155,6 +164,7 @@ export default function AdminApp() {
   const [sources, setSources] = useState<AdminSourceRow[] | null>(null)
   const [sourcePending, setSourcePending] = useState<Set<string>>(() => new Set())
   const [feedback, setFeedback] = useState<AdminFeedbackRow[] | null>(null)
+  const [audit, setAudit] = useState<AuditRow[] | null>(null)
   // Sort state per table. Defaults chosen to match the backend's natural
   // return order so a first render doesn't reshuffle.
   const [feedbackSort, setFeedbackSort] = useState<{ col: FeedbackSortCol; dir: SortDir }>({
@@ -186,27 +196,28 @@ export default function AdminApp() {
   const [editingToken, setEditingToken] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
 
-  // The admin surface requires an admin+ role on a gated (demo_mode) deploy —
-  // the backend /admin/* endpoints 403 otherwise. Gate the whole page on this
-  // so non-admins get a friendly message instead of raw error banners.
-  const canUseAdmin =
-    !!me && me.demo_mode && (me.role === 'level7' || me.role === 'level8')
-  const isSuperuser = !!me && me.role === 'level8'
+  // Everything is gated by CAPABILITY, not rank (docs/rbac-capabilities.md §6):
+  // the UI renders a control iff /me's capability bundle grants it, and the
+  // backend enforces the same. `advanced.view` (level 4+) opens the page at all.
+  const caps = me?.capabilities ?? []
+  const can = (c: string) => caps.includes(c)
+  const canUseAdmin = !!me && can('advanced.view')
 
   useEffect(() => {
     void refreshMe()
   }, [])
 
-  // Only fetch admin data once /me confirms access — avoids the 403 banners a
-  // non-admin (or demo-off) deploy would otherwise surface on every tab.
+  // Fetch each dataset only if the caller's capabilities grant that tab —
+  // avoids 403 banners on tabs the role can't see.
   useEffect(() => {
     if (!canUseAdmin) return
-    void refresh()
-    void refreshSources()
-    void refreshFeedback()
-    if (isSuperuser) void refreshUsers()
+    if (can('golds.view')) void refresh()
+    if (can('sources.view')) void refreshSources()
+    if (can('feedback.view')) void refreshFeedback()
+    if (can('users.view')) void refreshUsers()
+    if (can('attribution.view')) void refreshAudit()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUseAdmin, isSuperuser])
+  }, [canUseAdmin, caps.join(',')])
 
   async function refresh() {
     setError(null)
@@ -226,6 +237,17 @@ export default function AdminApp() {
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: AdminFeedbackListResponse = await resp.json()
       setFeedback(data.feedback)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function refreshAudit() {
+    try {
+      const resp = await fetch('/admin/audit')
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      const data: { audit: AuditRow[] } = await resp.json()
+      setAudit(data.audit)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -551,6 +573,20 @@ export default function AdminApp() {
     }
   }
 
+  // Fork someone else's gold into the caller's own editable copy (golds.clone).
+  async function cloneGold(row: AdminGoldRow) {
+    setError(null)
+    try {
+      const resp = await fetch(`/admin/golds/${encodeURIComponent(row.gold_id)}/clone`, {
+        method: 'POST',
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      await refresh()  // the clone now shows up as the caller's own gold
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   function toggleExpanded(qa_id: string) {
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -615,10 +651,11 @@ export default function AdminApp() {
       // Label and Source are case-insensitive alphabetical.
       return a[col].localeCompare(b[col], undefined, { sensitivity: 'base' }) * mult
     })
-  // The page is already gated on admin+ (canUseAdmin); within it the Users tab
-  // is superuser-only.
-  const showUsersTab = isSuperuser
-  const canManageUsers = isSuperuser
+  // The Users tab shows with `users.view`; the controls inside gate on their
+  // own caps (change_role / add / remove / rename), so level 7 (admin) manages
+  // roles + invites while only level 8 removes/renames.
+  const showUsersTab = can('users.view')
+  const canManageUsers = can('users.view')
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -669,8 +706,8 @@ export default function AdminApp() {
               </>
             ) : (
               <>
-                You need at least a <span className="font-medium">Level 7 (admin)</span> role to
-                use this page. Your level is{' '}
+                You need at least <span className="font-medium">Level 4</span> to see the
+                Advanced page. Your level is{' '}
                 <LevelBadge level={me.level} className="align-middle" /> — ask a superuser to
                 promote you.
               </>
@@ -680,7 +717,8 @@ export default function AdminApp() {
 
         {me && canUseAdmin && (
           <>
-        {/* Rebuild control — global, applies to whichever tab is active. */}
+        {/* Rebuild control — index.rebuild (level 6+); global to all tabs. */}
+        {can('index.rebuild') && (
         <div className="flex items-center justify-end">
           <button
             type="button"
@@ -692,6 +730,7 @@ export default function AdminApp() {
             {rebuilding ? 'Rebuilding…' : 'Rebuild index'}
           </button>
         </div>
+        )}
         {rebuildResult && (
           <div
             className={
@@ -712,13 +751,15 @@ export default function AdminApp() {
           </div>
         )}
 
-        {/* Tab bar — counts baked into labels so both are visible regardless of active tab. */}
+        {/* Tab bar — each tab shows only if the caller's capabilities grant it.
+            Counts baked into labels so both are visible regardless of active tab. */}
         <div className="flex gap-1 border-b border-border text-sm">
           {([
-            'feedback',
-            'golds',
-            'sources',
+            ...(can('feedback.view') ? (['feedback'] as AdminTab[]) : []),
+            ...(can('golds.view') ? (['golds'] as AdminTab[]) : []),
+            ...(can('sources.view') ? (['sources'] as AdminTab[]) : []),
             ...(showUsersTab ? (['users'] as AdminTab[]) : []),
+            ...(can('attribution.view') ? (['audit'] as AdminTab[]) : []),
           ] as AdminTab[]).map((t) => {
             const active = activeTab === t
             const label =
@@ -728,9 +769,11 @@ export default function AdminApp() {
                   ? `Golds (${goldIncluded}/${goldTotal})`
                   : t === 'sources'
                     ? `Sources (${sourceIncluded}/${sourceTotal})`
-                    : canManageUsers
-                      ? `Users (${userRows.length})`
-                      : 'Users'
+                    : t === 'audit'
+                      ? `Audit${audit ? ` (${audit.length})` : ''}`
+                      : canManageUsers
+                        ? `Users (${userRows.length})`
+                        : 'Users'
             return (
               <button
                 key={t}
@@ -897,15 +940,22 @@ export default function AdminApp() {
                           <button
                             type="button"
                             onClick={() => toggleInclusion(r)}
-                            disabled={pending.has(r.qa_id)}
+                            disabled={pending.has(r.qa_id) || !can('golds.curate')}
                             aria-pressed={r.included}
-                            title={r.included ? 'Included — click to exclude' : 'Excluded — click to include'}
+                            title={
+                              !can('golds.curate')
+                                ? (r.included ? 'Included' : 'Excluded')
+                                : r.included
+                                  ? 'Included — click to exclude'
+                                  : 'Excluded — click to include'
+                            }
                             className={
                               'inline-flex h-5 w-9 items-center rounded-full border transition ' +
                               (r.included
                                 ? 'border-green-500 bg-green-500 justify-end'
                                 : 'border-input bg-muted justify-start') +
-                              (pending.has(r.qa_id) ? ' opacity-50' : '')
+                              (pending.has(r.qa_id) ? ' opacity-50' : '') +
+                              (can('golds.curate') ? '' : ' cursor-not-allowed')
                             }
                           >
                             <span className="mx-0.5 h-4 w-4 rounded-full bg-card shadow-sm" />
@@ -971,14 +1021,31 @@ export default function AdminApp() {
                                 <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foreground">
                                   {r.gold_answer}
                                 </pre>
-                                <div className="flex justify-end">
-                                  <button
-                                    type="button"
-                                    onClick={() => beginEdit(r)}
-                                    className="rounded-md border border-input bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
-                                  >
-                                    Edit
-                                  </button>
+                                <div className="flex items-center justify-end gap-2">
+                                  {!r.is_own && (
+                                    <span className="text-xs text-muted-foreground">
+                                      by {r.author ?? 'unknown'}
+                                    </span>
+                                  )}
+                                  {r.is_own && can('golds.edit.own') && (
+                                    <button
+                                      type="button"
+                                      onClick={() => beginEdit(r)}
+                                      className="rounded-md border border-input bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+                                  {!r.is_own && can('golds.clone') && (
+                                    <button
+                                      type="button"
+                                      onClick={() => cloneGold(r)}
+                                      title="Copy this into your own editable gold — the original is untouched"
+                                      className="rounded-md border border-input bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
+                                    >
+                                      Clone
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -1060,15 +1127,22 @@ export default function AdminApp() {
                       <button
                         type="button"
                         onClick={() => toggleSourceInclusion(s)}
-                        disabled={sourcePending.has(s.path)}
+                        disabled={sourcePending.has(s.path) || !can('sources.curate')}
                         aria-pressed={s.included}
-                        title={s.included ? 'Included — click to exclude' : 'Excluded — click to include'}
+                        title={
+                          !can('sources.curate')
+                            ? (s.included ? 'Included' : 'Excluded')
+                            : s.included
+                              ? 'Included — click to exclude'
+                              : 'Excluded — click to include'
+                        }
                         className={
                           'inline-flex h-5 w-9 items-center rounded-full border transition ' +
                           (s.included
                             ? 'border-green-500 bg-green-500 justify-end'
                             : 'border-input bg-muted justify-start') +
-                          (sourcePending.has(s.path) ? ' opacity-50' : '')
+                          (sourcePending.has(s.path) ? ' opacity-50' : '') +
+                          (can('sources.curate') ? '' : ' cursor-not-allowed')
                         }
                       >
                         <span className="mx-0.5 h-4 w-4 rounded-full bg-card shadow-sm" />
@@ -1106,7 +1180,8 @@ export default function AdminApp() {
 
         {activeTab === 'users' && canManageUsers && (
           <div className="space-y-4">
-            {/* Add invitee — allowlist entry (defaults to novice until promoted). */}
+            {/* Add invitee — allowlist entry (defaults to level 1 until promoted). */}
+            {can('users.add') && (
             <section className="rounded-md border border-border bg-card p-4 shadow-sm">
               <div className="flex flex-wrap items-end gap-3">
                 <label className="flex-1">
@@ -1155,6 +1230,7 @@ export default function AdminApp() {
                   )
                 })()}
             </section>
+            )}
 
             {inviteTokens === null && !error && (
               <div className="text-sm text-muted-foreground">Loading users…</div>
@@ -1243,7 +1319,7 @@ export default function AdminApp() {
                                   Cancel
                                 </button>
                               </div>
-                            ) : (
+                            ) : can('users.rename') ? (
                               <button
                                 type="button"
                                 onClick={() => beginRename(u.token, u.label)}
@@ -1252,6 +1328,8 @@ export default function AdminApp() {
                               >
                                 {u.label}
                               </button>
+                            ) : (
+                              <span>{u.label}</span>
                             )}
                           </td>
                           <td className="px-3 py-2">
@@ -1269,7 +1347,7 @@ export default function AdminApp() {
                               <LevelBadge level={levelNumber(u.role)} />
                               <select
                                 value={u.role}
-                                disabled={busy}
+                                disabled={busy || !can('users.change_role')}
                                 onChange={(e) => void changeRole(u.token, e.target.value)}
                                 className="rounded-md border border-input bg-card px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                               >
@@ -1284,24 +1362,28 @@ export default function AdminApp() {
                           <td className="px-3 py-2 text-xs text-muted-foreground">{u.source}</td>
                           <td className="px-3 py-2">
                             <div className="flex justify-end gap-2 text-xs">
-                              <button
-                                type="button"
-                                onClick={() => void resetRole(u.token)}
-                                disabled={busy || u.source !== 'override'}
-                                title="Clear the override → fall back to the env seed (or novice)"
-                                className="rounded-md border border-input bg-card px-2 py-1 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                Reset
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void removeUser(u.token, u.label)}
-                                disabled={busy || isSelf}
-                                title={isSelf ? "You can't remove yourself" : 'Hard-delete this invite'}
-                                className="rounded-md border border-destructive/30 bg-card px-2 py-1 font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                Remove
-                              </button>
+                              {can('users.change_role') && (
+                                <button
+                                  type="button"
+                                  onClick={() => void resetRole(u.token)}
+                                  disabled={busy || u.source !== 'override'}
+                                  title="Clear the override → fall back to the env seed (or level 1)"
+                                  className="rounded-md border border-input bg-card px-2 py-1 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  Reset
+                                </button>
+                              )}
+                              {can('users.remove') && (
+                                <button
+                                  type="button"
+                                  onClick={() => void removeUser(u.token, u.label)}
+                                  disabled={busy || isSelf}
+                                  title={isSelf ? "You can't remove yourself" : 'Hard-delete this invite'}
+                                  className="rounded-md border border-destructive/30 bg-card px-2 py-1 font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  Remove
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1312,6 +1394,49 @@ export default function AdminApp() {
               </section>
             )}
           </div>
+        )}
+
+        {activeTab === 'audit' && audit === null && !error && (
+          <div className="text-sm text-muted-foreground">Loading audit trail…</div>
+        )}
+        {activeTab === 'audit' && audit !== null && audit.length === 0 && (
+          <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
+            No shared-state changes recorded yet. Curating a gold, rebuilding the index, or
+            changing a user all land here.
+          </div>
+        )}
+        {activeTab === 'audit' && audit !== null && audit.length > 0 && (
+          <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="w-44 px-3 py-2">when</th>
+                  <th className="w-32 px-3 py-2">who</th>
+                  <th className="w-40 px-3 py-2">action</th>
+                  <th className="px-3 py-2">target</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {audit.map((a, i) => (
+                  <tr key={a.timestamp + '-' + i} className="hover:bg-accent">
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                      {a.timestamp.replace('T', ' ').slice(0, 19)}
+                    </td>
+                    <td className="px-3 py-2">{a.actor ?? '—'}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{a.action}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                      {a.target ?? ''}
+                      {a.detail && Object.keys(a.detail).length > 0 && (
+                        <span className="ml-2 text-muted-foreground/70">
+                          {JSON.stringify(a.detail)}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
         )}
           </>
         )}

@@ -94,26 +94,12 @@ interface Me {
   recipient: string | null
   role: string
   level: number
+  capabilities: string[]
   demo_mode: boolean
 }
 
-// Numbered levels (docs/rbac-capabilities.md §4). /me returns a level id
-// (level0 … level8) plus its numeric `level`.
-const ROLE_RANK: Record<string, number> = {
-  level0: 0,
-  level1: 1,
-  level2: 2,
-  level3: 3,
-  level4: 4,
-  level5: 5,
-  level6: 6,
-  level7: 7,
-  level8: 8,
-}
-
-function atLeast(role: string, min: string): boolean {
-  return (ROLE_RANK[role] ?? 1) >= (ROLE_RANK[min] ?? 1)
-}
+// Gating is by capability, not rank (docs/rbac-capabilities.md §6): /me returns
+// the caller's `capabilities`; the UI shows a control iff the bundle grants it.
 
 // Format the ISO server-start timestamp for the footer. Uses the viewer's
 // locale so a bug reporter sees a time they can reason about.
@@ -358,11 +344,11 @@ export default function App() {
     [],
   )
 
-  // UI gating (roles.md step 4), active only in demo_mode. Novices may rate
-  // but not tag/note/author gold; the admin link is admin+ only.
+  // UI gating by capability, active only in demo_mode. Authoring golds needs
+  // `gold.author` (level 3+); the Advanced link needs `advanced.view` (level 4+).
   const gatingActive = !!me && me.demo_mode
-  const canEvaluate = !gatingActive || (me != null && atLeast(me.role, 'level3'))
-  const showAdminLink = !!me && (!me.demo_mode || atLeast(me.role, 'level7'))
+  const canEvaluate = !gatingActive || (me != null && me.capabilities.includes('gold.author'))
+  const showAdminLink = !!me && (!me.demo_mode || me.capabilities.includes('advanced.view'))
 
   if (meForbidden) {
     return (
