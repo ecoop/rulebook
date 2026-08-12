@@ -173,6 +173,10 @@ export default function AdminApp() {
   const [newInvite, setNewInvite] = useState<InviteTokenOut | null>(null)
   const [userPending, setUserPending] = useState<Set<string>>(() => new Set())
   const [copied, setCopied] = useState<string | null>(null)
+  // Inline name (label) editing — one row at a time. `editingToken` is the row
+  // being renamed; `editName` is the working buffer.
+  const [editingToken, setEditingToken] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
 
   // The admin surface requires an admin+ role on a gated (demo_mode) deploy —
   // the backend /admin/* endpoints 403 otherwise. Gate the whole page on this
@@ -295,6 +299,41 @@ export default function AdminApp() {
         body: JSON.stringify({ token, role }),
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      await refreshUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      markPending(token, false)
+    }
+  }
+
+  function beginRename(token: string, label: string) {
+    setEditingToken(token)
+    setEditName(label)
+  }
+
+  function cancelRename() {
+    setEditingToken(null)
+    setEditName('')
+  }
+
+  async function renameUser(token: string, currentLabel: string) {
+    const label = editName.trim()
+    // No-op if unchanged or empty — just close the editor.
+    if (!label || label === currentLabel) {
+      cancelRename()
+      return
+    }
+    markPending(token, true)
+    setError(null)
+    try {
+      const resp = await fetch(`/admin/invite-tokens/${encodeURIComponent(token)}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ label }),
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      cancelRename()
       await refreshUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -1124,7 +1163,7 @@ export default function AdminApp() {
                           onClick={() => setUserSort((s) => nextSort(s, 'label'))}
                           className="hover:text-foreground"
                         >
-                          label{sortIndicator(userSort.col === 'label', userSort.dir)}
+                          name{sortIndicator(userSort.col === 'label', userSort.dir)}
                         </button>
                       </th>
                       <th className="w-40 px-3 py-2">token</th>
@@ -1158,7 +1197,51 @@ export default function AdminApp() {
                           key={u.token}
                           className={'hover:bg-accent' + (busy ? ' opacity-50' : '')}
                         >
-                          <td className="px-3 py-2 text-foreground">{u.label}</td>
+                          <td className="px-3 py-2 text-foreground">
+                            {editingToken === u.token ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={editName}
+                                  disabled={busy}
+                                  onChange={(e) => setEditName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') void renameUser(u.token, u.label)
+                                    if (e.key === 'Escape') cancelRename()
+                                  }}
+                                  className="w-full rounded-md border border-input bg-card px-2 py-1 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void renameUser(u.token, u.label)}
+                                  disabled={busy || !editName.trim()}
+                                  title="Save name"
+                                  className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={cancelRename}
+                                  disabled={busy}
+                                  title="Cancel"
+                                  className="rounded-md border border-input bg-card px-2 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => beginRename(u.token, u.label)}
+                                title="Click to rename"
+                                className="rounded px-1 -mx-1 text-left hover:bg-accent hover:underline decoration-dotted underline-offset-4"
+                              >
+                                {u.label}
+                              </button>
+                            )}
+                          </td>
                           <td className="px-3 py-2">
                             <button
                               type="button"
