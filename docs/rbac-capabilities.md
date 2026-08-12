@@ -2,10 +2,16 @@
 
 _Last updated: 2026-08-12_
 
-> **Status: design, not yet built.** This extends [`roles.md`](roles.md), which
-> documents the current monotonic ladder. Nothing here ships until we agree on the
-> capability set and the frontend gating lands (see **Sequencing**). The
-> "define/edit permissions from the UI" part (§7) is explicitly **not near-term**.
+> **Status: backend landed; frontend pending.** The capability layer (§2–§5) now
+> ships in `roles.py` + `api/main.py`: every endpoint gates on a capability via
+> `require_capability`, `/me` returns the caller's capability bundle, and the three
+> new roles are defined and tested. The existing five behave **exactly** as before
+> (mechanism swap, not policy change) — so nothing is visibly different yet. What's
+> left: the **frontend** renders tabs/columns/buttons off `/me`'s capabilities, adds
+> the new roles to the picker, and carries the atomic Admin→Advanced relabel (see
+> **Sequencing**). This extends [`roles.md`](roles.md) (the monotonic ladder, still
+> used for role *ordering*). §7 (define/edit permissions from the UI) stays **not
+> near-term**.
 
 ## 1. Why the ladder can't do what we now want
 
@@ -44,7 +50,7 @@ coarse — one per meaningful action, not per field.
 
 | Capability | Guards |
 |---|---|
-| `admin.view` | see the admin page at all (the shell + the "Admin" link) |
+| `advanced.view` | see the Advanced page at all (the shell + the nav link) |
 | `feedback.view` | Feedback tab |
 | `golds.view` | Golds tab (read) |
 | `golds.curate` | toggle *Incl.* on a gold |
@@ -52,12 +58,20 @@ coarse — one per meaningful action, not per field.
 | `golds.edit.any` | edit **any** gold |
 | `sources.view` | Sources tab (read) |
 | `sources.curate` | toggle a source's inclusion |
-| `sources.add` | upload a new source (see [`sources-upload.md`](sources-upload.md)) |
+| `sources.add` | upload a new source — **not yet in code** (lands with [`sources-upload.md`](sources-upload.md)) |
 | `index.rebuild` | the *Rebuild Index* button |
 | `users.manage` | Users tab: view rows, change roles, add/remove/rename invites |
 | `roles.manage` | change the RBAC config itself (assign roles; later, edit bundles) |
 
-Two deliberate coarseness calls, both revisitable:
+Everything above except `sources.add` is defined in `roles.py` and enforced today.
+
+Three deliberate coarseness / naming calls, all revisitable:
+
+- **Names outlive labels.** The capability is `advanced.view` even though the HTTP
+  route is still `/admin/*` and the page still reads "Admin" until the frontend relabel.
+  Capability strings are stable identifiers; naming this one `admin.*` would leave an
+  unmoored fossil once the page is renamed. Routes stay `/admin/*` (an internal
+  management-API namespace, never shown on the page).
 
 - **Users tab is one capability, not three.** The user floated "see the tab but not the
   TOKEN/ACTIONS columns or the role picker." That's real, but it multiplies the set
@@ -73,29 +87,43 @@ Assignment is unchanged: a token still maps to **one role name** (seed ⊕ `role
 overrides, live-editable). What changes is that a role now resolves to a **set of
 capabilities** instead of a rank.
 
-The existing five map straight over (no behaviour change):
+The existing five map straight over with **no behaviour change** — this is the shipped
+bundling:
 
 | Role | Capabilities |
 |---|---|
 | `suspended` | *(none)* |
 | `novice` | `ask`, `rate` |
-| `evaluator` | + `feedback.annotate`, `gold.author`, `golds.edit.own` |
-| `admin` | everything except `roles.manage` |
-| `superuser` | everything |
+| `evaluator` | + `feedback.annotate`, `gold.author` |
+| `admin` | + the full Advanced surface: `advanced.view`, `feedback.view`, `golds.view`, `golds.curate`, `golds.edit.any`, `sources.view`, `sources.curate`, `index.rebuild` |
+| `superuser` | + `users.manage`, `roles.manage` |
 
-The three new roles the user described (names are placeholders — pick your own "cattle"
-labels):
+Two subtleties the code makes explicit:
 
-| Role | = | Capabilities added |
+- **`admin` does *not* get `users.manage` / `roles.manage`.** Today the Users tab and
+  role changes are superuser-only (`/admin/invite-tokens` and `/admin/roles` are
+  superuser-gated), so the bundling preserves that. The design's earlier "admin =
+  everything except roles.manage" would additionally hand admin the Users tab — a real
+  **policy** change. It's now a one-line move (drop `users.manage` into the admin bundle)
+  **pending your call**; the mechanism swap deliberately didn't decide it.
+- **`admin`/`superuser` hold `golds.edit.any`, not `golds.edit.own`.** `edit.any` already
+  grants editing everything (§4), so the strictly-lesser "your own only" form is left for
+  the curator tier — no role carries both.
+
+The three new roles (names are placeholders — pick your own "cattle" labels). Every human
+role builds on the public tier, so each can still `ask`/`rate`:
+
+| Role | = | Capabilities |
 |---|---|---|
-| **`observer`** (#1) | read-only admin | `admin.view`, `golds.view` (+ `feedback.view` / `sources.view` if you want those tabs visible) |
+| **`observer`** (#1) | read-only Advanced | `ask`, `rate`, `advanced.view`, `feedback.view`, `golds.view`, `sources.view` |
 | **`curator-lite`** (#2) | observer + act on golds | + `golds.curate`, `index.rebuild` |
-| **`curator`** (#3) | curator-lite + author | + `gold.author`, `golds.edit.own` |
+| **`curator`** (#3) | curator-lite + author | + `feedback.annotate`, `gold.author`, `golds.edit.own` |
 
 Note what each role **can't** do, by construction: `observer` never sees the Users tab
 (no `users.manage`), never rebuilds, never toggles *Incl.*; `curator` edits its own
 answers but not others' (`golds.edit.own`, not `.any`). That's exactly the machinery
-the ladder couldn't express.
+the ladder couldn't express. These three are defined and tested but **not yet offered in
+the role picker** — the frontend slice turns them on.
 
 ## 4. The one resource-level check
 
@@ -112,20 +140,27 @@ can_edit_gold(user, gold) =
 This is the bit that makes it *real* RBAC rather than a static table — the enforcement
 point has to look at the resource, not just the role. Everything else stays a table.
 
+> **Not yet enforced server-side.** The backend slice gates `POST /gold` on
+> `gold.author` only; it does **not** yet check gold ownership, because there's a single
+> authoring endpoint and no live role that has `edit.own`-without-`edit.any` (curator
+> isn't assignable until the frontend slice). Wiring the ownership check onto `POST /gold`
+> lands **with** the curator role, so the "can't edit others'" promise is real the moment
+> the role is grantable — not before. Until then, `golds.edit.own`/`.any` shape the
+> Golds-tab edit affordance in the UI.
+
 ## 5. Enforcement — backend and frontend read the same source
 
-- **Backend.** Replace `require_role(min)` with `require_capability(cap)`. Add
-  `ROLE_CAPABILITIES: dict[str, frozenset[str]]` and
-  `has_capability(role, cap) -> bool` in `roles.py`. Each endpoint names the capability
-  it needs (`/admin/rebuild-index` → `index.rebuild`, etc.). The `.own` endpoints add
-  the ownership check from §4.
-- **`/me` returns the caller's capabilities.** Add `capabilities: list[str]` to the
-  `/me` payload. This is the contract the UI renders against — the frontend must never
-  hardcode "role X sees tab Y"; it asks "do I have `golds.curate`?" and shows the toggle
-  or not.
-- **Frontend.** `AdminApp` renders each tab, column, and button behind a capability
-  check. `App` shows the Admin link behind `admin.view`. No rank math anywhere — the
-  `ROLE_RANK` / `ROLE_LADDER_FALLBACK` constants retire.
+- **Backend.** ✅ **Done.** `require_capability(cap)` replaces `require_role(min)` at every
+  endpoint; `ROLE_CAPABILITIES: dict[str, frozenset[str]]` + `has_capability(role, cap)`
+  live in `roles.py`. Each endpoint names its capability (`/admin/rebuild-index` →
+  `index.rebuild`, etc.). The gold ownership check (§4) is deferred to the curator slice.
+- **`/me` returns the caller's capabilities.** ✅ **Done.** `capabilities: list[str]` is on
+  the `/me` payload (sorted). This is the contract the UI renders against — the frontend
+  must never hardcode "role X sees tab Y"; it asks "do I have `golds.curate`?" and shows
+  the toggle or not.
+- **Frontend.** ⏳ **Pending.** `AdminApp` renders each tab, column, and button behind a
+  capability check; `App` shows the (renamed) nav link behind `advanced.view`. No rank
+  math anywhere — the `ROLE_RANK` / `ROLE_LADDER_FALLBACK` constants retire.
 
 One rule keeps backend and frontend honest: **the UI hides what you can't do; the
 backend enforces it.** Hiding a button is UX, not security — the endpoint still checks

@@ -84,3 +84,77 @@ def test_suspended_blocked_everywhere(local_backend, monkeypatch):
     )
     with pytest.raises(HTTPException):
         roles.require_role("novice")()  # suspended fails the floor
+
+
+# ── Capabilities ────────────────────────────────────────────────────────────
+
+
+def test_capability_bundles_preserve_ladder_policy():
+    has = roles.has_capability
+    # suspended: nothing.
+    assert roles.capabilities_for("suspended") == frozenset()
+    # novice: public tier only.
+    assert has("novice", roles.CAP_ASK) and has("novice", roles.CAP_RATE)
+    assert not has("novice", roles.CAP_ADVANCED_VIEW)
+    # admin: full Advanced surface, but NOT user/role management (superuser-only).
+    assert has("admin", roles.CAP_GOLDS_CURATE)
+    assert has("admin", roles.CAP_INDEX_REBUILD)
+    assert has("admin", roles.CAP_GOLDS_EDIT_ANY)
+    assert not has("admin", roles.CAP_USERS_MANAGE)
+    assert not has("admin", roles.CAP_ROLES_MANAGE)
+    # superuser: everything meaningful. It carries golds.edit.any, so it does
+    # NOT also carry the strictly-lesser golds.edit.own (the "your own only"
+    # form) — that one is for restricted roles like curator.
+    assert has("superuser", roles.CAP_USERS_MANAGE)
+    assert has("superuser", roles.CAP_ROLES_MANAGE)
+    assert has("superuser", roles.CAP_GOLDS_EDIT_ANY)
+    assert not has("superuser", roles.CAP_GOLDS_EDIT_OWN)
+    assert roles.capabilities_for("superuser") == roles.CAPABILITIES - {roles.CAP_GOLDS_EDIT_OWN}
+
+
+def test_new_roles_capability_shape():
+    has = roles.has_capability
+    # observer: read the machinery, change nothing — and can still ask.
+    assert has("observer", roles.CAP_ASK)
+    assert has("observer", roles.CAP_ADVANCED_VIEW)
+    assert has("observer", roles.CAP_GOLDS_VIEW)
+    for cap in (roles.CAP_GOLDS_CURATE, roles.CAP_INDEX_REBUILD, roles.CAP_USERS_MANAGE):
+        assert not has("observer", cap)
+    # curator-lite: observer + toggle Incl. + rebuild.
+    assert has("curator-lite", roles.CAP_GOLDS_CURATE)
+    assert has("curator-lite", roles.CAP_INDEX_REBUILD)
+    assert not has("curator-lite", roles.CAP_GOLD_AUTHOR)
+    # curator: can author/edit OWN golds, never ANY (the own/any split).
+    assert has("curator", roles.CAP_GOLD_AUTHOR)
+    assert has("curator", roles.CAP_GOLDS_EDIT_OWN)
+    assert not has("curator", roles.CAP_GOLDS_EDIT_ANY)
+    assert not has("curator", roles.CAP_USERS_MANAGE)
+
+
+def test_unknown_role_has_no_capabilities():
+    assert roles.capabilities_for("wizard") == frozenset()
+    assert not roles.has_capability("wizard", roles.CAP_ASK)
+
+
+def test_require_capability_public_mode(monkeypatch):
+    monkeypatch.setattr(roles.settings, "demo_mode", False)
+    monkeypatch.setattr(roles, "get_current_guest", lambda: None)
+    # Public tier stays open (anonymous /ask, /feedback rating)...
+    roles.require_capability(roles.CAP_ASK)()
+    roles.require_capability(roles.CAP_RATE)()
+    # ...but anything on the Advanced surface fails closed with no auth.
+    for cap in (roles.CAP_ADVANCED_VIEW, roles.CAP_GOLDS_CURATE, roles.CAP_USERS_MANAGE):
+        with pytest.raises(HTTPException) as ei:
+            roles.require_capability(cap)()
+        assert ei.value.status_code == 403
+
+
+def test_require_capability_enforced_in_demo(local_backend, monkeypatch):
+    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_ob": "observer"})
+    monkeypatch.setattr(
+        roles, "get_current_guest", lambda: GuestIdentity(token="tok_ob", recipient="ob")
+    )
+    roles.require_capability(roles.CAP_GOLDS_VIEW)()   # observer may view
+    with pytest.raises(HTTPException) as ei:
+        roles.require_capability(roles.CAP_GOLDS_CURATE)()  # but not curate
+    assert ei.value.status_code == 403

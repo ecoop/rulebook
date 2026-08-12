@@ -1,6 +1,13 @@
 # User roles (RBAC)
 
-_Last updated: 2026-08-10_
+_Last updated: 2026-08-12_
+
+> **Superseded in part by capabilities.** Authorization has since moved from the
+> monotonic ladder below to **capability-based** gating — see
+> [`rbac-capabilities.md`](rbac-capabilities.md). Endpoints now gate on named
+> capabilities (`require_capability`), not rank (`require_role`); the ladder is
+> retained for role *ordering* and legacy paths. The "not in scope: per-endpoint
+> fine-grained permissions" line below is the thing that capabilities deliver.
 
 > **Status:** Backend implemented (`rulebook.roles`, `/me`, `/admin/roles*`,
 > `require_role` gating, seed via `RULEBOOK_INITIAL_ROLES`, live overrides in

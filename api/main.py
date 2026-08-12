@@ -60,13 +60,28 @@ from rulebook.interaction_log import (  # noqa: E402
 )
 from rulebook.pipeline import DEFAULT_SPORTS, ask  # noqa: E402
 from rulebook.roles import (  # noqa: E402
+    CAP_ASK,
+    CAP_FEEDBACK_ANNOTATE,
+    CAP_FEEDBACK_VIEW,
+    CAP_GOLD_AUTHOR,
+    CAP_GOLDS_CURATE,
+    CAP_GOLDS_VIEW,
+    CAP_INDEX_REBUILD,
+    CAP_RATE,
+    CAP_ROLES_MANAGE,
+    CAP_SOURCES_CURATE,
+    CAP_SOURCES_VIEW,
+    CAP_USERS_MANAGE,
     RESET_SENTINEL,
+    ROLE_CAPABILITIES,
     ROLE_LADDER,
     append_role_row,
+    capabilities_for,
+    has_capability,
     is_valid_role,
     overrides_from_rows,
     read_role_rows,
-    require_role,
+    require_capability,
     resolve_role,
 )
 from rulebook.store import list_sports  # noqa: E402
@@ -227,7 +242,11 @@ class MeResponse(BaseModel):
         default=None,
         description="Guest label; null outside demo_mode / when unauthenticated.",
     )
-    role: str = Field(..., description="Effective role: suspended|novice|evaluator|admin|superuser.")
+    role: str = Field(..., description="Effective role name (e.g. novice|evaluator|admin|superuser, or a capability-only role like observer).")
+    capabilities: list[str] = Field(
+        default_factory=list,
+        description="Sorted capability strings the effective role grants. The UI renders tabs/columns/buttons off these; the backend enforces them per-endpoint.",
+    )
     demo_mode: bool = Field(..., description="Whether the invite gate is active.")
 
 
@@ -438,7 +457,7 @@ def usage_endpoint() -> UsageResponse:
     response_model=AskResponse,
     dependencies=[
         Depends(app_state.enforce_ip_rate_limit),
-        Depends(require_role("novice")),
+        Depends(require_capability(CAP_ASK)),
     ],
 )
 def ask_endpoint(req: AskRequest) -> AskResponse:
@@ -494,7 +513,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
 @app.post(
     "/feedback",
     response_model=FeedbackResponse,
-    dependencies=[Depends(require_role("novice"))],
+    dependencies=[Depends(require_capability(CAP_RATE))],
 )
 def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     """Record a thumbs-up / thumbs-down on a prior answer.
@@ -505,15 +524,16 @@ def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     referential integrity to enforce.
 
     Partial permission (docs/roles.md): novices may submit a bare rating;
-    the richer surface (tags, free-text comment) requires evaluator+.
+    the richer surface (tags, free-text comment) requires the
+    `feedback.annotate` capability (evaluator+ and curator).
     """
     guest = get_current_guest()
     if (req.tags or req.comment) and settings.demo_mode:
         role = resolve_role(guest.token if guest else None)
-        if not is_valid_role(role) or ROLE_LADDER.index(role) < ROLE_LADDER.index("evaluator"):
+        if not has_capability(role, CAP_FEEDBACK_ANNOTATE):
             raise HTTPException(
                 status_code=403,
-                detail="tags/comment require role 'evaluator'; rating alone is allowed",
+                detail="tags/comment require the 'feedback.annotate' capability; rating alone is allowed",
             )
     log_feedback(
         req.qa_id,
@@ -528,7 +548,7 @@ def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
 @app.post(
     "/gold",
     response_model=GoldResponse,
-    dependencies=[Depends(require_role("evaluator"))],
+    dependencies=[Depends(require_capability(CAP_GOLD_AUTHOR))],
 )
 def gold_endpoint(req: GoldRequest) -> GoldResponse:
     """Record a user-authored canonical answer for a prior qa_id.
@@ -551,19 +571,22 @@ def gold_endpoint(req: GoldRequest) -> GoldResponse:
 @app.get(
     "/me",
     response_model=MeResponse,
-    dependencies=[Depends(require_role("novice"))],
+    dependencies=[Depends(require_capability(CAP_ASK))],
 )
 def me_endpoint() -> MeResponse:
-    """Current guest's identity + effective role — powers UI gating.
+    """Current guest's identity + effective role + capabilities — powers UI gating.
 
-    Gated at novice, so a `suspended` guest gets 403 here (the frontend
-    renders the suspended screen on that). Outside demo_mode there's no
-    guest: recipient is null and role is the novice default.
+    Gated on `ask` (which every non-suspended role has), so a `suspended`
+    guest gets 403 here — the frontend renders the suspended screen on that.
+    Outside demo_mode there's no guest: recipient is null and role is the
+    novice default.
     """
     guest = get_current_guest()
+    role = resolve_role(guest.token if guest else None)
     return MeResponse(
         recipient=(guest.recipient if guest else None),
-        role=resolve_role(guest.token if guest else None),
+        role=role,
+        capabilities=sorted(capabilities_for(role)),
         demo_mode=settings.demo_mode,
     )
 
@@ -580,7 +603,7 @@ def _require_gcs_for_roles() -> tuple[str, str]:
 @app.get(
     "/admin/roles",
     response_model=AdminRolesResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_ROLES_MANAGE))],
 )
 def admin_list_roles() -> AdminRolesResponse:
     """Merged role assignments (env seed ⊕ live roles.jsonl overrides)."""
@@ -603,14 +626,14 @@ def admin_list_roles() -> AdminRolesResponse:
 @app.post(
     "/admin/roles",
     response_model=RoleChangeResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_ROLES_MANAGE))],
 )
 def admin_set_role(req: RoleChangeRequest) -> RoleChangeResponse:
     """Append a role change to roles.jsonl. Takes effect within the TTL."""
     if not is_valid_role(req.role):
         raise HTTPException(
             status_code=422,
-            detail=f"invalid role '{req.role}'; one of {list(ROLE_LADDER)}",
+            detail=f"invalid role '{req.role}'; one of {sorted(ROLE_CAPABILITIES)}",
         )
     bucket, obj = _require_gcs_for_roles()
     guest = get_current_guest()
@@ -632,7 +655,7 @@ def admin_set_role(req: RoleChangeRequest) -> RoleChangeResponse:
 @app.post(
     "/admin/roles/{token}/reset",
     response_model=RoleChangeResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_ROLES_MANAGE))],
 )
 def admin_reset_role(token: str) -> RoleChangeResponse:
     """Clear a token's override; role falls back to the env seed (or novice)."""
@@ -665,7 +688,7 @@ def _require_gcs_for_invite_tokens() -> tuple[str, str]:
 @app.get(
     "/admin/invite-tokens",
     response_model=InviteTokensResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_USERS_MANAGE))],
 )
 def admin_list_invite_tokens() -> InviteTokensResponse:
     """Current GCS invite allowlist. Powers the Users tab's list."""
@@ -682,7 +705,7 @@ def admin_list_invite_tokens() -> InviteTokensResponse:
 @app.post(
     "/admin/invite-tokens",
     response_model=AddInviteTokenResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_USERS_MANAGE))],
 )
 def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse:
     """Create a user: mint (or accept) a token and add it to the allowlist.
@@ -703,7 +726,7 @@ def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse
 @app.delete(
     "/admin/invite-tokens/{token}",
     response_model=RemoveInviteTokenResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_USERS_MANAGE))],
 )
 def admin_remove_invite_token(token: str) -> RemoveInviteTokenResponse:
     """Remove a user from the allowlist (their cookie stops resolving).
@@ -723,7 +746,7 @@ def admin_remove_invite_token(token: str) -> RemoveInviteTokenResponse:
 @app.patch(
     "/admin/invite-tokens/{token}",
     response_model=InviteTokenOut,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_USERS_MANAGE))],
 )
 def admin_rename_invite_token(token: str, req: RenameInviteTokenRequest) -> InviteTokenOut:
     """Rename a user's label, keeping the same token.
@@ -742,7 +765,7 @@ def admin_rename_invite_token(token: str, req: RenameInviteTokenRequest) -> Invi
     return InviteTokenOut(token=token, label=req.label)
 
 
-@app.get("/admin/golds", response_model=AdminGoldListResponse, dependencies=[Depends(require_role("admin"))])
+@app.get("/admin/golds", response_model=AdminGoldListResponse, dependencies=[Depends(require_capability(CAP_GOLDS_VIEW))])
 def admin_list_golds() -> AdminGoldListResponse:
     """Merged view of gold.jsonl + gold_curation.jsonl.
 
@@ -763,14 +786,14 @@ def admin_list_golds() -> AdminGoldListResponse:
     return AdminGoldListResponse(golds=rows)
 
 
-@app.post("/admin/gold-curation", response_model=GoldCurationResponse, dependencies=[Depends(require_role("admin"))])
+@app.post("/admin/gold-curation", response_model=GoldCurationResponse, dependencies=[Depends(require_capability(CAP_GOLDS_CURATE))])
 def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
     """Toggle whether a gold is included in the next index rebuild."""
     log_gold_curation(req.qa_id, included=req.included)
     return GoldCurationResponse()
 
 
-@app.get("/admin/feedback", response_model=AdminFeedbackListResponse, dependencies=[Depends(require_role("admin"))])
+@app.get("/admin/feedback", response_model=AdminFeedbackListResponse, dependencies=[Depends(require_capability(CAP_FEEDBACK_VIEW))])
 def admin_list_feedback() -> AdminFeedbackListResponse:
     """List the latest feedback event per qa_id, sorted newest-first.
 
@@ -798,7 +821,7 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
     return AdminFeedbackListResponse(feedback=rows)
 
 
-@app.get("/admin/sources", response_model=AdminSourceListResponse, dependencies=[Depends(require_role("admin"))])
+@app.get("/admin/sources", response_model=AdminSourceListResponse, dependencies=[Depends(require_capability(CAP_SOURCES_VIEW))])
 def admin_list_sources() -> AdminSourceListResponse:
     """List every source file under rules/<sport>/ with its inclusion state.
 
@@ -831,14 +854,14 @@ def admin_list_sources() -> AdminSourceListResponse:
     return AdminSourceListResponse(sources=rows)
 
 
-@app.post("/admin/source-curation", response_model=SourceCurationResponse, dependencies=[Depends(require_role("admin"))])
+@app.post("/admin/source-curation", response_model=SourceCurationResponse, dependencies=[Depends(require_capability(CAP_SOURCES_CURATE))])
 def admin_set_source_curation(req: SourceCurationRequest) -> SourceCurationResponse:
     """Toggle whether a source file is included in the next index rebuild."""
     log_source_curation(req.path, included=req.included)
     return SourceCurationResponse()
 
 
-@app.post("/admin/rebuild-index", response_model=RebuildIndexResponse, dependencies=[Depends(require_role("admin"))])
+@app.post("/admin/rebuild-index", response_model=RebuildIndexResponse, dependencies=[Depends(require_capability(CAP_INDEX_REBUILD))])
 def admin_rebuild_index() -> RebuildIndexResponse:
     """Run scripts/build_index.py synchronously and return its outcome.
 

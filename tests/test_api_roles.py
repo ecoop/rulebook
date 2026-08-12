@@ -34,14 +34,32 @@ def _as(client: TestClient, token: str) -> None:
 
 
 def test_me_reports_seed_role(client):
+    import rulebook.roles as roles
+
     _as(client, "tok_super")
     body = client.get("/me").json()
-    assert body == {"recipient": "boss", "role": "superuser", "demo_mode": True}
+    assert body["recipient"] == "boss"
+    assert body["role"] == "superuser"
+    assert body["demo_mode"] is True
+    # /me carries the effective role's full capability bundle, sorted — this is
+    # the contract the frontend renders tabs/columns/buttons against.
+    assert body["capabilities"] == sorted(roles.ROLE_CAPABILITIES["superuser"])
+    assert "roles.manage" in body["capabilities"]
 
 
 def test_me_defaults_to_novice(client):
     _as(client, "tok_nov")
-    assert client.get("/me").json()["role"] == "novice"
+    body = client.get("/me").json()
+    assert body["role"] == "novice"
+    # A plain novice only gets the public tier — nothing on the Advanced surface.
+    assert body["capabilities"] == ["ask", "rate"]
+
+
+def test_admin_tabs_are_capability_gated(client):
+    # /admin/golds was admin-gated; a novice lacks golds.view → 403 (not a
+    # rank comparison anymore, but the same outcome).
+    _as(client, "tok_nov")
+    assert client.get("/admin/golds").status_code == 403
 
 
 def test_admin_roles_superuser_only(client):
