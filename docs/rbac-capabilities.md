@@ -1,222 +1,252 @@
-# RBAC, phase 2 — capabilities instead of a ladder
+# RBAC — capabilities and the eight rungs
 
 _Last updated: 2026-08-12_
 
-> **Status: backend landed; frontend pending.** The capability layer (§2–§5) now
-> ships in `roles.py` + `api/main.py`: every endpoint gates on a capability via
-> `require_capability`, `/me` returns the caller's capability bundle, and the three
-> new roles are defined and tested. The existing five behave **exactly** as before
-> (mechanism swap, not policy change) — so nothing is visibly different yet. What's
-> left: the **frontend** renders tabs/columns/buttons off `/me`'s capabilities, adds
-> the new roles to the picker, and carries the atomic Admin→Advanced relabel (see
-> **Sequencing**). This extends [`roles.md`](roles.md) (the monotonic ladder, still
-> used for role *ordering*). §7 (define/edit permissions from the UI) stays **not
-> near-term**.
+> **Status: this is the target design; the code is partway there.** The capability
+> *mechanism* has landed (`roles.py` + `api/main.py`: every endpoint gates on a
+> capability via `require_capability`, `/me` returns the caller's bundle) with a
+> first-cut set of roles. **This document supersedes that first cut** with the full
+> eight-rung model below. Aligning the code — the tag/comment split, `passages.view`,
+> self→all scoping, the clone model, the attribution wall, and audit — is the roadmap
+> in §9. Extends [`roles.md`](roles.md) (the original monotonic ladder; still used for
+> role *ordering* in the picker).
 
-## 1. Why the ladder can't do what we now want
+## 1. The ladder wasn't wrong — it was too coarse
 
-Today a role is a **rank**: `suspended < novice < evaluator < admin < superuser`, and
-every gate is one comparison — `require_role("admin")` means `rank(you) >= rank(admin)`.
-That makes access **monotonic**: anything an admin-rank endpoint allows, *every*
-admin automatically gets. There is no way to say "admin page, but not the Users tab,"
-because Users-tab access *is* admin-rank — granting the page grants the tab.
+The original five-tier ladder (`suspended < novice < evaluator < admin < superuser`)
+gated by **rank**: `require_role("admin")` meant `rank(you) >= rank(admin)`. That reads
+access off a single number, which can't express per-feature asks like "see the Advanced
+page but not the Users tab" or "edit your own gold but not others'."
 
-The new asks break monotonicity:
+Working the real requirements through, though, a surprising thing fell out: the desired
+roles form a **monotonic chain** — each is the previous plus more:
 
-- see the admin page **but not** the Users tab
-- view the Golds tab **but not** toggle *Incl.* or edit answers
-- edit **your own** gold answers but **not** other people's
+> #1 ⊂ #2 ⊂ #3 ⊂ #4 ⊂ #5 ⊂ #6 ⊂ #7 ⊂ #8
 
-None of these are expressible as "further up / further down one line." They're
-**per-feature**, so roles have to become **bundles of named capabilities** rather than
-points on a ladder. (This is the "pet → cattle" shift: a role is *defined by what it can
-do*, not hand-placed in a hierarchy.)
+So this *is* a ladder — just a finer, eight-rung one instead of a blunt five-rung one.
+Monotonic is a feature: it's easy to reason about, and "higher rung ⇒ strictly more."
 
-## 2. The capability set (small, closed, code-defined)
+**Capabilities remain the mechanism even for a monotonic model**, for three reasons:
+they express a nesting ladder trivially (each bundle ⊇ the last); they let orthogonal
+axes like **self vs. all** and **attribution** ride alongside the rungs without
+inventing a rank for every combination; and they keep the escape hatch open for the one
+non-monotonic move we considered and rejected (a Users-only admin) without a rewrite.
+So: the rungs are the policy, capabilities are the mechanism.
 
-A capability is a stable string that guards exactly one thing. Keep the set small and
-coarse — one per meaningful action, not per field.
+## 2. Vocabulary — source, chunk, passage
 
-**Main app**
+Three words, each meaning exactly one thing, used consistently everywhere (UI labels,
+capability names, code):
+
+| Term | Meaning | Where it shows |
+|---|---|---|
+| **source** | an ingested document (e.g. "Goaltimate Official Rules") | the Advanced **Sources** tab manages these |
+| **chunk** | the build-time unit a source is split into during ingestion | backstage — never shown to end users |
+| **passage** | a *retrieved chunk*: an excerpt pulled from a source to answer a query | the main-page **Retrieved passages** panel |
+
+This is standard RAG parlance (cf. Dense Passage Retrieval), not local coinage. It
+retires an earlier ambiguity: "sources" now means the documents *only*, so the Advanced
+tab keeps the name **Sources** (`sources.*`) and the answer-evidence panel is **Retrieved
+passages** (`passages.view`) — no collision, no rename.
+
+## 3. The capability set
+
+A capability is a stable string guarding exactly one action. Names outlive UI labels: the
+Advanced page is guarded by `advanced.view` even while the HTTP route is still `/admin/*`
+and the page still reads "Admin" until the relabel — naming it `admin.*` would fossilize.
+Routes stay `/admin/*` (an internal management-API namespace, never shown on the page).
+
+**Main page**
 
 | Capability | Guards |
 |---|---|
 | `ask` | POST `/ask` |
-| `rate` | POST `/feedback` (star rating) |
-| `feedback.annotate` | tags + notes on feedback |
-| `gold.author` | write a gold answer for your own Q&A |
+| `rate` | a numeric 1–5 rating on an answer |
+| `feedback.tag` | attach issue tags to a rating |
+| `feedback.comment` | attach a free-text comment (≤ 400 chars) |
+| `gold.author` | suggest a gold answer for your own Q&A |
+| `passages.view` | see the Retrieved passages panel under an answer |
 
-**Admin surface**
+**Advanced surface**
 
 | Capability | Guards |
 |---|---|
-| `advanced.view` | see the Advanced page at all (the shell + the nav link) |
-| `feedback.view` | Feedback tab |
-| `golds.view` | Golds tab (read) |
-| `golds.curate` | toggle *Incl.* on a gold |
-| `golds.edit.own` | edit a gold **you authored** |
-| `golds.edit.any` | edit **any** gold |
-| `sources.view` | Sources tab (read) |
+| `advanced.view` | see the Advanced page shell + the nav button |
+| `feedback.view` | Feedback tab — **your own** rows |
+| `feedback.view.all` | Feedback tab shows **everyone's** rows |
+| `golds.view` | Golds tab — **your own** rows |
+| `golds.view.all` | Golds tab shows **everyone's** rows |
+| `golds.edit.own` | Edit a gold you authored |
+| `golds.clone` | Clone another's gold into your own, then edit as your own |
+| `golds.curate` | toggle a gold's *Incl.* |
+| `sources.view` | Sources tab (the corpus of documents) |
 | `sources.curate` | toggle a source's inclusion |
-| `sources.add` | upload a new source — **not yet in code** (lands with [`sources-upload.md`](sources-upload.md)) |
-| `index.rebuild` | the *Rebuild Index* button |
-| `users.manage` | Users tab: view rows, change roles, add/remove/rename invites |
-| `roles.manage` | change the RBAC config itself (assign roles; later, edit bundles) |
+| `sources.add` | upload a new source — **future** (see [`sources-upload.md`](sources-upload.md)) |
+| `index.rebuild` | the *Rebuild index* button |
+| `attribution.view` | see the author identity on feedback / gold rows |
+| `users.view` | Users tab — see rows |
+| `users.change_role` | change a user's role |
+| `users.remove` | hard-delete an invite |
+| `users.rename` | rename a user's label |
+| `roles.manage` | edit the RBAC config itself (the future data-driven editor, §8) |
 
-Everything above except `sources.add` is defined in `roles.py` and enforced today.
+Note there is no `golds.edit.any`: nobody edits another person's gold **in place** —
+you **clone** it (§5). Feedback is **never editable** at any rung; it's read-only data.
 
-Three deliberate coarseness / naming calls, all revisitable:
+## 4. The eight rungs
 
-- **Names outlive labels.** The capability is `advanced.view` even though the HTTP
-  route is still `/admin/*` and the page still reads "Admin" until the frontend relabel.
-  Capability strings are stable identifiers; naming this one `admin.*` would leave an
-  unmoored fossil once the page is renamed. Routes stay `/admin/*` (an internal
-  management-API namespace, never shown on the page).
+Descriptions, not final names — the four brand-new rungs (#2, #4, #5, #6) still need
+machine names (novice/evaluator/admin/superuser already exist and map as shown). Every
+higher rung includes everything below it; the table lists only **what each rung adds**.
 
-- **Users tab is one capability, not three.** The user floated "see the tab but not the
-  TOKEN/ACTIONS columns or the role picker." That's real, but it multiplies the set
-  fast. Ship `users.manage` as all-or-nothing first; split into
-  `users.view` / `users.edit_roles` / `users.manage_invites` only when someone actually
-  needs the middle ground.
-- **`golds.edit.own` vs `golds.edit.any`** is the one place a capability isn't a pure
-  role lookup — see §4.
-
-## 3. Roles = capability bundles
-
-Assignment is unchanged: a token still maps to **one role name** (seed ⊕ `roles.jsonl`
-overrides, live-editable). What changes is that a role now resolves to a **set of
-capabilities** instead of a rank.
-
-The existing five map straight over with **no behaviour change** — this is the shipped
-bundling:
-
-| Role | Capabilities |
-|---|---|
-| `suspended` | *(none)* |
-| `novice` | `ask`, `rate` |
-| `evaluator` | + `feedback.annotate`, `gold.author` |
-| `admin` | + the full Advanced surface: `advanced.view`, `feedback.view`, `golds.view`, `golds.curate`, `golds.edit.any`, `sources.view`, `sources.curate`, `index.rebuild` |
-| `superuser` | + `users.manage`, `roles.manage` |
-
-Two subtleties the code makes explicit:
-
-- **`admin` does *not* get `users.manage` / `roles.manage`.** Today the Users tab and
-  role changes are superuser-only (`/admin/invite-tokens` and `/admin/roles` are
-  superuser-gated), so the bundling preserves that. The design's earlier "admin =
-  everything except roles.manage" would additionally hand admin the Users tab — a real
-  **policy** change. It's now a one-line move (drop `users.manage` into the admin bundle)
-  **pending your call**; the mechanism swap deliberately didn't decide it.
-- **`admin`/`superuser` hold `golds.edit.any`, not `golds.edit.own`.** `edit.any` already
-  grants editing everything (§4), so the strictly-lesser "your own only" form is left for
-  the curator tier — no role carries both.
-
-The three new roles (names are placeholders — pick your own "cattle" labels). Every human
-role builds on the public tier, so each can still `ask`/`rate`:
-
-| Role | = | Capabilities |
+| # | Description | Adds |
 |---|---|---|
-| **`observer`** (#1) | read-only Advanced | `ask`, `rate`, `advanced.view`, `feedback.view`, `golds.view`, `sources.view` |
-| **`curator-lite`** (#2) | observer + act on golds | + `golds.curate`, `index.rebuild` |
-| **`curator`** (#3) | curator-lite + author | + `feedback.annotate`, `gold.author`, `golds.edit.own` |
+| **1** | casual player *(= `novice`)* | `ask`, `rate`, `feedback.tag` |
+| **2** | + explain a rating | `feedback.comment` |
+| **3** | + suggest answers *(= `evaluator`)* | `gold.author` |
+| **4** | peek behind the curtain — self, read-mostly | `advanced.view`, `passages.view`, `feedback.view`, `golds.view`, `golds.edit.own`, `sources.view` |
+| **5** | read all, write own | `feedback.view.all`, `golds.view.all` |
+| **6** | operator | `golds.curate`, `golds.clone`, `sources.curate`, `index.rebuild`, `attribution.view` *(+ audit — §5)* |
+| **7** | admin *(= `admin`)* | `users.view`, `users.change_role` |
+| **8** | superuser *(= `superuser`)* | `users.remove`, `users.rename`, `roles.manage` |
 
-Note what each role **can't** do, by construction: `observer` never sees the Users tab
-(no `users.manage`), never rebuilds, never toggles *Incl.*; `curator` edits its own
-answers but not others' (`golds.edit.own`, not `.any`). That's exactly the machinery
-the ladder couldn't express. These three are defined and tested but **not yet offered in
-the role picker** — the frontend slice turns them on.
+Reference matrix (✓ = has it; columns are cumulative left→right):
 
-## 4. The one resource-level check
+| Capability | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `ask`, `rate`, `feedback.tag` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `feedback.comment` | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `gold.author` | | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `advanced.view` · `passages.view` | | | | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `feedback.view` · `golds.view` (own) | | | | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `golds.edit.own` · `sources.view` | | | | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `feedback.view.all` · `golds.view.all` | | | | | ✓ | ✓ | ✓ | ✓ |
+| `golds.curate` · `golds.clone` | | | | | | ✓ | ✓ | ✓ |
+| `sources.curate` · `index.rebuild` | | | | | | ✓ | ✓ | ✓ |
+| `attribution.view` | | | | | | ✓ | ✓ | ✓ |
+| `users.view` · `users.change_role` | | | | | | | ✓ | ✓ |
+| `users.remove` · `users.rename` · `roles.manage` | | | | | | | | ✓ |
 
-Every capability except `golds.edit.own` is a pure `role → capability` lookup. `own`
-needs one extra step: the gold row carries an `author`, and the edit is allowed only
-when `author == current_guest`. So the check is:
+What each boundary means, in one line:
+- **#3→#4** is the Advanced button appearing — the first "behind the curtain" rung.
+- **#4→#5** is scope: self → all (read). #4 sees only its own feedback/golds; #5 sees
+  everyone's. Tab counts read "your X" at #4, the global total at #5.
+- **#5→#6** is two things at once: **write on others' assets** (curate, clone, rebuild)
+  *and* the **attribution wall** (§5). This is the boundary to be most deliberate about.
+- **#6→#7** is people: the Users tab and role changes.
+- **#7→#8** is the irreversible/identity actions: remove, rename, and editing the RBAC
+  config itself.
 
-```
-can_edit_gold(user, gold) =
-    has_capability(user.role, "golds.edit.any")
-    or (has_capability(user.role, "golds.edit.own") and gold.author == user.id)
-```
+## 5. Cross-cutting behaviors
 
-This is the bit that makes it *real* RBAC rather than a static table — the enforcement
-point has to look at the resource, not just the role. Everything else stays a table.
+Four things aren't single-endpoint gates; they're patterns the rungs above lean on.
 
-> **Not yet enforced server-side.** The backend slice gates `POST /gold` on
-> `gold.author` only; it does **not** yet check gold ownership, because there's a single
-> authoring endpoint and no live role that has `edit.own`-without-`edit.any` (curator
-> isn't assignable until the frontend slice). Wiring the ownership check onto `POST /gold`
-> lands **with** the curator role, so the "can't edit others'" promise is real the moment
-> the role is grantable — not before. Until then, `golds.edit.own`/`.any` shape the
-> Golds-tab edit affordance in the UI.
+**Self vs. all (the `.all` capabilities).** The Advanced list endpoints
+(`/admin/{golds,feedback,sources}`) take an **owner filter**. Without `*.view.all`, they
+return only rows authored by the caller and the tab count reflects that subset ("your
+X"). With `*.view.all`, they return everyone's and count the global total. One filter,
+two capabilities — no separate "own" vs "all" endpoints.
 
-## 5. Enforcement — backend and frontend read the same source
+**Clone, not edit-any (golds become owned entities).** No rung edits another person's
+gold in place. Own golds show **Edit** (`golds.edit.own`); at #6+ others' golds show
+**Clone** (`golds.clone`) — the clone is a new gold owned by the cloner, which they then
+Edit as their own. Provenance is never mutated. This requires a **schema change**: today
+a gold is keyed by question (one active gold per `qa_id`, latest wins); to support clones
+a gold must be an **owned entity** (its own id + author + the `qa_id` it answers). A nice
+side effect — several candidate golds can coexist for one question and curation (`Incl.`)
+picks which feed the index.
 
-- **Backend.** ✅ **Done.** `require_capability(cap)` replaces `require_role(min)` at every
-  endpoint; `ROLE_CAPABILITIES: dict[str, frozenset[str]]` + `has_capability(role, cap)`
-  live in `roles.py`. Each endpoint names its capability (`/admin/rebuild-index` →
-  `index.rebuild`, etc.). The gold ownership check (§4) is deferred to the curator slice.
-- **`/me` returns the caller's capabilities.** ✅ **Done.** `capabilities: list[str]` is on
-  the `/me` payload (sorted). This is the contract the UI renders against — the frontend
-  must never hardcode "role X sees tab Y"; it asks "do I have `golds.curate`?" and shows
-  the toggle or not.
-- **Frontend.** ⏳ **Pending.** `AdminApp` renders each tab, column, and button behind a
-  capability check; `App` shows the (renamed) nav link behind `advanced.view`. No rank
-  math anywhere — the `ROLE_RANK` / `ROLE_LADDER_FALLBACK` constants retire.
+**The attribution wall (#5 → #6).** Below the wall, #5 can read *everyone's* gold and
+feedback **content** but the rows are **anonymous** — no author shown (`attribution.view`
+is absent). At #6+ each row shows **who wrote it**. Knowing which player gave which
+rating or wrote which answer is a privacy step-up, reserved for trusted operators.
 
-One rule keeps backend and frontend honest: **the UI hides what you can't do; the
-backend enforces it.** Hiding a button is UX, not security — the endpoint still checks
-the capability, so a hand-crafted request is rejected the same way.
+**Audit is action-scoped, not rung-scoped.** Every **content write already** carries
+`author` + `timestamp` in the append-only jsonl (`qa_log`, `feedback`, `gold`), so #1–#5
+activity is on the record as a byproduct. The genuine gap is **shared-state mutations**
+(`golds.curate`, `golds.clone`, `sources.curate`, `index.rebuild`, `users.*`), which
+vanish today. The rule: *every state-changing endpoint appends one audit row* (actor,
+action, target, timestamp, before→after) to a dedicated `audit.jsonl`. Level-independent,
+cheap (append-only), and it dissolves "where does audit start?" — it starts at the first
+action that touches something other than your own, which is exactly rung #6.
 
-## 6. Where it's hardcoded vs. data-driven (first cut)
+## 6. Enforcement — one source of truth
 
-Start with `ROLE_CAPABILITIES` as a **literal in `roles.py`**. Adding or changing a role
-is a code edit + deploy — fine at this scale, and it keeps the capability set and its
-one-line meanings reviewable in the diff. Structure it so the *values* (the bundles) can
-later move to a GCS-backed config exactly like `roles.jsonl`, without touching the
-enforcement points. That migration is §7.
+- **Backend.** `require_capability(cap)` gates every endpoint; `ROLE_CAPABILITIES:
+  dict[str, frozenset[str]]` + `has_capability(role, cap)` live in `roles.py`. Unknown
+  roles resolve to an empty bundle — fail closed. When `demo_mode` is off the deploy is
+  anonymous and only the public tier (`ask`, `rate`) is allowed.
+- **`/me` returns the caller's `capabilities`** (sorted). This is the contract the UI
+  renders against — the frontend never hardcodes "role X sees tab Y"; it asks "do I have
+  `golds.curate`?" and shows the control or not.
+- **The rule that keeps them honest:** the UI *hides* what you can't do; the backend
+  *enforces* it. Hiding a button is UX, not security — the endpoint still checks the
+  capability, so a hand-crafted request is rejected the same way. The `.own`/clone
+  resource checks (§5) live at the endpoint, not just the button.
 
-## 7. Later (NOT near-term): define & edit permissions from the UI
+## 7. UI and build notes (frontend / pipeline slices)
 
-The end-state the user wants is managing the RBAC config as **data**: create a new role,
-re-bundle capabilities, maybe define a new capability — all live, no deploy. Sketch, so
-the phase-1 code doesn't paint us out of it:
+Design decisions captured here so they aren't lost; they land in the frontend and
+build-side slices, not the RBAC backend.
 
-- **Role bundles become data.** Move `ROLE_CAPABILITIES` into a GCS object
-  (`role_defs.json`, same read-with-TTL pattern as roles/invites). A superuser
-  (`roles.manage`) edits bundles in a new admin surface; assignment
-  (`token → role`) is unchanged.
-- **A capability registry.** The list in §2 becomes a declared registry (string +
-  human description + which surface it guards) so the editor can render checkboxes with
-  labels instead of raw strings.
+- **Retrieved passages panel.** One row per passage; a **scannable metadata line**
+  (`sport · document · § section · page`, with the match `d` right-aligned) and the
+  passage text **collapsed** behind a disclosure. Header carries a one-line gloss:
+  *"d = distance from your question — lower is a closer match."* Golds retrieved as
+  passages get a `gold` badge and (per `golds.view` scope) a reference/link to the gold.
+  Caption: *"The N excerpts the model used to write the answer above."*
+- **The document must be shown.** Each passage already carries a `source`; surface it, so
+  a citation reads `goaltimate · Goaltimate Official Rules · § XIII.D.4 · p.21` and a
+  supplement is never an orphaned "p.21 of what?". Map raw filenames to a friendly
+  **title** once (a per-source display name).
+- **Advanced button.** Rename "Admin" → **"Advanced"**; move it into the header **top-
+  right as a bordered button** (currently it's a bland link buried under the expanded
+  passages panel).
+- **Whitespace at the source.** PDF-extracted passages render as one-word-per-line garbage
+  because the extraction emitted stray newlines. Normalize on display *and* clean at
+  **extraction / chunk-build** time so the index itself is clean.
+
+## 8. Later (NOT near-term): define & edit permissions from the UI
+
+The end-state is managing the RBAC config as **data** — create a role, re-bundle
+capabilities — live, no deploy. So phase-1 code shouldn't paint us out of it:
+
+- **Role bundles become data.** Move `ROLE_CAPABILITIES` into a GCS object (same
+  read-with-TTL pattern as roles/invites); a `roles.manage` superuser edits bundles in a
+  new surface. Assignment (`token → role`) is unchanged.
+- **A capability registry** (string + description + which surface it guards) so the editor
+  renders labeled checkboxes, not raw strings.
 - **The hard limit, stated plainly.** You can data-drive *which capabilities a role
   bundles*, but a capability only *does* something because **code checks it** at an
-  enforcement point. "Define a brand-new permission from the UI" can register the string
-  and bundle it, but it's inert until an endpoint/UI element guards on it. So the UI can
-  safely **create roles and re-bundle existing capabilities**; **inventing new
-  enforcement** stays a code change. Design the editor to make that boundary obvious
-  (existing capabilities are pickable; new ones are "declared but unguarded" until
-  wired).
-- **Guardrails.** Can't delete a capability an endpoint still references; can't leave a
-  token pointing at a deleted role (fall back to `DEFAULT_ROLE`); superuser can't strip
-  their own `roles.manage` and lock everyone out.
+  enforcement point. So the UI can **create roles and re-bundle existing capabilities**;
+  **inventing new enforcement** stays a code change. The editor should make that boundary
+  obvious (existing capabilities pickable; new ones "declared but unguarded" until wired).
+- **Guardrails.** Can't delete a capability an endpoint references; a token pointing at a
+  deleted role falls back to `DEFAULT_ROLE`; a superuser can't strip their own
+  `roles.manage` and lock everyone out.
 
-## 8. Sequencing (and the AdminApp.tsx collision)
+## 9. Sequencing
 
-The frontend slice edits `web/src/AdminApp.tsx` — the same file the sortable-columns
-session and the label-rename frontend touch. **The UI work waits until those PRs land**
-to avoid a three-way conflict. Suggested order:
+The mechanism has landed; the rest is slices. The frontend ones edit
+`web/src/AdminApp.tsx`, so they follow the sorting + rename work already on `main`.
 
-1. **Backend caps** — `ROLE_CAPABILITIES` + `has_capability` + `require_capability`;
-   port every endpoint; ownership check for `.own`. Ladder roles behave identically, so
-   this ships behind the existing UI with no visible change.
-2. **`/me` carries `capabilities`.**
-3. *(after sorting + rename land)* **Frontend gating** — tabs/columns/buttons by
-   capability; retire `ROLE_RANK` / `ROLE_LADDER_FALLBACK`; add the three new roles to
-   the role picker.
-4. **Ownership UX** — show the edit control on golds only where §4 allows.
-5. *(later)* **data-driven bundles**, then **the permissions editor** (§7).
+1. ✅ **Capability mechanism** — `require_capability`, `ROLE_CAPABILITIES`,
+   `has_capability`, `/me` carries `capabilities`. (First-cut roles; realign to §4.)
+2. **Realign bundles to the eight rungs** — the tag/comment split, `passages.view`,
+   `.all` capabilities, clone/attribution capabilities in `ROLE_CAPABILITIES`; name the
+   four new rungs.
+3. **Self→all filtering** — owner filter + per-user counts on the Advanced list endpoints.
+4. **Golds as owned entities + clone** — the schema change (§5) and the `POST /gold`
+   ownership check; Edit vs Clone in the Golds tab.
+5. **Audit log** — `audit.jsonl` + a write on every shared-state mutation.
+6. **Frontend gating** — tabs/columns/buttons by capability; retire `ROLE_RANK` /
+   `ROLE_LADDER_FALLBACK`; the atomic **Admin→Advanced** relabel; the passages-panel
+   redesign; the new rungs in the picker.
+7. *(later)* **data-driven bundles**, then **the permissions editor** (§8).
 
-## 9. Non-goals (first cut)
+## 10. Non-goals (for now)
 
-- Per-field ACLs beyond the one `own`/`any` split.
-- Inventing new enforcement points from the UI (§7).
-- Splitting `users.manage` into column-level pieces — deferred until needed.
+- Per-field ACLs beyond the self/all and own/clone splits.
+- Editable feedback (feedback is read-only data at every rung).
+- Group/team scoping (the Linux self→group→all middle tier); we go self → all only.
+- Inventing new enforcement points from the UI (§8).
