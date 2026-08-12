@@ -2,6 +2,11 @@
 
 _Last updated: 2026-08-11_
 
+> **Executed 2026-08-11.** Phases 1–6 done and verified — `rulebook.cooper.nu` now serves
+> from `rulebook-prod` (401 gate, Coop=superuser). **Only Phase 8 (decommission) is
+> pending** — the old bits in `pitchcraft-demo` are left as rollback insurance. This
+> doc doubles as the template for the same jobscout / pitchcraft moves.
+
 rulebook was launched inside the shared **`pitchcraft-demo`** project by mistake.
 This runbook relocates it to a dedicated **`rulebook-prod`** project (one project
 per service). It's a **migration of a live, gated demo** — data already exists in
@@ -58,12 +63,14 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
   --project=rulebook-prod
 ```
 
-## Phase 2 — re-verify domain ownership in the new project  `[Eric]`
-The `pitchcraft-demo` verification does not carry over. Verify `cooper.nu` for
-`rulebook-prod` via [Search Console](https://search.google.com/search-console) (add
-the account as an owner / add a DNS-TXT record in Plesk). Required before the domain
-mapping (Phase 6) can issue a cert. The `rulebook → ghs.googlehosted.com` CNAME
-already exists in Plesk and **stays** — only the mapping's project changes.
+## Phase 2 — domain ownership in the new project  `[Eric]`
+In practice (rulebook-prod, 2026-08-11) verification **carried over** — Search Console
+domain verification is per-**account**, and `cooper.nu` was already verified for
+`eric@cooper.nu` from the pitchcraft mapping, so the Phase 6 `create` issued the cert
+with **no TXT challenge**. Only if `domain-mappings create` returns a TXT challenge do
+you add that record in Plesk (or [Search Console](https://search.google.com/search-console))
+and retry. The `rulebook → ghs.googlehosted.com` CNAME already exists in Plesk and
+**stays** — only the mapping's project changes.
 
 ## Phase 3 — runtime SA, bucket, copy state  `[Eric]`
 ```bash
@@ -95,7 +102,16 @@ done
 ```
 
 ## Phase 5 — deploy the service to the new project  `[Eric]`
-Run from the rulebook repo root on `main`:
+First, a fresh project's **compute** SA (used as the Cloud Build SA for `--source`
+deploys) lacks build permissions — grant it once, or the first deploy fails with
+`storage.objects.get denied on ...run-sources...`:
+```bash
+NUM=$(gcloud projects describe rulebook-prod --format='value(projectNumber)')
+gcloud projects add-iam-policy-binding rulebook-prod \
+  --member="serviceAccount:${NUM}-compute@developer.gserviceaccount.com" \
+  --role=roles/cloudbuild.builds.builder
+```
+Then deploy from the rulebook repo root on `main`:
 ```bash
 gcloud run deploy rulebook --project=rulebook-prod --region=us-central1 --source . \
   --allow-unauthenticated --max-instances=1 \
