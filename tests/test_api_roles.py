@@ -20,9 +20,13 @@ def client(monkeypatch):
     monkeypatch.setattr(settings, "state_backend_kind", "local")
     monkeypatch.setattr(settings, "gcs_state_bucket", None)
     monkeypatch.setattr(
-        settings, "invite_tokens_seed", {"tok_super": "boss", "tok_nov": "newbie"}
+        settings,
+        "invite_tokens_seed",
+        {"tok_super": "boss", "tok_admin": "chief", "tok_nov": "newbie"},
     )
-    monkeypatch.setattr(settings, "initial_roles", {"tok_super": "superuser"})
+    monkeypatch.setattr(
+        settings, "initial_roles", {"tok_super": "superuser", "tok_admin": "admin"}
+    )
 
     import api.main as main
 
@@ -51,8 +55,20 @@ def test_me_defaults_to_novice(client):
     _as(client, "tok_nov")
     body = client.get("/me").json()
     assert body["role"] == "novice"
-    # A plain novice only gets the public tier — nothing on the Advanced surface.
-    assert body["capabilities"] == ["ask", "rate"]
+    # The casual tier (#1): ask, rate, and issue tags — nothing behind the curtain.
+    assert body["capabilities"] == ["ask", "feedback.tag", "rate"]
+
+
+def test_users_split_admin_vs_superuser(client):
+    # #7 admin manages users (view + change role) — authorized, so these fail
+    # only for lack of the gcs backend (400), not authorization (403)...
+    _as(client, "tok_admin")
+    assert client.get("/admin/invite-tokens").status_code == 400
+    assert client.post("/admin/roles", json={"token": "tok_nov", "role": "commenter"}).status_code == 400
+    # ...but the roster mutations (add / remove / rename) are superuser-only → 403.
+    assert client.post("/admin/invite-tokens", json={"label": "x"}).status_code == 403
+    assert client.delete("/admin/invite-tokens/tok_x").status_code == 403
+    assert client.patch("/admin/invite-tokens/tok_nov", json={"label": "y"}).status_code == 403
 
 
 def test_admin_tabs_are_capability_gated(client):

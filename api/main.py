@@ -61,17 +61,21 @@ from rulebook.interaction_log import (  # noqa: E402
 from rulebook.pipeline import DEFAULT_SPORTS, ask  # noqa: E402
 from rulebook.roles import (  # noqa: E402
     CAP_ASK,
-    CAP_FEEDBACK_ANNOTATE,
+    CAP_FEEDBACK_COMMENT,
+    CAP_FEEDBACK_TAG,
     CAP_FEEDBACK_VIEW,
     CAP_GOLD_AUTHOR,
     CAP_GOLDS_CURATE,
     CAP_GOLDS_VIEW,
     CAP_INDEX_REBUILD,
     CAP_RATE,
-    CAP_ROLES_MANAGE,
     CAP_SOURCES_CURATE,
     CAP_SOURCES_VIEW,
-    CAP_USERS_MANAGE,
+    CAP_USERS_ADD,
+    CAP_USERS_CHANGE_ROLE,
+    CAP_USERS_REMOVE,
+    CAP_USERS_RENAME,
+    CAP_USERS_VIEW,
     RESET_SENTINEL,
     ROLE_CAPABILITIES,
     ROLE_LADDER,
@@ -155,8 +159,8 @@ class FeedbackRequest(BaseModel):
     )
     comment: str | None = Field(
         default=None,
-        max_length=4000,
-        description="Optional note — what worked, what didn't, worth capturing for later review.",
+        max_length=400,
+        description="Optional note — what worked, what didn't. Capped short (400) to keep feedback terse; see rbac-capabilities.md.",
     )
 
 
@@ -523,17 +527,23 @@ def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     log is a data source to be joined and filtered, not a database with
     referential integrity to enforce.
 
-    Partial permission (docs/roles.md): novices may submit a bare rating;
-    the richer surface (tags, free-text comment) requires the
-    `feedback.annotate` capability (evaluator+ and curator).
+    Partial permission (docs/rbac-capabilities.md §4): a bare rating is the
+    casual tier (#1); issue *tags* need `feedback.tag` (also #1), a free-text
+    *comment* needs `feedback.comment` (#2+). Enforced per-field so a lower rung
+    can still tag without commenting.
     """
     guest = get_current_guest()
     if (req.tags or req.comment) and settings.demo_mode:
         role = resolve_role(guest.token if guest else None)
-        if not has_capability(role, CAP_FEEDBACK_ANNOTATE):
+        if req.tags and not has_capability(role, CAP_FEEDBACK_TAG):
             raise HTTPException(
                 status_code=403,
-                detail="tags/comment require the 'feedback.annotate' capability; rating alone is allowed",
+                detail="tags require the 'feedback.tag' capability; a bare rating is allowed",
+            )
+        if req.comment and not has_capability(role, CAP_FEEDBACK_COMMENT):
+            raise HTTPException(
+                status_code=403,
+                detail="a comment requires the 'feedback.comment' capability; a rating (with tags) is allowed",
             )
     log_feedback(
         req.qa_id,
@@ -603,7 +613,7 @@ def _require_gcs_for_roles() -> tuple[str, str]:
 @app.get(
     "/admin/roles",
     response_model=AdminRolesResponse,
-    dependencies=[Depends(require_capability(CAP_ROLES_MANAGE))],
+    dependencies=[Depends(require_capability(CAP_USERS_VIEW))],
 )
 def admin_list_roles() -> AdminRolesResponse:
     """Merged role assignments (env seed ⊕ live roles.jsonl overrides)."""
@@ -626,7 +636,7 @@ def admin_list_roles() -> AdminRolesResponse:
 @app.post(
     "/admin/roles",
     response_model=RoleChangeResponse,
-    dependencies=[Depends(require_capability(CAP_ROLES_MANAGE))],
+    dependencies=[Depends(require_capability(CAP_USERS_CHANGE_ROLE))],
 )
 def admin_set_role(req: RoleChangeRequest) -> RoleChangeResponse:
     """Append a role change to roles.jsonl. Takes effect within the TTL."""
@@ -655,7 +665,7 @@ def admin_set_role(req: RoleChangeRequest) -> RoleChangeResponse:
 @app.post(
     "/admin/roles/{token}/reset",
     response_model=RoleChangeResponse,
-    dependencies=[Depends(require_capability(CAP_ROLES_MANAGE))],
+    dependencies=[Depends(require_capability(CAP_USERS_CHANGE_ROLE))],
 )
 def admin_reset_role(token: str) -> RoleChangeResponse:
     """Clear a token's override; role falls back to the env seed (or novice)."""
@@ -688,7 +698,7 @@ def _require_gcs_for_invite_tokens() -> tuple[str, str]:
 @app.get(
     "/admin/invite-tokens",
     response_model=InviteTokensResponse,
-    dependencies=[Depends(require_capability(CAP_USERS_MANAGE))],
+    dependencies=[Depends(require_capability(CAP_USERS_VIEW))],
 )
 def admin_list_invite_tokens() -> InviteTokensResponse:
     """Current GCS invite allowlist. Powers the Users tab's list."""
@@ -705,7 +715,7 @@ def admin_list_invite_tokens() -> InviteTokensResponse:
 @app.post(
     "/admin/invite-tokens",
     response_model=AddInviteTokenResponse,
-    dependencies=[Depends(require_capability(CAP_USERS_MANAGE))],
+    dependencies=[Depends(require_capability(CAP_USERS_ADD))],
 )
 def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse:
     """Create a user: mint (or accept) a token and add it to the allowlist.
@@ -726,7 +736,7 @@ def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse
 @app.delete(
     "/admin/invite-tokens/{token}",
     response_model=RemoveInviteTokenResponse,
-    dependencies=[Depends(require_capability(CAP_USERS_MANAGE))],
+    dependencies=[Depends(require_capability(CAP_USERS_REMOVE))],
 )
 def admin_remove_invite_token(token: str) -> RemoveInviteTokenResponse:
     """Remove a user from the allowlist (their cookie stops resolving).
@@ -746,7 +756,7 @@ def admin_remove_invite_token(token: str) -> RemoveInviteTokenResponse:
 @app.patch(
     "/admin/invite-tokens/{token}",
     response_model=InviteTokenOut,
-    dependencies=[Depends(require_capability(CAP_USERS_MANAGE))],
+    dependencies=[Depends(require_capability(CAP_USERS_RENAME))],
 )
 def admin_rename_invite_token(token: str, req: RenameInviteTokenRequest) -> InviteTokenOut:
     """Rename a user's label, keeping the same token.

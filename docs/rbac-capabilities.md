@@ -2,14 +2,15 @@
 
 _Last updated: 2026-08-12_
 
-> **Status: this is the target design; the code is partway there.** The capability
-> *mechanism* has landed (`roles.py` + `api/main.py`: every endpoint gates on a
-> capability via `require_capability`, `/me` returns the caller's bundle) with a
-> first-cut set of roles. **This document supersedes that first cut** with the full
-> eight-rung model below. Aligning the code — the tag/comment split, `passages.view`,
-> self→all scoping, the clone model, the attribution wall, and audit — is the roadmap
-> in §9. Extends [`roles.md`](roles.md) (the original monotonic ladder; still used for
-> role *ordering* in the picker).
+> **Status: bundles match the eight rungs; behaviours follow.** The capability
+> *mechanism* **and** the eight-rung *bundles* now ship in `roles.py` + `api/main.py`:
+> every endpoint gates on a capability via `require_capability`, `/me` returns the
+> caller's bundle, and `ROLE_CAPABILITIES` encodes rungs #1–#8 (the four new rungs
+> carry placeholder machine names — §4). What's still ahead is **behaviour**, not
+> vocabulary: self→all filtering, the clone flow (golds as owned entities), the
+> attribution wall, the audit log, and the whole frontend — sequenced in §9. The new
+> rungs aren't offered in the picker yet, so nothing depends on their names. Extends
+> [`roles.md`](roles.md) (the original ladder; still used for role ordering).
 
 ## 1. The ladder wasn't wrong — it was too coarse
 
@@ -86,6 +87,7 @@ Routes stay `/admin/*` (an internal management-API namespace, never shown on the
 | `attribution.view` | see the author identity on feedback / gold rows |
 | `users.view` | Users tab — see rows |
 | `users.change_role` | change a user's role |
+| `users.add` | add an invitee |
 | `users.remove` | hard-delete an invite |
 | `users.rename` | rename a user's label |
 | `roles.manage` | edit the RBAC config itself (the future data-driven editor, §8) |
@@ -108,7 +110,7 @@ higher rung includes everything below it; the table lists only **what each rung 
 | **5** | read all, write own | `feedback.view.all`, `golds.view.all` |
 | **6** | operator | `golds.curate`, `golds.clone`, `sources.curate`, `index.rebuild`, `attribution.view` *(+ audit — §5)* |
 | **7** | admin *(= `admin`)* | `users.view`, `users.change_role` |
-| **8** | superuser *(= `superuser`)* | `users.remove`, `users.rename`, `roles.manage` |
+| **8** | superuser *(= `superuser`)* | `users.add`, `users.remove`, `users.rename`, `roles.manage` |
 
 Reference matrix (✓ = has it; columns are cumulative left→right):
 
@@ -125,7 +127,7 @@ Reference matrix (✓ = has it; columns are cumulative left→right):
 | `sources.curate` · `index.rebuild` | | | | | | ✓ | ✓ | ✓ |
 | `attribution.view` | | | | | | ✓ | ✓ | ✓ |
 | `users.view` · `users.change_role` | | | | | | | ✓ | ✓ |
-| `users.remove` · `users.rename` · `roles.manage` | | | | | | | | ✓ |
+| `users.add` · `users.remove` · `users.rename` · `roles.manage` | | | | | | | | ✓ |
 
 What each boundary means, in one line:
 - **#3→#4** is the Advanced button appearing — the first "behind the curtain" rung.
@@ -134,8 +136,16 @@ What each boundary means, in one line:
 - **#5→#6** is two things at once: **write on others' assets** (curate, clone, rebuild)
   *and* the **attribution wall** (§5). This is the boundary to be most deliberate about.
 - **#6→#7** is people: the Users tab and role changes.
-- **#7→#8** is the irreversible/identity actions: remove, rename, and editing the RBAC
-  config itself.
+- **#7→#8** is the roster/identity mutations — add, remove, rename a user — plus editing
+  the RBAC config itself. #7 adjusts *existing* users (roles); #8 changes *who's on the
+  roster*. (Whether `users.add` belongs at #7 is an easy later move — see below.)
+
+**Role names are mostly invisible.** A player never sees their rung name; only #6+ see
+roles at all (in the Users tab). So the placeholder machine names cost little. The one
+other place a name might surface is a future **"level up"** moment — auto-promoting a
+player a rung on sustained activity (e.g. asked 10 questions *and* rated 10 answers →
+#1 → #2). That's a promotion *mechanic* layered on assignment, noted here so the model
+leaves room for it; assignment today is manual (seed ⊕ `roles.jsonl`).
 
 ## 5. Cross-cutting behaviors
 

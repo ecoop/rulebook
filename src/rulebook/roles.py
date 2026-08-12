@@ -49,80 +49,88 @@ RESET_SENTINEL = "reset"  # a roles.jsonl row role that clears an override
 
 # ── Capabilities ───────────────────────────────────────────────────────────
 #
-# Named permissions a role either has or hasn't. Capability strings are STABLE
-# identifiers that outlive UI labels: the Advanced surface is gated by
-# `advanced.view` even while the HTTP route is still /admin/* and the page still
-# reads "Admin" — that relabel is cosmetic and lands later; the capability is
-# named for what it will be, so it never becomes an unmoored `admin.*` fossil.
+# Named permissions a role either has or hasn't (docs/rbac-capabilities.md).
+# Capability strings are STABLE identifiers that outlive UI labels: the Advanced
+# surface is gated by `advanced.view` even while the HTTP route is still /admin/*
+# and the page still reads "Admin" — that relabel is cosmetic and lands later.
+#
+# The eight rungs (§4 of the doc) form a monotonic chain, so each bundle below is
+# the previous one plus more. Some capabilities are DEFINED here but their
+# behaviour lands in a later slice — noted inline; the vocabulary and the role
+# assignments are correct now, the features (self/all filtering, clone, audit,
+# attribution) follow.
 
-# Main app.
+# Main page.
 CAP_ASK = "ask"
-CAP_RATE = "rate"
-CAP_FEEDBACK_ANNOTATE = "feedback.annotate"   # attach tags/notes to feedback
-CAP_GOLD_AUTHOR = "gold.author"               # write a gold answer (POST /gold)
-# Advanced (admin) surface.
+CAP_RATE = "rate"                             # numeric 1–5 rating
+CAP_FEEDBACK_TAG = "feedback.tag"             # attach issue tags to a rating
+CAP_FEEDBACK_COMMENT = "feedback.comment"     # attach a free-text comment (≤400)
+CAP_GOLD_AUTHOR = "gold.author"               # suggest a gold answer (POST /gold)
+CAP_PASSAGES_VIEW = "passages.view"           # Retrieved-passages panel (frontend gate)
+# Advanced surface.
 CAP_ADVANCED_VIEW = "advanced.view"           # see the Advanced page shell at all
-CAP_FEEDBACK_VIEW = "feedback.view"
-CAP_GOLDS_VIEW = "golds.view"
-CAP_GOLDS_CURATE = "golds.curate"             # toggle a gold's Incl.
+CAP_FEEDBACK_VIEW = "feedback.view"           # Feedback tab — your own rows
+CAP_FEEDBACK_VIEW_ALL = "feedback.view.all"   # …everyone's rows  (self/all slice)
+CAP_GOLDS_VIEW = "golds.view"                 # Golds tab — your own rows
+CAP_GOLDS_VIEW_ALL = "golds.view.all"         # …everyone's rows  (self/all slice)
 CAP_GOLDS_EDIT_OWN = "golds.edit.own"         # edit a gold you authored
-CAP_GOLDS_EDIT_ANY = "golds.edit.any"         # edit any gold
-CAP_SOURCES_VIEW = "sources.view"
-CAP_SOURCES_CURATE = "sources.curate"
-CAP_INDEX_REBUILD = "index.rebuild"           # the Rebuild Index button
-CAP_USERS_MANAGE = "users.manage"             # Users tab: invites + role changes
-CAP_ROLES_MANAGE = "roles.manage"             # change the RBAC config itself
+CAP_GOLDS_CLONE = "golds.clone"               # clone another's gold → yours  (clone slice)
+CAP_GOLDS_CURATE = "golds.curate"             # toggle a gold's Incl.
+CAP_SOURCES_VIEW = "sources.view"             # Sources tab (the corpus)
+CAP_SOURCES_CURATE = "sources.curate"         # toggle a source's inclusion
+CAP_INDEX_REBUILD = "index.rebuild"           # the Rebuild index button
+CAP_ATTRIBUTION_VIEW = "attribution.view"     # author identity on rows  (attribution slice)
+CAP_USERS_VIEW = "users.view"                 # Users tab — see rows
+CAP_USERS_CHANGE_ROLE = "users.change_role"   # change a user's role
+CAP_USERS_ADD = "users.add"                   # add an invitee
+CAP_USERS_REMOVE = "users.remove"             # hard-delete an invite
+CAP_USERS_RENAME = "users.rename"             # rename a user's label
+CAP_ROLES_MANAGE = "roles.manage"             # edit the RBAC config itself (no endpoint yet)
 
 # The full closed set — every capability a role may be granted.
 CAPABILITIES: frozenset[str] = frozenset({
-    CAP_ASK, CAP_RATE, CAP_FEEDBACK_ANNOTATE, CAP_GOLD_AUTHOR,
-    CAP_ADVANCED_VIEW, CAP_FEEDBACK_VIEW, CAP_GOLDS_VIEW, CAP_GOLDS_CURATE,
-    CAP_GOLDS_EDIT_OWN, CAP_GOLDS_EDIT_ANY, CAP_SOURCES_VIEW, CAP_SOURCES_CURATE,
-    CAP_INDEX_REBUILD, CAP_USERS_MANAGE, CAP_ROLES_MANAGE,
+    CAP_ASK, CAP_RATE, CAP_FEEDBACK_TAG, CAP_FEEDBACK_COMMENT, CAP_GOLD_AUTHOR,
+    CAP_PASSAGES_VIEW, CAP_ADVANCED_VIEW, CAP_FEEDBACK_VIEW, CAP_FEEDBACK_VIEW_ALL,
+    CAP_GOLDS_VIEW, CAP_GOLDS_VIEW_ALL, CAP_GOLDS_EDIT_OWN, CAP_GOLDS_CLONE,
+    CAP_GOLDS_CURATE, CAP_SOURCES_VIEW, CAP_SOURCES_CURATE, CAP_INDEX_REBUILD,
+    CAP_ATTRIBUTION_VIEW, CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE, CAP_USERS_ADD,
+    CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE,
 })
 
-# Role → capability bundle. Built so the existing five behave EXACTLY as they
-# did under the ladder — this slice changes the *mechanism* (rank → capability),
-# not the *policy*. In particular user/role management stays superuser-only:
-# admin deliberately does NOT get users.manage/roles.manage, matching today's
-# superuser-gated /admin/invite-tokens and /admin/roles. Granting admin
-# users.manage later is a one-line move into `_ADMIN` — which is the whole point
-# of the capability model.
-_PUBLIC = frozenset({CAP_ASK, CAP_RATE})
-_EVALUATOR = _PUBLIC | {CAP_FEEDBACK_ANNOTATE, CAP_GOLD_AUTHOR}
-# The full Advanced surface an admin may touch: read every tab, curate, rebuild.
-# Carries golds.edit.any (edit *any* gold), which supersedes golds.edit.own — so
-# admin/superuser intentionally do NOT hold edit.own; that restricted "your own
-# only" form is for the curator tier (the OR-check in docs/rbac-capabilities.md
-# §4 means edit.any alone already grants editing everything).
-_ADVANCED_FULL = frozenset({
-    CAP_ADVANCED_VIEW, CAP_FEEDBACK_VIEW, CAP_GOLDS_VIEW, CAP_GOLDS_CURATE,
-    CAP_GOLDS_EDIT_ANY, CAP_SOURCES_VIEW, CAP_SOURCES_CURATE, CAP_INDEX_REBUILD,
-})
-_ADMIN = _EVALUATOR | _ADVANCED_FULL
-_SUPERUSER = _ADMIN | {CAP_USERS_MANAGE, CAP_ROLES_MANAGE}
-
-# New capability-defined roles (docs/rbac-capabilities.md). Every human role
-# builds on _PUBLIC, so an observer can still ask questions — they gain
-# read-only sight of the machinery on top. Defined here so the model + tests are
-# complete, but NOT yet offered in the assignment UI (the picker still shows
-# ROLE_LADDER) until the RBAC-frontend slice turns them on. Names are
-# placeholders — rename freely.
-_OBSERVER = _PUBLIC | {
-    CAP_ADVANCED_VIEW, CAP_FEEDBACK_VIEW, CAP_GOLDS_VIEW, CAP_SOURCES_VIEW,
+# The eight rungs, cumulative (each = the previous ∪ its additions). See §4.
+_R1 = frozenset({CAP_ASK, CAP_RATE, CAP_FEEDBACK_TAG})            # casual player
+_R2 = _R1 | {CAP_FEEDBACK_COMMENT}                               # + explain a rating
+_R3 = _R2 | {CAP_GOLD_AUTHOR}                                    # + suggest answers
+_R4 = _R3 | {                                                    # peek behind the curtain (self)
+    CAP_ADVANCED_VIEW, CAP_PASSAGES_VIEW,
+    CAP_FEEDBACK_VIEW, CAP_GOLDS_VIEW, CAP_GOLDS_EDIT_OWN, CAP_SOURCES_VIEW,
 }
-_CURATOR_LITE = _OBSERVER | {CAP_GOLDS_CURATE, CAP_INDEX_REBUILD}
-_CURATOR = _CURATOR_LITE | {CAP_FEEDBACK_ANNOTATE, CAP_GOLD_AUTHOR, CAP_GOLDS_EDIT_OWN}
+_R5 = _R4 | {CAP_FEEDBACK_VIEW_ALL, CAP_GOLDS_VIEW_ALL}          # read all, write own
+_R6 = _R5 | {                                                    # operator
+    CAP_GOLDS_CURATE, CAP_GOLDS_CLONE, CAP_SOURCES_CURATE,
+    CAP_INDEX_REBUILD, CAP_ATTRIBUTION_VIEW,
+}
+_R7 = _R6 | {CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE}              # admin
+_R8 = _R7 | {                                                    # superuser
+    CAP_USERS_ADD, CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE,
+}
 
+# Role → capability bundle. The four brand-new rungs (#2/#4/#5/#6) carry
+# PLACEHOLDER machine names — rename once the human names are chosen; they aren't
+# offered in the picker yet (that shows ROLE_LADDER), so nothing depends on them.
+# Note the policy this encodes: admin (#7) now DOES manage users (view + change
+# role), and the destructive/identity ops (add/remove/rename) plus the future
+# RBAC-config editor (roles.manage) are superuser-only (#8).
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "suspended": frozenset(),
-    "novice": _PUBLIC,
-    "evaluator": _EVALUATOR,
-    "admin": _ADMIN,
-    "superuser": _SUPERUSER,
-    "observer": _OBSERVER,
-    "curator-lite": _CURATOR_LITE,
-    "curator": _CURATOR,
+    "novice": _R1,        # #1
+    "commenter": _R2,     # #2  (placeholder name)
+    "evaluator": _R3,     # #3
+    "observer": _R4,      # #4  (placeholder name)
+    "reviewer": _R5,      # #5  (placeholder name)
+    "operator": _R6,      # #6  (placeholder name)
+    "admin": _R7,         # #7
+    "superuser": _R8,     # #8
 }
 
 # What a public (demo_mode off) deploy allows anonymously — the novice tier.
