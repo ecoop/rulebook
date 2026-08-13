@@ -311,7 +311,25 @@ The mechanism has landed; the rest is slices. The frontend ones edit
    `/admin/*`→`/advanced/*` routes with their fetch calls + tests. Internal `Admin*`
    model/type names are left as a soft namespace (no behaviour, no user text).
    *(Still open, separate: the retrieved-passages panel redesign — a main-page item.)*
-8. *(later)* **data-driven bundles**, then **the permissions editor** (§8).
+8. ✅ **"View as level" preview** — a superuser previews the whole app as any
+   level 0–8 without reassigning users and reloading (the gates already read a
+   capability set, so previewing = swapping which set the UI gates on). Two
+   identities coexist: the **real** identity (`/me`) owns page access, the
+   View-as control, and every data fetch; a **preview** level drives all
+   tab/column/button gating (`caps = previewLevel != null ? roleCaps[levelN] :
+   me.capabilities`). The state lives in `main.tsx`'s Root, *above* both the Main
+   and Advanced views, so it reshapes both at once, and the exit affordance is a
+   **persistent top-level banner** owned by the real user — the previewed chrome
+   (e.g. a level-1 Q&A page) has no controls, so the only way back must live
+   outside it (standard impersonation pattern). Offered only to a superuser
+   (`roles.manage`) in demo_mode; selectable levels capped at the viewer's own.
+   `GET /advanced/role-capabilities` (gated `advanced.view`) serves the static
+   level→bundle map. **Caveat (surfaced in the banner):** this previews
+   *visibility* — which tabs/buttons/panels show — **not** server-side data
+   scoping: rows/counts stay the real user's and any action still runs as the
+   real caller. True act-as impersonation (backend data scoping) is a separate,
+   security-sensitive follow-up.
+9. *(later)* **data-driven bundles**, then **the permissions editor** (§8).
 
 ## 10. Non-goals (for now)
 
