@@ -170,26 +170,13 @@ export function UsageBody({ usage }: { usage: UsageSnapshot | null }) {
         </div>
       )}
       {usage.caller_weekly_usd != null && (
-        <div className="border-t border-border pt-2 text-[11px]">
-          <div className="flex items-baseline justify-between">
-            <span className="flex items-center gap-0.5 text-muted-foreground">
-              you
-              <Info
-                className="h-3 w-3 opacity-60"
-                aria-label="Your cumulative weekly spend against the per-guest cap. Populates when guest-auth identifies you."
-              >
-                <title>Your cumulative weekly spend against the per-guest cap.</title>
-              </Info>
-            </span>
-            <span className="font-mono tabular-nums">
-              <span className="text-emerald-600 dark:text-emerald-400">
-                {money(usage.caller_weekly_usd)}
-              </span>{' '}
-              <span className="text-muted-foreground">
-                / {money(usage.caps.per_token_usd)}
-              </span>
-            </span>
-          </div>
+        <div className="border-t border-border pt-2">
+          <CapBar
+            label="you"
+            info="Your cumulative weekly spend against the per-guest cap. Populates when guest-auth identifies you."
+            spent={usage.caller_weekly_usd}
+            cap={usage.caps.per_token_usd}
+          />
         </div>
       )}
     </div>
