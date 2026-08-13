@@ -140,15 +140,15 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
 # here as the single source of truth; expose via the API rather than duplicating
 # in the frontend.
 ROLE_LEVELS: dict[str, dict[str, object]] = {
-    "level0": {"level": 0, "color": "#9AA0A6", "description": "Suspended — no access"},
-    "level1": {"level": 1, "color": "#E8E8E8", "description": "Beginner — ask and rate"},
-    "level2": {"level": 2, "color": "#E5B80B", "description": "Can comment on answers"},
-    "level3": {"level": 3, "color": "#E07A20", "description": "Can suggest gold answers"},
-    "level4": {"level": 4, "color": "#3A8C3A", "description": "Sees the workings (own items)"},
-    "level5": {"level": 5, "color": "#2C64B4", "description": "Reviews everyone's items"},
-    "level6": {"level": 6, "color": "#7A4A2B", "description": "Operator — curates and rebuilds"},
-    "level7": {"level": 7, "color": "#1A1A1A", "description": "Admin — manages users"},
-    "level8": {"level": 8, "color": "#C4272E", "description": "Superuser — full control"},
+    "level0": {"level": 0, "name": "Suspended", "color": "#9AA0A6", "description": "No access"},
+    "level1": {"level": 1, "name": "Beginner", "color": "#E8E8E8", "description": "Ask and rate answers"},
+    "level2": {"level": 2, "name": "Annotator", "color": "#E5B80B", "description": "Comment on answers"},
+    "level3": {"level": 3, "name": "Contributor", "color": "#E07A20", "description": "Suggest gold answers"},
+    "level4": {"level": 4, "name": "Builder", "color": "#3A8C3A", "description": "Advanced page for own items; edit own golds"},
+    "level5": {"level": 5, "name": "Reviewer", "color": "#2C64B4", "description": "Review everyone's work"},
+    "level6": {"level": 6, "name": "Director", "color": "#7A4A2B", "description": "Curate & clone golds, rebuild index, audit"},
+    "level7": {"level": 7, "name": "Admin", "color": "#1A1A1A", "description": "Users tab; change roles"},
+    "level8": {"level": 8, "name": "Superuser", "color": "#C4272E", "description": "Remove/rename users; RBAC config"},
 }
 
 

@@ -39,8 +39,9 @@ def test_level_number():
     assert roles.level_number("level0") == 0
     assert roles.level_number("level8") == 8
     assert roles.level_number("wizard") == 0   # unknown → floor
-    # every level carries a color + description for the badge
-    assert set(roles.ROLE_LEVELS["level5"]) == {"level", "color", "description"}
+    # every level carries a name + color + description for the badge
+    assert set(roles.ROLE_LEVELS["level5"]) == {"level", "name", "color", "description"}
+    assert roles.ROLE_LEVELS["level5"]["name"] == "Reviewer"
 
 
 def test_overrides_from_rows_replay():
