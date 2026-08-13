@@ -94,6 +94,7 @@ from rulebook.roles import (  # noqa: E402
     read_role_rows,
     require_capability,
     resolve_role,
+    role_fingerprint,
 )
 from rulebook.store import list_sports  # noqa: E402
 from rulebook.tokens import (  # noqa: E402
@@ -213,6 +214,7 @@ class CloneGoldResponse(BaseModel):
 class AuditRow(BaseModel):
     timestamp: str
     actor: str | None = None
+    actor_fingerprint: str | None = Field(default=None, description="Actor's capability-set fingerprint at the time.")
     action: str = Field(..., description="The capability the write exercised, e.g. 'golds.curate'.")
     target: str | None = Field(default=None, description="Affected id — gold_id, source path, token…")
     detail: dict = Field(default_factory=dict, description="Before→after specifics.")
@@ -275,6 +277,7 @@ class MeResponse(BaseModel):
     )
     role: str = Field(..., description="Effective role — a level id, level0 (suspended) … level8 (superuser).")
     level: int = Field(..., description="Numeric level 0–8, for ordering and the level badge.")
+    fingerprint: str = Field(..., description="8-hex fingerprint of this role's capability set — changes iff its permissions change.")
     capabilities: list[str] = Field(
         default_factory=list,
         description="Sorted capability strings the effective role grants. The UI renders tabs/columns/buttons off these; the backend enforces them per-endpoint.",
@@ -286,6 +289,7 @@ class RoleAssignmentOut(BaseModel):
     token: str
     role: str
     source: str = Field(..., description='"override" (roles.jsonl) or "seed" (env).')
+    fingerprint: str = Field(..., description="8-hex fingerprint of the role's capability set.")
 
 
 class AdminRolesResponse(BaseModel):
@@ -633,6 +637,7 @@ def me_endpoint() -> MeResponse:
         recipient=(guest.recipient if guest else None),
         role=role,
         level=level_number(role),
+        fingerprint=role_fingerprint(role),
         capabilities=sorted(capabilities_for(role)),
         demo_mode=settings.demo_mode,
     )
@@ -664,7 +669,7 @@ def admin_list_roles() -> AdminRolesResponse:
         for tok, role in overrides.items():
             merged[tok] = (role, "override")
     rows = [
-        RoleAssignmentOut(token=tok, role=role, source=src)
+        RoleAssignmentOut(token=tok, role=role, source=src, fingerprint=role_fingerprint(role))
         for tok, (role, src) in sorted(merged.items())
     ]
     return AdminRolesResponse(roles=rows, ladder=list(ROLE_LADDER))
@@ -835,11 +840,13 @@ def _audit(action: str, *, target: str | None = None, detail: dict | None = None
     """Record a shared-state mutation to the audit trail (§5). Call AFTER the
     write succeeds so only committed actions are logged."""
     guest = get_current_guest()
+    role = resolve_role(guest.token if guest else None)
     log_audit(
         actor=(guest.recipient if guest else None),
         action=action,
         target=target,
         detail=detail,
+        actor_fingerprint=role_fingerprint(role),
     )
 
 
@@ -926,6 +933,7 @@ def admin_list_audit(limit: int = 200) -> AuditListResponse:
         AuditRow(
             timestamp=r["timestamp"],
             actor=r.get("actor"),
+            actor_fingerprint=r.get("actor_fingerprint"),
             action=r["action"],
             target=r.get("target"),
             detail=r.get("detail") or {},
