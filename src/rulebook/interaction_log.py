@@ -85,7 +85,9 @@ SOURCE_CURATION_SCHEMA_VERSION = 1
 # (ratings, own golds) are already on the record via their own logs, so this
 # captures only the actions that touch others' / shared state.
 #   v1  {actor, action, target, detail, timestamp}
-AUDIT_SCHEMA_VERSION = 1
+#   v2  v1 + actor_fingerprint — the 8-hex fingerprint of the actor's capability
+#       set at the time (records "with what powers", survives role re-tuning)
+AUDIT_SCHEMA_VERSION = 2
 
 # Append + last-row-wins reads come from the shared `jsonl-log` library
 # (jsonl_log.append_jsonl / read_latest / read_latest_list). It serializes
@@ -307,13 +309,15 @@ def log_audit(
     action: str,
     target: str | None = None,
     detail: dict[str, Any] | None = None,
+    actor_fingerprint: str | None = None,
 ) -> None:
     """Append one row to the audit trail for a shared-state mutation.
 
     `actor` is the guest recipient label, `action` the capability the write
     exercised (e.g. "golds.curate"), `target` the affected id (gold_id, source
-    path, token…), `detail` any before→after specifics. Append-only; every row
-    is kept (this is the record, not a latest-wins state).
+    path, token…), `detail` any before→after specifics, `actor_fingerprint` the
+    8-hex fingerprint of the actor's capability set at the time. Append-only;
+    every row is kept (this is the record, not a latest-wins state).
     """
     _append(
         "audit.jsonl",
@@ -321,6 +325,7 @@ def log_audit(
             "v": AUDIT_SCHEMA_VERSION,
             "timestamp": utc_now_iso(timespec="auto", z=False),
             "actor": actor,
+            "actor_fingerprint": actor_fingerprint,
             "action": action,
             "target": target,
             "detail": detail or {},
