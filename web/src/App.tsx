@@ -15,6 +15,7 @@ import {
   type DiagnosticsSnapshot,
 } from './widgets/Diagnostics'
 import { DemoBody, DemoSummaryLine } from './widgets/Demo'
+import { LevelBadge } from './levels'
 
 // -----------------------------------------------------------------------------
 // Types mirroring the FastAPI response shape. Kept inline (rather than in a
@@ -92,20 +93,13 @@ interface Meta {
 interface Me {
   recipient: string | null
   role: string
+  level: number
+  capabilities: string[]
   demo_mode: boolean
 }
 
-const ROLE_RANK: Record<string, number> = {
-  suspended: 0,
-  novice: 1,
-  evaluator: 2,
-  admin: 3,
-  superuser: 4,
-}
-
-function atLeast(role: string, min: string): boolean {
-  return (ROLE_RANK[role] ?? 1) >= (ROLE_RANK[min] ?? 1)
-}
+// Gating is by capability, not rank (docs/rbac-capabilities.md §6): /me returns
+// the caller's `capabilities`; the UI shows a control iff the bundle grants it.
 
 // Format the ISO server-start timestamp for the footer. Uses the viewer's
 // locale so a bug reporter sees a time they can reason about.
@@ -350,11 +344,11 @@ export default function App() {
     [],
   )
 
-  // UI gating (roles.md step 4), active only in demo_mode. Novices may rate
-  // but not tag/note/author gold; the admin link is admin+ only.
+  // UI gating by capability, active only in demo_mode. Authoring golds needs
+  // `gold.author` (level 3+); the Advanced link needs `advanced.view` (level 4+).
   const gatingActive = !!me && me.demo_mode
-  const canEvaluate = !gatingActive || (me != null && atLeast(me.role, 'evaluator'))
-  const showAdminLink = !!me && (!me.demo_mode || atLeast(me.role, 'admin'))
+  const canEvaluate = !gatingActive || (me != null && me.capabilities.includes('gold.author'))
+  const showAdminLink = !!me && (!me.demo_mode || me.capabilities.includes('advanced.view'))
 
   if (meForbidden) {
     return (
@@ -412,11 +406,20 @@ export default function App() {
                 </p>
               )}
               {usage?.guest_recipient && (
-                <p className="text-sm text-muted-foreground">
-                  Demo
-                  <span className="text-muted-foreground/70"> · </span>
+                <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <span>Demo</span>
+                  <span className="text-muted-foreground/70">·</span>
                   <span className="font-medium text-foreground">{usage.guest_recipient}</span>
+                  {me && me.demo_mode && <LevelBadge level={me.level} />}
                 </p>
+              )}
+              {showAdminLink && (
+                <a
+                  href="#/advanced"
+                  className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
+                >
+                  Advanced <span aria-hidden>→</span>
+                </a>
               )}
             </div>
             <button
@@ -682,14 +685,6 @@ export default function App() {
         <footer className="px-6 py-4 text-xs text-muted-foreground lg:pr-[19rem]">
           embeddings: {meta.embedding_provider}/{meta.embedding_model} · gen:{' '}
           {meta.claude_model}
-          {showAdminLink && (
-            <>
-              <span className="mx-2 opacity-50">·</span>
-              <a href="#/admin" className="hover:text-foreground hover:underline">
-                admin
-              </a>
-            </>
-          )}
         </footer>
       )}
       <FloatingWidgetStack<WidgetCtx>

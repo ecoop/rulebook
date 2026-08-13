@@ -150,25 +150,28 @@ def load_gold_chunks(gold_path: Path) -> list[Chunk]:
     if not gold_path.exists():
         return []
 
-    # Latest row per qa_id wins — walk the file and keep last-write-wins.
+    # Latest row per gold_id wins — walk the file and keep last-write-wins.
+    # Golds are owned entities now, so several can share a qa_id; legacy rows
+    # (no gold_id) fall back to their qa_id as the id (matches legacy curation).
     latest: dict[str, dict] = {}
     with gold_path.open() as f:
         for line in f:
             row = json.loads(line)
-            latest[row["qa_id"]] = row
+            row["gold_id"] = row.get("gold_id") or row["qa_id"]
+            latest[row["gold_id"]] = row
 
     # Apply admin curation: skip golds whose latest curation row set
     # included=False. Absent from the curation log = included by default,
     # so freshly-authored golds flow into the index automatically.
     curation = read_latest_curation()
-    excluded = {qa_id for qa_id, included in curation.items() if not included}
+    excluded = {gid for gid, included in curation.items() if not included}
     if excluded:
-        latest = {qa_id: row for qa_id, row in latest.items() if qa_id not in excluded}
+        latest = {gid: row for gid, row in latest.items() if gid not in excluded}
         print(f"[curate]  {len(excluded)} gold(s) excluded by admin")
 
     known = set(DEFAULT_SPORTS)
     chunks: list[Chunk] = []
-    for qa_id, row in latest.items():
+    for row in latest.values():
         text = row["gold_answer"].strip()
         if not text:
             continue
