@@ -1,13 +1,17 @@
 import { Fragment, useEffect, useState } from 'react'
+import { LevelBadge, levelLabel, levelNumber } from './levels'
 
-// Admin surface for grooming user-authored gold answers before the next
-// index rebuild. Deliberately kept small: this is a curator's workflow,
-// not a casual-user surface. Reached via URL hash `#/admin` — see main.tsx.
+// Advanced surface — capability-gated tabs (feedback / golds / sources / users
+// / audit) for reviewers, operators, and admins. Reached via URL hash
+// `#/advanced` — see main.tsx.
 
 interface AdminGoldRow {
+  gold_id: string
   qa_id: string
   question: string
   gold_answer: string
+  author: string | null
+  is_own: boolean
   timestamp: string
   included: boolean
 }
@@ -53,7 +57,17 @@ interface AdminFeedbackListResponse {
 interface MeResponse {
   recipient: string | null
   role: string
+  level: number
+  capabilities: string[]
   demo_mode: boolean
+}
+
+interface AuditRow {
+  timestamp: string
+  actor: string | null
+  action: string
+  target: string | null
+  detail: Record<string, unknown>
 }
 
 interface InviteTokenOut {
@@ -84,16 +98,19 @@ interface UserRow {
   source: string
 }
 
-type AdminTab = 'feedback' | 'golds' | 'sources' | 'users'
+type AdminTab = 'feedback' | 'golds' | 'sources' | 'users' | 'audit'
 
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
 type SourceSortCol = 'included' | 'sport' | 'path' | 'size_bytes' | 'modified_at'
 type UserSortCol = 'label' | 'role' | 'source'
 
-// Logical role ordering (low→high), used as a fallback when the backend
-// ladder from GET /admin/roles hasn't loaded yet.
-const ROLE_LADDER_FALLBACK = ['suspended', 'novice', 'evaluator', 'admin', 'superuser']
+// Logical role ordering (low→high) — numbered levels (docs/rbac-capabilities.md
+// §4), a fallback when the backend ladder from GET /advanced/roles hasn't loaded.
+const ROLE_LADDER_FALLBACK = [
+  'level0', 'level1', 'level2', 'level3', 'level4',
+  'level5', 'level6', 'level7', 'level8',
+]
 
 // Generic click handler for a sortable table column: same column → flip
 // direction, new column → default to ascending. Keeps the per-table sort
@@ -129,7 +146,7 @@ function formatWhen(iso: string): string {
   })
 }
 
-export default function AdminApp() {
+export default function AdvancedApp() {
   const [rows, setRows] = useState<AdminGoldRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
@@ -147,6 +164,7 @@ export default function AdminApp() {
   const [sources, setSources] = useState<AdminSourceRow[] | null>(null)
   const [sourcePending, setSourcePending] = useState<Set<string>>(() => new Set())
   const [feedback, setFeedback] = useState<AdminFeedbackRow[] | null>(null)
+  const [audit, setAudit] = useState<AuditRow[] | null>(null)
   // Sort state per table. Defaults chosen to match the backend's natural
   // return order so a first render doesn't reshuffle.
   const [feedbackSort, setFeedbackSort] = useState<{ col: FeedbackSortCol; dir: SortDir }>({
@@ -178,32 +196,33 @@ export default function AdminApp() {
   const [editingToken, setEditingToken] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
 
-  // The admin surface requires an admin+ role on a gated (demo_mode) deploy —
-  // the backend /admin/* endpoints 403 otherwise. Gate the whole page on this
-  // so non-admins get a friendly message instead of raw error banners.
-  const canUseAdmin =
-    !!me && me.demo_mode && (me.role === 'admin' || me.role === 'superuser')
-  const isSuperuser = !!me && me.role === 'superuser'
+  // Everything is gated by CAPABILITY, not rank (docs/rbac-capabilities.md §6):
+  // the UI renders a control iff /me's capability bundle grants it, and the
+  // backend enforces the same. `advanced.view` (level 4+) opens the page at all.
+  const caps = me?.capabilities ?? []
+  const can = (c: string) => caps.includes(c)
+  const canUseAdmin = !!me && can('advanced.view')
 
   useEffect(() => {
     void refreshMe()
   }, [])
 
-  // Only fetch admin data once /me confirms access — avoids the 403 banners a
-  // non-admin (or demo-off) deploy would otherwise surface on every tab.
+  // Fetch each dataset only if the caller's capabilities grant that tab —
+  // avoids 403 banners on tabs the role can't see.
   useEffect(() => {
     if (!canUseAdmin) return
-    void refresh()
-    void refreshSources()
-    void refreshFeedback()
-    if (isSuperuser) void refreshUsers()
+    if (can('golds.view')) void refresh()
+    if (can('sources.view')) void refreshSources()
+    if (can('feedback.view')) void refreshFeedback()
+    if (can('users.view')) void refreshUsers()
+    if (can('attribution.view')) void refreshAudit()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUseAdmin, isSuperuser])
+  }, [canUseAdmin, caps.join(',')])
 
   async function refresh() {
     setError(null)
     try {
-      const resp = await fetch('/admin/golds')
+      const resp = await fetch('/advanced/golds')
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: AdminGoldListResponse = await resp.json()
       setRows(data.golds)
@@ -214,10 +233,21 @@ export default function AdminApp() {
 
   async function refreshFeedback() {
     try {
-      const resp = await fetch('/admin/feedback')
+      const resp = await fetch('/advanced/feedback')
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: AdminFeedbackListResponse = await resp.json()
       setFeedback(data.feedback)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function refreshAudit() {
+    try {
+      const resp = await fetch('/advanced/audit')
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      const data: { audit: AuditRow[] } = await resp.json()
+      setAudit(data.audit)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -242,8 +272,8 @@ export default function AdminApp() {
   async function refreshUsers() {
     try {
       const [tResp, rResp] = await Promise.all([
-        fetch('/admin/invite-tokens'),
-        fetch('/admin/roles'),
+        fetch('/advanced/invite-tokens'),
+        fetch('/advanced/roles'),
       ])
       if (!tResp.ok) throw new Error(`invite-tokens ${tResp.status}: ${await tResp.text()}`)
       if (!rResp.ok) throw new Error(`roles ${rResp.status}: ${await rResp.text()}`)
@@ -264,7 +294,7 @@ export default function AdminApp() {
     setError(null)
     setNewInvite(null)
     try {
-      const resp = await fetch('/admin/invite-tokens', {
+      const resp = await fetch('/advanced/invite-tokens', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ label }),
@@ -293,7 +323,7 @@ export default function AdminApp() {
     markPending(token, true)
     setError(null)
     try {
-      const resp = await fetch('/admin/roles', {
+      const resp = await fetch('/advanced/roles', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ token, role }),
@@ -327,7 +357,7 @@ export default function AdminApp() {
     markPending(token, true)
     setError(null)
     try {
-      const resp = await fetch(`/admin/invite-tokens/${encodeURIComponent(token)}`, {
+      const resp = await fetch(`/advanced/invite-tokens/${encodeURIComponent(token)}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ label }),
@@ -346,7 +376,7 @@ export default function AdminApp() {
     markPending(token, true)
     setError(null)
     try {
-      const resp = await fetch(`/admin/roles/${encodeURIComponent(token)}/reset`, {
+      const resp = await fetch(`/advanced/roles/${encodeURIComponent(token)}/reset`, {
         method: 'POST',
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
@@ -370,7 +400,7 @@ export default function AdminApp() {
     markPending(token, true)
     setError(null)
     try {
-      const resp = await fetch(`/admin/invite-tokens/${encodeURIComponent(token)}`, {
+      const resp = await fetch(`/advanced/invite-tokens/${encodeURIComponent(token)}`, {
         method: 'DELETE',
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
@@ -394,7 +424,7 @@ export default function AdminApp() {
 
   async function refreshSources() {
     try {
-      const resp = await fetch('/admin/sources')
+      const resp = await fetch('/advanced/sources')
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: AdminSourceListResponse = await resp.json()
       setSources(data.sources)
@@ -410,7 +440,7 @@ export default function AdminApp() {
     )
     setSourcePending((prev) => new Set(prev).add(row.path))
     try {
-      const resp = await fetch('/admin/source-curation', {
+      const resp = await fetch('/advanced/source-curation', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ path: row.path, included: next }),
@@ -434,15 +464,18 @@ export default function AdminApp() {
   async function toggleInclusion(row: AdminGoldRow) {
     const next = !row.included
     // Optimistic — reflect the change immediately, revert if the POST fails.
+    // Curation is keyed by gold_id on the backend (row.gold_id in the body);
+    // the optimistic UI stays qa_id-keyed until the table is re-keyed to
+    // gold_id in the frontend-gating slice (one gold per qa_id today).
     setRows((prev) =>
       prev?.map((r) => (r.qa_id === row.qa_id ? { ...r, included: next } : r)) ?? prev,
     )
     setPending((prev) => new Set(prev).add(row.qa_id))
     try {
-      const resp = await fetch('/admin/gold-curation', {
+      const resp = await fetch('/advanced/gold-curation', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ qa_id: row.qa_id, included: next }),
+        body: JSON.stringify({ gold_id: row.gold_id, included: next }),
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
     } catch (err) {
@@ -466,7 +499,7 @@ export default function AdminApp() {
     setRebuilding(true)
     setRebuildResult(null)
     try {
-      const resp = await fetch('/admin/rebuild-index', { method: 'POST' })
+      const resp = await fetch('/advanced/rebuild-index', { method: 'POST' })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       const data: RebuildResult = await resp.json()
       setRebuildResult(data)
@@ -540,6 +573,20 @@ export default function AdminApp() {
     }
   }
 
+  // Fork someone else's gold into the caller's own editable copy (golds.clone).
+  async function cloneGold(row: AdminGoldRow) {
+    setError(null)
+    try {
+      const resp = await fetch(`/advanced/golds/${encodeURIComponent(row.gold_id)}/clone`, {
+        method: 'POST',
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      await refresh()  // the clone now shows up as the caller's own gold
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   function toggleExpanded(qa_id: string) {
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -595,7 +642,7 @@ export default function AdminApp() {
   const userRows: UserRow[] = (inviteTokens ?? [])
     .map((t) => {
       const r = roleByToken.get(t.token)
-      return { token: t.token, label: t.label, role: r?.role ?? 'novice', source: r?.source ?? '—' }
+      return { token: t.token, label: t.label, role: r?.role ?? 'level1', source: r?.source ?? '—' }
     })
     .sort((a, b) => {
       const { col, dir } = userSort
@@ -604,10 +651,11 @@ export default function AdminApp() {
       // Label and Source are case-insensitive alphabetical.
       return a[col].localeCompare(b[col], undefined, { sensitivity: 'base' }) * mult
     })
-  // The page is already gated on admin+ (canUseAdmin); within it the Users tab
-  // is superuser-only.
-  const showUsersTab = isSuperuser
-  const canManageUsers = isSuperuser
+  // The Users tab shows with `users.view`; the controls inside gate on their
+  // own caps (change_role / add / remove / rename), so level 7 (admin) manages
+  // roles + invites while only level 8 removes/renames.
+  const showUsersTab = can('users.view')
+  const canManageUsers = can('users.view')
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -616,7 +664,7 @@ export default function AdminApp() {
           <div className="flex items-baseline justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold tracking-tight">
-                Rulebook <span className="text-muted-foreground">/ admin</span>
+                Rulebook <span className="text-muted-foreground">/ Advanced</span>
               </h1>
               <p className="text-sm text-muted-foreground">
                 Curate gold answers and source files. Excluded rows are skipped by the next index rebuild.
@@ -651,16 +699,17 @@ export default function AdminApp() {
           <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
             {!me.demo_mode ? (
               <>
-                The admin panel isn't available on this deploy. It needs a gated deploy
+                The Advanced page isn't available on this deploy. It needs a gated deploy
                 (<span className="font-mono">RULEBOOK_DEMO_MODE=true</span> with{' '}
-                <span className="font-mono">STATE_BACKEND_KIND=gcs</span>) and an{' '}
-                <span className="font-mono">admin</span> role.
+                <span className="font-mono">STATE_BACKEND_KIND=gcs</span>) and a role of{' '}
+                <span className="font-medium">Level 4</span> or higher.
               </>
             ) : (
               <>
-                You need the <span className="font-mono">admin</span> role to use this page.
-                Your role is <span className="font-mono">{me.role}</span> — ask a superuser
-                to promote you.
+                You need at least <span className="font-medium">Level 4</span> to see the
+                Advanced page. Your level is{' '}
+                <LevelBadge level={me.level} className="align-middle" /> — ask a superuser to
+                promote you.
               </>
             )}
           </div>
@@ -668,7 +717,8 @@ export default function AdminApp() {
 
         {me && canUseAdmin && (
           <>
-        {/* Rebuild control — global, applies to whichever tab is active. */}
+        {/* Rebuild control — index.rebuild (level 6+); global to all tabs. */}
+        {can('index.rebuild') && (
         <div className="flex items-center justify-end">
           <button
             type="button"
@@ -680,6 +730,7 @@ export default function AdminApp() {
             {rebuilding ? 'Rebuilding…' : 'Rebuild index'}
           </button>
         </div>
+        )}
         {rebuildResult && (
           <div
             className={
@@ -700,13 +751,15 @@ export default function AdminApp() {
           </div>
         )}
 
-        {/* Tab bar — counts baked into labels so both are visible regardless of active tab. */}
+        {/* Tab bar — each tab shows only if the caller's capabilities grant it.
+            Counts baked into labels so both are visible regardless of active tab. */}
         <div className="flex gap-1 border-b border-border text-sm">
           {([
-            'feedback',
-            'golds',
-            'sources',
+            ...(can('feedback.view') ? (['feedback'] as AdminTab[]) : []),
+            ...(can('golds.view') ? (['golds'] as AdminTab[]) : []),
+            ...(can('sources.view') ? (['sources'] as AdminTab[]) : []),
             ...(showUsersTab ? (['users'] as AdminTab[]) : []),
+            ...(can('attribution.view') ? (['audit'] as AdminTab[]) : []),
           ] as AdminTab[]).map((t) => {
             const active = activeTab === t
             const label =
@@ -716,9 +769,11 @@ export default function AdminApp() {
                   ? `Golds (${goldIncluded}/${goldTotal})`
                   : t === 'sources'
                     ? `Sources (${sourceIncluded}/${sourceTotal})`
-                    : canManageUsers
-                      ? `Users (${userRows.length})`
-                      : 'Users'
+                    : t === 'audit'
+                      ? `Audit${audit ? ` (${audit.length})` : ''}`
+                      : canManageUsers
+                        ? `Users (${userRows.length})`
+                        : 'Users'
             return (
               <button
                 key={t}
@@ -885,15 +940,22 @@ export default function AdminApp() {
                           <button
                             type="button"
                             onClick={() => toggleInclusion(r)}
-                            disabled={pending.has(r.qa_id)}
+                            disabled={pending.has(r.qa_id) || !can('golds.curate')}
                             aria-pressed={r.included}
-                            title={r.included ? 'Included — click to exclude' : 'Excluded — click to include'}
+                            title={
+                              !can('golds.curate')
+                                ? (r.included ? 'Included' : 'Excluded')
+                                : r.included
+                                  ? 'Included — click to exclude'
+                                  : 'Excluded — click to include'
+                            }
                             className={
                               'inline-flex h-5 w-9 items-center rounded-full border transition ' +
                               (r.included
                                 ? 'border-green-500 bg-green-500 justify-end'
                                 : 'border-input bg-muted justify-start') +
-                              (pending.has(r.qa_id) ? ' opacity-50' : '')
+                              (pending.has(r.qa_id) ? ' opacity-50' : '') +
+                              (can('golds.curate') ? '' : ' cursor-not-allowed')
                             }
                           >
                             <span className="mx-0.5 h-4 w-4 rounded-full bg-card shadow-sm" />
@@ -959,14 +1021,31 @@ export default function AdminApp() {
                                 <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foreground">
                                   {r.gold_answer}
                                 </pre>
-                                <div className="flex justify-end">
-                                  <button
-                                    type="button"
-                                    onClick={() => beginEdit(r)}
-                                    className="rounded-md border border-input bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
-                                  >
-                                    Edit
-                                  </button>
+                                <div className="flex items-center justify-end gap-2">
+                                  {!r.is_own && (
+                                    <span className="text-xs text-muted-foreground">
+                                      by {r.author ?? 'unknown'}
+                                    </span>
+                                  )}
+                                  {r.is_own && can('golds.edit.own') && (
+                                    <button
+                                      type="button"
+                                      onClick={() => beginEdit(r)}
+                                      className="rounded-md border border-input bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+                                  {!r.is_own && can('golds.clone') && (
+                                    <button
+                                      type="button"
+                                      onClick={() => cloneGold(r)}
+                                      title="Copy this into your own editable gold — the original is untouched"
+                                      className="rounded-md border border-input bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
+                                    >
+                                      Clone
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -1048,15 +1127,22 @@ export default function AdminApp() {
                       <button
                         type="button"
                         onClick={() => toggleSourceInclusion(s)}
-                        disabled={sourcePending.has(s.path)}
+                        disabled={sourcePending.has(s.path) || !can('sources.curate')}
                         aria-pressed={s.included}
-                        title={s.included ? 'Included — click to exclude' : 'Excluded — click to include'}
+                        title={
+                          !can('sources.curate')
+                            ? (s.included ? 'Included' : 'Excluded')
+                            : s.included
+                              ? 'Included — click to exclude'
+                              : 'Excluded — click to include'
+                        }
                         className={
                           'inline-flex h-5 w-9 items-center rounded-full border transition ' +
                           (s.included
                             ? 'border-green-500 bg-green-500 justify-end'
                             : 'border-input bg-muted justify-start') +
-                          (sourcePending.has(s.path) ? ' opacity-50' : '')
+                          (sourcePending.has(s.path) ? ' opacity-50' : '') +
+                          (can('sources.curate') ? '' : ' cursor-not-allowed')
                         }
                       >
                         <span className="mx-0.5 h-4 w-4 rounded-full bg-card shadow-sm" />
@@ -1094,7 +1180,8 @@ export default function AdminApp() {
 
         {activeTab === 'users' && canManageUsers && (
           <div className="space-y-4">
-            {/* Add invitee — allowlist entry (defaults to novice until promoted). */}
+            {/* Add invitee — allowlist entry (defaults to level 1 until promoted). */}
+            {can('users.add') && (
             <section className="rounded-md border border-border bg-card p-4 shadow-sm">
               <div className="flex flex-wrap items-end gap-3">
                 <label className="flex-1">
@@ -1143,6 +1230,7 @@ export default function AdminApp() {
                   )
                 })()}
             </section>
+            )}
 
             {inviteTokens === null && !error && (
               <div className="text-sm text-muted-foreground">Loading users…</div>
@@ -1231,7 +1319,7 @@ export default function AdminApp() {
                                   Cancel
                                 </button>
                               </div>
-                            ) : (
+                            ) : can('users.rename') ? (
                               <button
                                 type="button"
                                 onClick={() => beginRename(u.token, u.label)}
@@ -1240,6 +1328,8 @@ export default function AdminApp() {
                               >
                                 {u.label}
                               </button>
+                            ) : (
+                              <span>{u.label}</span>
                             )}
                           </td>
                           <td className="px-3 py-2">
@@ -1253,40 +1343,47 @@ export default function AdminApp() {
                             </button>
                           </td>
                           <td className="px-3 py-2">
-                            <select
-                              value={u.role}
-                              disabled={busy}
-                              onChange={(e) => void changeRole(u.token, e.target.value)}
-                              className="rounded-md border border-input bg-card px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                            >
-                              {ladder.map((r) => (
-                                <option key={r} value={r}>
-                                  {r}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="flex items-center gap-2">
+                              <LevelBadge level={levelNumber(u.role)} />
+                              <select
+                                value={u.role}
+                                disabled={busy || !can('users.change_role')}
+                                onChange={(e) => void changeRole(u.token, e.target.value)}
+                                className="rounded-md border border-input bg-card px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                              >
+                                {ladder.map((r) => (
+                                  <option key={r} value={r}>
+                                    {levelLabel(levelNumber(r))}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{u.source}</td>
                           <td className="px-3 py-2">
                             <div className="flex justify-end gap-2 text-xs">
-                              <button
-                                type="button"
-                                onClick={() => void resetRole(u.token)}
-                                disabled={busy || u.source !== 'override'}
-                                title="Clear the override → fall back to the env seed (or novice)"
-                                className="rounded-md border border-input bg-card px-2 py-1 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                Reset
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void removeUser(u.token, u.label)}
-                                disabled={busy || isSelf}
-                                title={isSelf ? "You can't remove yourself" : 'Hard-delete this invite'}
-                                className="rounded-md border border-destructive/30 bg-card px-2 py-1 font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                Remove
-                              </button>
+                              {can('users.change_role') && (
+                                <button
+                                  type="button"
+                                  onClick={() => void resetRole(u.token)}
+                                  disabled={busy || u.source !== 'override'}
+                                  title="Clear the override → fall back to the env seed (or level 1)"
+                                  className="rounded-md border border-input bg-card px-2 py-1 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  Reset
+                                </button>
+                              )}
+                              {can('users.remove') && (
+                                <button
+                                  type="button"
+                                  onClick={() => void removeUser(u.token, u.label)}
+                                  disabled={busy || isSelf}
+                                  title={isSelf ? "You can't remove yourself" : 'Hard-delete this invite'}
+                                  className="rounded-md border border-destructive/30 bg-card px-2 py-1 font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  Remove
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1297,6 +1394,49 @@ export default function AdminApp() {
               </section>
             )}
           </div>
+        )}
+
+        {activeTab === 'audit' && audit === null && !error && (
+          <div className="text-sm text-muted-foreground">Loading audit trail…</div>
+        )}
+        {activeTab === 'audit' && audit !== null && audit.length === 0 && (
+          <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
+            No shared-state changes recorded yet. Curating a gold, rebuilding the index, or
+            changing a user all land here.
+          </div>
+        )}
+        {activeTab === 'audit' && audit !== null && audit.length > 0 && (
+          <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="w-44 px-3 py-2">when</th>
+                  <th className="w-32 px-3 py-2">who</th>
+                  <th className="w-40 px-3 py-2">action</th>
+                  <th className="px-3 py-2">target</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {audit.map((a, i) => (
+                  <tr key={a.timestamp + '-' + i} className="hover:bg-accent">
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                      {a.timestamp.replace('T', ' ').slice(0, 19)}
+                    </td>
+                    <td className="px-3 py-2">{a.actor ?? '—'}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{a.action}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                      {a.target ?? ''}
+                      {a.detail && Object.keys(a.detail).length > 0 && (
+                        <span className="ml-2 text-muted-foreground/70">
+                          {JSON.stringify(a.detail)}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
         )}
           </>
         )}

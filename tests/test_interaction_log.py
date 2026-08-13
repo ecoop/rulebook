@@ -11,15 +11,36 @@ from rulebook import interaction_log as il
 
 
 def test_gold_last_row_wins_and_newest_first(log_dir):
-    il.log_gold("q1", question="Q1?", gold_answer="first")
-    il.log_gold("q2", question="Q2?", gold_answer="q2ans")
-    il.log_gold("q1", question="Q1?", gold_answer="second")  # supersedes q1
+    il.log_gold("q1", gold_id="g1", question="Q1?", gold_answer="first")
+    il.log_gold("q2", gold_id="g2", question="Q2?", gold_answer="q2ans")
+    il.log_gold("q1", gold_id="g1", question="Q1?", gold_answer="second")  # supersedes g1
 
     golds = il.read_latest_golds()
-    by_id = {g["qa_id"]: g for g in golds}
-    assert by_id["q1"]["gold_answer"] == "second"
-    assert by_id["q2"]["gold_answer"] == "q2ans"
-    assert golds[0]["qa_id"] == "q1"  # most-recently-written first
+    by_id = {g["gold_id"]: g for g in golds}
+    assert by_id["g1"]["gold_answer"] == "second"
+    assert by_id["g2"]["gold_answer"] == "q2ans"
+    assert golds[0]["gold_id"] == "g1"  # most-recently-written first
+
+
+def test_golds_owned_entities_and_legacy_fallback(log_dir):
+    # Two distinct golds for the same qa_id (an author's and a clone's) coexist.
+    il.log_gold("q1", gold_id="g1", question="Q1?", gold_answer="alice", author="alice")
+    il.log_gold("q1", gold_id="g2", question="Q1?", gold_answer="bob", author="bob")
+    # A legacy row (no gold_id) resolves to gold_id == qa_id — no migration.
+    il.append_jsonl(
+        log_dir / "gold.jsonl",
+        {
+            "v": 2,
+            "qa_id": "qOld",
+            "timestamp": il.utc_now_iso(timespec="auto", z=False),
+            "question": "?",
+            "gold_answer": "legacy",
+            "author": "old",
+        },
+    )
+    golds = il.read_latest_golds()
+    assert {"g1", "g2", "qOld"} <= {g["gold_id"] for g in golds}
+    assert sum(1 for g in golds if g["qa_id"] == "q1") == 2  # both survive
 
 
 def test_feedback_skips_legacy_string_ratings(log_dir):
@@ -41,6 +62,19 @@ def test_gold_curation_last_wins(log_dir):
     il.log_gold_curation("q1", included=True)
     il.log_gold_curation("q1", included=False)
     assert il.read_latest_curation() == {"q1": False}
+
+
+def test_audit_appends_every_row(log_dir):
+    il.log_audit(actor="alice", action="golds.curate", target="g1", detail={"included": False})
+    il.log_audit(actor="bob", action="index.rebuild", detail={"ok": True})
+
+    rows = il.read_audit()
+    assert {r["action"] for r in rows} == {"golds.curate", "index.rebuild"}
+    g = next(r for r in rows if r["action"] == "golds.curate")
+    assert g["actor"] == "alice"
+    assert g["target"] == "g1"
+    assert g["detail"]["included"] is False
+    assert len(il.read_audit(limit=1)) == 1  # cap honored
 
 
 def test_source_curation_last_wins(log_dir):

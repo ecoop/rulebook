@@ -47,11 +47,13 @@ sync_index_from_gcs()
 sync_logs_from_gcs()
 
 from rulebook.interaction_log import (  # noqa: E402
+    log_audit,
     log_feedback,
     log_gold,
     log_gold_curation,
     log_qa,
     log_source_curation,
+    read_audit,
     read_latest_curation,
     read_latest_feedback,
     read_latest_golds,
@@ -60,13 +62,37 @@ from rulebook.interaction_log import (  # noqa: E402
 )
 from rulebook.pipeline import DEFAULT_SPORTS, ask  # noqa: E402
 from rulebook.roles import (  # noqa: E402
+    CAP_ASK,
+    CAP_ATTRIBUTION_VIEW,
+    CAP_FEEDBACK_COMMENT,
+    CAP_FEEDBACK_TAG,
+    CAP_FEEDBACK_VIEW,
+    CAP_FEEDBACK_VIEW_ALL,
+    CAP_GOLD_AUTHOR,
+    CAP_GOLDS_CLONE,
+    CAP_GOLDS_CURATE,
+    CAP_GOLDS_VIEW,
+    CAP_GOLDS_VIEW_ALL,
+    CAP_INDEX_REBUILD,
+    CAP_RATE,
+    CAP_SOURCES_CURATE,
+    CAP_SOURCES_VIEW,
+    CAP_USERS_ADD,
+    CAP_USERS_CHANGE_ROLE,
+    CAP_USERS_REMOVE,
+    CAP_USERS_RENAME,
+    CAP_USERS_VIEW,
     RESET_SENTINEL,
+    ROLE_CAPABILITIES,
     ROLE_LADDER,
     append_role_row,
+    capabilities_for,
+    has_capability,
     is_valid_role,
+    level_number,
     overrides_from_rows,
     read_role_rows,
-    require_role,
+    require_capability,
     resolve_role,
 )
 from rulebook.store import list_sports  # noqa: E402
@@ -140,8 +166,8 @@ class FeedbackRequest(BaseModel):
     )
     comment: str | None = Field(
         default=None,
-        max_length=4000,
-        description="Optional note — what worked, what didn't, worth capturing for later review.",
+        max_length=400,
+        description="Optional note — what worked, what didn't. Capped short (400) to keep feedback terse; see rbac-capabilities.md.",
     )
 
 
@@ -160,9 +186,12 @@ class GoldResponse(BaseModel):
 
 
 class AdminGoldRow(BaseModel):
+    gold_id: str = Field(..., description="Stable id for this gold (legacy golds: == qa_id).")
     qa_id: str
     question: str
     gold_answer: str
+    author: str | None = Field(default=None, description="Who authored this gold (recipient label).")
+    is_own: bool = Field(..., description="Whether the current caller authored it — drives Edit vs Clone.")
     timestamp: str
     included: bool = Field(..., description="Whether this gold is included in the next index rebuild.")
 
@@ -172,8 +201,25 @@ class AdminGoldListResponse(BaseModel):
 
 
 class GoldCurationRequest(BaseModel):
-    qa_id: str
+    gold_id: str
     included: bool
+
+
+class CloneGoldResponse(BaseModel):
+    gold_id: str = Field(..., description="Id of the new gold, now owned by the caller.")
+    ok: bool = True
+
+
+class AuditRow(BaseModel):
+    timestamp: str
+    actor: str | None = None
+    action: str = Field(..., description="The capability the write exercised, e.g. 'golds.curate'.")
+    target: str | None = Field(default=None, description="Affected id — gold_id, source path, token…")
+    detail: dict = Field(default_factory=dict, description="Before→after specifics.")
+
+
+class AuditListResponse(BaseModel):
+    audit: list[AuditRow]
 
 
 class GoldCurationResponse(BaseModel):
@@ -227,7 +273,12 @@ class MeResponse(BaseModel):
         default=None,
         description="Guest label; null outside demo_mode / when unauthenticated.",
     )
-    role: str = Field(..., description="Effective role: suspended|novice|evaluator|admin|superuser.")
+    role: str = Field(..., description="Effective role — a level id, level0 (suspended) … level8 (superuser).")
+    level: int = Field(..., description="Numeric level 0–8, for ordering and the level badge.")
+    capabilities: list[str] = Field(
+        default_factory=list,
+        description="Sorted capability strings the effective role grants. The UI renders tabs/columns/buttons off these; the backend enforces them per-endpoint.",
+    )
     demo_mode: bool = Field(..., description="Whether the invite gate is active.")
 
 
@@ -438,7 +489,7 @@ def usage_endpoint() -> UsageResponse:
     response_model=AskResponse,
     dependencies=[
         Depends(app_state.enforce_ip_rate_limit),
-        Depends(require_role("novice")),
+        Depends(require_capability(CAP_ASK)),
     ],
 )
 def ask_endpoint(req: AskRequest) -> AskResponse:
@@ -494,7 +545,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
 @app.post(
     "/feedback",
     response_model=FeedbackResponse,
-    dependencies=[Depends(require_role("novice"))],
+    dependencies=[Depends(require_capability(CAP_RATE))],
 )
 def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     """Record a thumbs-up / thumbs-down on a prior answer.
@@ -504,16 +555,23 @@ def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
     log is a data source to be joined and filtered, not a database with
     referential integrity to enforce.
 
-    Partial permission (docs/roles.md): novices may submit a bare rating;
-    the richer surface (tags, free-text comment) requires evaluator+.
+    Partial permission (docs/rbac-capabilities.md §4): a bare rating is the
+    casual tier (#1); issue *tags* need `feedback.tag` (also #1), a free-text
+    *comment* needs `feedback.comment` (#2+). Enforced per-field so a lower rung
+    can still tag without commenting.
     """
     guest = get_current_guest()
     if (req.tags or req.comment) and settings.demo_mode:
         role = resolve_role(guest.token if guest else None)
-        if not is_valid_role(role) or ROLE_LADDER.index(role) < ROLE_LADDER.index("evaluator"):
+        if req.tags and not has_capability(role, CAP_FEEDBACK_TAG):
             raise HTTPException(
                 status_code=403,
-                detail="tags/comment require role 'evaluator'; rating alone is allowed",
+                detail="tags require the 'feedback.tag' capability; a bare rating is allowed",
+            )
+        if req.comment and not has_capability(role, CAP_FEEDBACK_COMMENT):
+            raise HTTPException(
+                status_code=403,
+                detail="a comment requires the 'feedback.comment' capability; a rating (with tags) is allowed",
             )
     log_feedback(
         req.qa_id,
@@ -528,22 +586,30 @@ def feedback_endpoint(req: FeedbackRequest) -> FeedbackResponse:
 @app.post(
     "/gold",
     response_model=GoldResponse,
-    dependencies=[Depends(require_role("evaluator"))],
+    dependencies=[Depends(require_capability(CAP_GOLD_AUTHOR))],
 )
 def gold_endpoint(req: GoldRequest) -> GoldResponse:
-    """Record a user-authored canonical answer for a prior qa_id.
+    """Author (or update) the caller's own gold for a qa_id.
 
-    Golds are picked up by scripts/build_index.py on the next rebuild —
-    each gold becomes retrievable chunks tagged by sport (via ## Sport
-    markdown headings) or as a shared/all-sports chunk if the answer
-    has no headings.
+    Ownership is intrinsic: this upserts the caller's *own* gold for the
+    qa_id — it reuses their existing gold's id if they have one, else mints a
+    new one, and never touches another author's gold. To fork someone else's
+    gold, use POST /advanced/golds/{gold_id}/clone. Golds are picked up by
+    scripts/build_index.py on the next rebuild.
     """
     guest = get_current_guest()
+    author = guest.recipient if guest else None
+    mine = next(
+        (g for g in read_latest_golds() if g["qa_id"] == req.qa_id and g.get("author") == author),
+        None,
+    )
+    gold_id = mine["gold_id"] if mine else uuid.uuid4().hex
     log_gold(
         req.qa_id,
+        gold_id=gold_id,
         question=req.question,
         gold_answer=req.gold_answer,
-        author=(guest.recipient if guest else None),
+        author=author,
     )
     return GoldResponse()
 
@@ -551,19 +617,23 @@ def gold_endpoint(req: GoldRequest) -> GoldResponse:
 @app.get(
     "/me",
     response_model=MeResponse,
-    dependencies=[Depends(require_role("novice"))],
+    dependencies=[Depends(require_capability(CAP_ASK))],
 )
 def me_endpoint() -> MeResponse:
-    """Current guest's identity + effective role — powers UI gating.
+    """Current guest's identity + effective role + capabilities — powers UI gating.
 
-    Gated at novice, so a `suspended` guest gets 403 here (the frontend
-    renders the suspended screen on that). Outside demo_mode there's no
-    guest: recipient is null and role is the novice default.
+    Gated on `ask` (which every non-suspended role has), so a `suspended`
+    guest gets 403 here — the frontend renders the suspended screen on that.
+    Outside demo_mode there's no guest: recipient is null and role is the
+    novice default.
     """
     guest = get_current_guest()
+    role = resolve_role(guest.token if guest else None)
     return MeResponse(
         recipient=(guest.recipient if guest else None),
-        role=resolve_role(guest.token if guest else None),
+        role=role,
+        level=level_number(role),
+        capabilities=sorted(capabilities_for(role)),
         demo_mode=settings.demo_mode,
     )
 
@@ -578,9 +648,9 @@ def _require_gcs_for_roles() -> tuple[str, str]:
 
 
 @app.get(
-    "/admin/roles",
+    "/advanced/roles",
     response_model=AdminRolesResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_USERS_VIEW))],
 )
 def admin_list_roles() -> AdminRolesResponse:
     """Merged role assignments (env seed ⊕ live roles.jsonl overrides)."""
@@ -601,16 +671,16 @@ def admin_list_roles() -> AdminRolesResponse:
 
 
 @app.post(
-    "/admin/roles",
+    "/advanced/roles",
     response_model=RoleChangeResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_USERS_CHANGE_ROLE))],
 )
 def admin_set_role(req: RoleChangeRequest) -> RoleChangeResponse:
     """Append a role change to roles.jsonl. Takes effect within the TTL."""
     if not is_valid_role(req.role):
         raise HTTPException(
             status_code=422,
-            detail=f"invalid role '{req.role}'; one of {list(ROLE_LADDER)}",
+            detail=f"invalid role '{req.role}'; one of {sorted(ROLE_CAPABILITIES)}",
         )
     bucket, obj = _require_gcs_for_roles()
     guest = get_current_guest()
@@ -626,13 +696,14 @@ def admin_set_role(req: RoleChangeRequest) -> RoleChangeResponse:
             "note": req.note,
         },
     )
+    _audit(CAP_USERS_CHANGE_ROLE, target=req.token, detail={"role": req.role})
     return RoleChangeResponse(token=req.token, role=req.role)
 
 
 @app.post(
-    "/admin/roles/{token}/reset",
+    "/advanced/roles/{token}/reset",
     response_model=RoleChangeResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_USERS_CHANGE_ROLE))],
 )
 def admin_reset_role(token: str) -> RoleChangeResponse:
     """Clear a token's override; role falls back to the env seed (or novice)."""
@@ -650,6 +721,7 @@ def admin_reset_role(token: str) -> RoleChangeResponse:
             "note": None,
         },
     )
+    _audit(CAP_USERS_CHANGE_ROLE, target=token, detail={"role": "reset"})
     return RoleChangeResponse(token=token, role=resolve_role(token))
 
 
@@ -663,9 +735,9 @@ def _require_gcs_for_invite_tokens() -> tuple[str, str]:
 
 
 @app.get(
-    "/admin/invite-tokens",
+    "/advanced/invite-tokens",
     response_model=InviteTokensResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_USERS_VIEW))],
 )
 def admin_list_invite_tokens() -> InviteTokensResponse:
     """Current GCS invite allowlist. Powers the Users tab's list."""
@@ -680,9 +752,9 @@ def admin_list_invite_tokens() -> InviteTokensResponse:
 
 
 @app.post(
-    "/admin/invite-tokens",
+    "/advanced/invite-tokens",
     response_model=AddInviteTokenResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_USERS_ADD))],
 )
 def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse:
     """Create a user: mint (or accept) a token and add it to the allowlist.
@@ -697,19 +769,20 @@ def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse
         raise HTTPException(status_code=409, detail=f"token already exists ({tokens[token]!r}).")
     tokens[token] = req.label
     write_tokens_object(bucket, obj, tokens)
+    _audit(CAP_USERS_ADD, target=token, detail={"label": req.label})
     return AddInviteTokenResponse(token=token, label=req.label)
 
 
 @app.delete(
-    "/admin/invite-tokens/{token}",
+    "/advanced/invite-tokens/{token}",
     response_model=RemoveInviteTokenResponse,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_USERS_REMOVE))],
 )
 def admin_remove_invite_token(token: str) -> RemoveInviteTokenResponse:
     """Remove a user from the allowlist (their cookie stops resolving).
 
     Note: this is hard removal. For a reversible, audit-preserving block,
-    set the user's role to `suspended` via /admin/roles instead.
+    set the user's role to `suspended` via /advanced/roles instead.
     """
     bucket, obj = _require_gcs_for_invite_tokens()
     tokens = read_tokens_object(bucket, obj)
@@ -717,13 +790,14 @@ def admin_remove_invite_token(token: str) -> RemoveInviteTokenResponse:
         raise HTTPException(status_code=404, detail="token not found.")
     label = tokens.pop(token)
     write_tokens_object(bucket, obj, tokens)
+    _audit(CAP_USERS_REMOVE, target=token, detail={"label": label})
     return RemoveInviteTokenResponse(token=token, label=label)
 
 
 @app.patch(
-    "/admin/invite-tokens/{token}",
+    "/advanced/invite-tokens/{token}",
     response_model=InviteTokenOut,
-    dependencies=[Depends(require_role("superuser"))],
+    dependencies=[Depends(require_capability(CAP_USERS_RENAME))],
 )
 def admin_rename_invite_token(token: str, req: RenameInviteTokenRequest) -> InviteTokenOut:
     """Rename a user's label, keeping the same token.
@@ -739,38 +813,129 @@ def admin_rename_invite_token(token: str, req: RenameInviteTokenRequest) -> Invi
         raise HTTPException(status_code=404, detail="token not found.")
     tokens[token] = req.label
     write_tokens_object(bucket, obj, tokens)
+    _audit(CAP_USERS_RENAME, target=token, detail={"label": req.label})
     return InviteTokenOut(token=token, label=req.label)
 
 
-@app.get("/admin/golds", response_model=AdminGoldListResponse, dependencies=[Depends(require_role("admin"))])
+def _view_scope(view_all_cap: str) -> tuple[bool, str | None]:
+    """Self/all scoping for an Advanced list (docs/rbac-capabilities.md §5).
+
+    Returns (see_all, author): with the `.all` capability the caller sees
+    everyone's rows (True, None); otherwise only their own, matched on the
+    author label stored with each row (False, <recipient>).
+    """
+    guest = get_current_guest()
+    role = resolve_role(guest.token if guest else None)
+    if has_capability(role, view_all_cap):
+        return True, None
+    return False, (guest.recipient if guest else None)
+
+
+def _audit(action: str, *, target: str | None = None, detail: dict | None = None) -> None:
+    """Record a shared-state mutation to the audit trail (§5). Call AFTER the
+    write succeeds so only committed actions are logged."""
+    guest = get_current_guest()
+    log_audit(
+        actor=(guest.recipient if guest else None),
+        action=action,
+        target=target,
+        detail=detail,
+    )
+
+
+@app.get("/advanced/golds", response_model=AdminGoldListResponse, dependencies=[Depends(require_capability(CAP_GOLDS_VIEW))])
 def admin_list_golds() -> AdminGoldListResponse:
     """Merged view of gold.jsonl + gold_curation.jsonl.
 
     Latest gold per qa_id joined with latest curation decision (default
-    included=True when no curation row exists).
+    included=True when no curation row exists). Self-scoped without
+    `golds.view.all`: the caller sees only golds they authored.
     """
     curation = read_latest_curation()
+    guest = get_current_guest()
+    me_author = guest.recipient if guest else None
+    see_all = has_capability(resolve_role(guest.token if guest else None), CAP_GOLDS_VIEW_ALL)
+    golds = read_latest_golds()
+    if not see_all:
+        golds = [g for g in golds if g.get("author") == me_author]
     rows = [
         AdminGoldRow(
+            gold_id=g["gold_id"],
             qa_id=g["qa_id"],
             question=g["question"],
             gold_answer=g["gold_answer"],
+            author=g.get("author"),
+            is_own=g.get("author") == me_author,
             timestamp=g["timestamp"],
-            included=curation.get(g["qa_id"], True),
+            included=curation.get(g["gold_id"], True),
         )
-        for g in read_latest_golds()
+        for g in golds
     ]
     return AdminGoldListResponse(golds=rows)
 
 
-@app.post("/admin/gold-curation", response_model=GoldCurationResponse, dependencies=[Depends(require_role("admin"))])
+@app.post("/advanced/gold-curation", response_model=GoldCurationResponse, dependencies=[Depends(require_capability(CAP_GOLDS_CURATE))])
 def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
-    """Toggle whether a gold is included in the next index rebuild."""
-    log_gold_curation(req.qa_id, included=req.included)
+    """Toggle whether a specific gold is included in the next index rebuild."""
+    log_gold_curation(req.gold_id, included=req.included)
+    _audit(CAP_GOLDS_CURATE, target=req.gold_id, detail={"included": req.included})
     return GoldCurationResponse()
 
 
-@app.get("/admin/feedback", response_model=AdminFeedbackListResponse, dependencies=[Depends(require_role("admin"))])
+@app.post(
+    "/advanced/golds/{gold_id}/clone",
+    response_model=CloneGoldResponse,
+    dependencies=[Depends(require_capability(CAP_GOLDS_CLONE))],
+)
+def admin_clone_gold(gold_id: str) -> CloneGoldResponse:
+    """Fork a gold into a new one owned by the caller (docs/rbac-capabilities.md §5).
+
+    Nothing is edited in place — the source gold is untouched; the caller gets
+    their own copy (same qa_id + question + text, new id, author = caller),
+    which they can then edit as their own. This is how #6 (operator) acts on
+    another user's gold: clone, then edit the clone.
+    """
+    src = next((g for g in read_latest_golds() if g["gold_id"] == gold_id), None)
+    if src is None:
+        raise HTTPException(status_code=404, detail="gold not found.")
+    guest = get_current_guest()
+    new_id = uuid.uuid4().hex
+    log_gold(
+        src["qa_id"],
+        gold_id=new_id,
+        question=src["question"],
+        gold_answer=src["gold_answer"],
+        author=(guest.recipient if guest else None),
+    )
+    _audit(CAP_GOLDS_CLONE, target=gold_id, detail={"new_gold_id": new_id})
+    return CloneGoldResponse(gold_id=new_id)
+
+
+@app.get(
+    "/advanced/audit",
+    response_model=AuditListResponse,
+    dependencies=[Depends(require_capability(CAP_ATTRIBUTION_VIEW))],
+)
+def admin_list_audit(limit: int = 200) -> AuditListResponse:
+    """Recent shared-state mutations, newest-first.
+
+    Gated on `attribution.view` (level 6+): seeing who did what is the same
+    trust tier as seeing who authored what (the §5 attribution wall).
+    """
+    rows = [
+        AuditRow(
+            timestamp=r["timestamp"],
+            actor=r.get("actor"),
+            action=r["action"],
+            target=r.get("target"),
+            detail=r.get("detail") or {},
+        )
+        for r in read_audit(limit=limit)
+    ]
+    return AuditListResponse(audit=rows)
+
+
+@app.get("/advanced/feedback", response_model=AdminFeedbackListResponse, dependencies=[Depends(require_capability(CAP_FEEDBACK_VIEW))])
 def admin_list_feedback() -> AdminFeedbackListResponse:
     """List the latest feedback event per qa_id, sorted newest-first.
 
@@ -778,12 +943,17 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
     UI can flag which rated answers already have a curator-authored
     correction. Legacy v1 (binary up/down) feedback rows are filtered
     out — they don't have tag/comment fields and would render as noise.
+    Self-scoped without `feedback.view.all`: the caller sees only feedback
+    they authored.
     """
     questions = read_qa_questions()
     gold_qa_ids = {g["qa_id"] for g in read_latest_golds()}
 
+    see_all, author = _view_scope(CAP_FEEDBACK_VIEW_ALL)
     rows: list[AdminFeedbackRow] = []
     for r in read_latest_feedback():
+        if not see_all and r.get("author") != author:
+            continue
         rows.append(
             AdminFeedbackRow(
                 qa_id=r["qa_id"],
@@ -798,7 +968,7 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
     return AdminFeedbackListResponse(feedback=rows)
 
 
-@app.get("/admin/sources", response_model=AdminSourceListResponse, dependencies=[Depends(require_role("admin"))])
+@app.get("/advanced/sources", response_model=AdminSourceListResponse, dependencies=[Depends(require_capability(CAP_SOURCES_VIEW))])
 def admin_list_sources() -> AdminSourceListResponse:
     """List every source file under rules/<sport>/ with its inclusion state.
 
@@ -831,14 +1001,15 @@ def admin_list_sources() -> AdminSourceListResponse:
     return AdminSourceListResponse(sources=rows)
 
 
-@app.post("/admin/source-curation", response_model=SourceCurationResponse, dependencies=[Depends(require_role("admin"))])
+@app.post("/advanced/source-curation", response_model=SourceCurationResponse, dependencies=[Depends(require_capability(CAP_SOURCES_CURATE))])
 def admin_set_source_curation(req: SourceCurationRequest) -> SourceCurationResponse:
     """Toggle whether a source file is included in the next index rebuild."""
     log_source_curation(req.path, included=req.included)
+    _audit(CAP_SOURCES_CURATE, target=req.path, detail={"included": req.included})
     return SourceCurationResponse()
 
 
-@app.post("/admin/rebuild-index", response_model=RebuildIndexResponse, dependencies=[Depends(require_role("admin"))])
+@app.post("/advanced/rebuild-index", response_model=RebuildIndexResponse, dependencies=[Depends(require_capability(CAP_INDEX_REBUILD))])
 def admin_rebuild_index() -> RebuildIndexResponse:
     """Run scripts/build_index.py synchronously and return its outcome.
 
@@ -865,8 +1036,10 @@ def admin_rebuild_index() -> RebuildIndexResponse:
     def _tail(s: str, lines: int = 20) -> str:
         return "\n".join(s.strip().splitlines()[-lines:])
 
+    ok = proc.returncode == 0
+    _audit(CAP_INDEX_REBUILD, detail={"ok": ok, "duration_seconds": round(elapsed, 2)})
     return RebuildIndexResponse(
-        ok=(proc.returncode == 0),
+        ok=ok,
         duration_seconds=round(elapsed, 2),
         stdout_tail=_tail(proc.stdout),
         stderr_tail=_tail(proc.stderr) if proc.returncode != 0 else "",
