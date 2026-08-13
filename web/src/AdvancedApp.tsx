@@ -670,9 +670,17 @@ export default function AdvancedApp() {
                 Curate gold answers and source files. Excluded rows are skipped by the next index rebuild.
               </p>
             </div>
-            <a href="#/" className="text-sm text-muted-foreground hover:text-foreground hover:underline">
-              ← back to Q&amp;A
-            </a>
+            <div className="flex flex-col items-end gap-1">
+              {me?.recipient && (
+                <span className="flex items-center gap-1.5 text-sm">
+                  <span className="font-medium text-foreground">{me.recipient}</span>
+                  {me.demo_mode && <LevelBadge level={me.level} />}
+                </span>
+              )}
+              <a href="#/" className="text-sm text-muted-foreground hover:text-foreground hover:underline">
+                ← back to Q&amp;A
+              </a>
+            </div>
           </div>
         </div>
       </header>
