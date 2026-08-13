@@ -1244,39 +1244,39 @@ export default function AdvancedApp() {
               </div>
             )}
             {inviteTokens !== null && userRows.length > 0 && (
-              <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
-                <table className="w-full text-sm">
+              <section className="w-fit max-w-full overflow-x-auto rounded-md border border-border bg-card shadow-sm">
+                <table className="text-sm">
                   <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2">
                         <button
                           type="button"
                           onClick={() => setUserSort((s) => nextSort(s, 'label'))}
-                          className="hover:text-foreground"
+                          className="uppercase hover:text-foreground"
                         >
                           name{sortIndicator(userSort.col === 'label', userSort.dir)}
                         </button>
                       </th>
-                      <th className="w-40 px-3 py-2">token</th>
-                      <th className="w-36 px-3 py-2">
+                      <th className="px-3 py-2">token</th>
+                      <th className="px-3 py-2">
                         <button
                           type="button"
                           onClick={() => setUserSort((s) => nextSort(s, 'role'))}
-                          className="hover:text-foreground"
+                          className="uppercase hover:text-foreground"
                         >
                           role{sortIndicator(userSort.col === 'role', userSort.dir)}
                         </button>
                       </th>
-                      <th className="w-20 px-3 py-2">
+                      <th className="px-3 py-2">
                         <button
                           type="button"
                           onClick={() => setUserSort((s) => nextSort(s, 'source'))}
-                          className="hover:text-foreground"
+                          className="uppercase hover:text-foreground"
                         >
                           source{sortIndicator(userSort.col === 'source', userSort.dir)}
                         </button>
                       </th>
-                      <th className="w-40 px-3 py-2 text-right">actions</th>
+                      <th className="px-3 py-2 text-right">actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1288,7 +1288,7 @@ export default function AdvancedApp() {
                           key={u.token}
                           className={'hover:bg-accent' + (busy ? ' opacity-50' : '')}
                         >
-                          <td className="px-3 py-2 text-foreground">
+                          <td className="whitespace-nowrap px-3 py-2 text-foreground">
                             {editingToken === u.token ? (
                               <div className="flex items-center gap-1.5">
                                 <input
@@ -1301,7 +1301,7 @@ export default function AdvancedApp() {
                                     if (e.key === 'Enter') void renameUser(u.token, u.label)
                                     if (e.key === 'Escape') cancelRename()
                                   }}
-                                  className="w-full rounded-md border border-input bg-card px-2 py-1 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                                  className="w-full min-w-[12rem] rounded-md border border-input bg-card px-2 py-1 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                                 />
                                 <button
                                   type="button"
