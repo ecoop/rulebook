@@ -63,13 +63,16 @@ coincide (`level4`). The plan makes them fully independent, then data-driven.
 **Phase 0 — done.** Capability mechanism (`require_capability`, `ROLE_CAPABILITIES`,
 `has_capability`), hardcoded 8-rung bundles, display labels + colors + badge.
 
-**Phase 1 — clean separation + fingerprint** *(small, backend-only, no behaviour change)*
-- Treat the **label** as fully separate from the id: badge/picker read `ROLE_LEVELS[id].label`;
-  the id is opaque. (Mostly true already — this just makes it explicit and drops any
-  remaining "name implies order" assumptions.)
-- Add `role_fingerprint(id) -> str` = `sha256(sorted(caps))[:8]`. Surface it in `/me`,
-  `/advanced/roles`, and each audit row, so "this role's permissions changed on <date>" is
-  answerable. Derived; nothing else changes.
+**Phase 1 — fingerprint** ✅ *(backend-only, no behaviour change)*
+- `capability_fingerprint(caps)` = `sha256(",".join(sorted(set(caps))))[:8]` and
+  `role_fingerprint(role)` in `roles.py`. Order-independent; a fingerprint, not an id.
+- Surfaced in **`/me`** (`fingerprint`), **`/advanced/roles`** (per assignment), and each
+  **audit row** (`actor_fingerprint` — records the actor's powers at the time; audit schema
+  → v2). So "did this role's permissions change?" / "with what powers did they act?" are
+  answerable by comparing 8 chars.
+- *(Deferred, rides with the badge/title work:)* making the display **label** an explicit
+  `ROLE_LEVELS[id].name` field. The ids are already opaque and stable — the levels/badge
+  just still show the number, pending final titles.
 
 **Phase 2 — roles become data** *(the §7 move)*
 - Move `ROLE_CAPABILITIES` from a code literal to a GCS object (`role_defs.json`), same

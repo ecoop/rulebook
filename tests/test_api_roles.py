@@ -52,6 +52,8 @@ def test_me_reports_seed_role(client):
     # the contract the frontend renders tabs/columns/buttons against.
     assert body["capabilities"] == sorted(roles.ROLE_CAPABILITIES["level8"])
     assert "roles.manage" in body["capabilities"]
+    # Fingerprint of the role's capability set — 8 hex, matches the helper.
+    assert body["fingerprint"] == roles.role_fingerprint("level8")
 
 
 def test_me_defaults_to_level1(client):
@@ -176,6 +178,10 @@ def test_mutation_is_audited_and_audit_is_gated(client, monkeypatch):
     assert audited[-1]["action"] == "golds.curate"
     assert audited[-1]["target"] == "g9"
     assert audited[-1]["actor"] == "boss"
+    # The row records the actor's capability-set fingerprint at the time.
+    import rulebook.roles as roles
+
+    assert audited[-1]["actor_fingerprint"] == roles.role_fingerprint("level8")
 
     # Reading the trail needs attribution.view (level 6+): level8 ok, level4 denied.
     monkeypatch.setattr(main, "read_audit", lambda limit=None: [])
