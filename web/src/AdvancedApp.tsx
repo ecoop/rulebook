@@ -660,7 +660,7 @@ export default function AdvancedApp() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border bg-card">
-        <div className="mx-auto max-w-5xl px-6 py-4">
+        <div className="px-6 py-4 lg:pr-[19rem]">
           <div className="flex items-baseline justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold tracking-tight">
@@ -677,7 +677,10 @@ export default function AdvancedApp() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl space-y-4 px-6 py-6">
+      {/* Left-aligned, full-width, with a right gutter reserving space for the
+          floating widgets (they portal to <body> and show over this view too).
+          Mirrors the main page's layout — content shifts left, widgets stay. */}
+      <main className="space-y-4 px-6 py-6 lg:pr-[19rem]">
         {error && (
           <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
             <div className="font-medium">Request failed</div>
