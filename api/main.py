@@ -62,6 +62,7 @@ from rulebook.interaction_log import (  # noqa: E402
 )
 from rulebook.pipeline import DEFAULT_SPORTS, ask  # noqa: E402
 from rulebook.roles import (  # noqa: E402
+    CAP_ADVANCED_VIEW,
     CAP_ASK,
     CAP_ATTRIBUTION_VIEW,
     CAP_FEEDBACK_COMMENT,
@@ -636,6 +637,25 @@ def me_endpoint() -> MeResponse:
         capabilities=sorted(capabilities_for(role)),
         demo_mode=settings.demo_mode,
     )
+
+
+@app.get(
+    "/advanced/role-capabilities",
+    response_model=dict[str, list[str]],
+    dependencies=[Depends(require_capability(CAP_ADVANCED_VIEW))],
+)
+def advanced_role_capabilities() -> dict[str, list[str]]:
+    """The level→capability-bundle map, for the "View as level" preview.
+
+    Returns {"level0": [...sorted caps], … "level8": [...]} straight from
+    ROLE_CAPABILITIES. Static policy, not sensitive — the same table lives in
+    docs/rbac-capabilities.md. A superuser's UI uses it to re-gate itself as a
+    chosen level (which tabs/buttons/panels show) without reassigning anyone;
+    the actual API caller is unchanged, so this previews VISIBILITY only, never
+    server-side data scope. Gated on advanced.view — only the Advanced surface
+    (level 4+) can enumerate the bundles.
+    """
+    return {role: sorted(caps) for role, caps in ROLE_CAPABILITIES.items()}
 
 
 def _require_gcs_for_roles() -> tuple[str, str]:

@@ -16,6 +16,7 @@ import {
 } from './widgets/Diagnostics'
 import { DemoBody, DemoSummaryLine } from './widgets/Demo'
 import { LevelBadge } from './levels'
+import { useEffectiveCaps, useEffectiveLevel } from './preview'
 
 // -----------------------------------------------------------------------------
 // Types mirroring the FastAPI response shape. Kept inline (rather than in a
@@ -344,11 +345,18 @@ export default function App() {
     [],
   )
 
-  // UI gating by capability, active only in demo_mode. Authoring golds needs
-  // `gold.author` (level 3+); the Advanced link needs `advanced.view` (level 4+).
+  // UI gating by capability, active only in demo_mode. `effectiveCaps` is the
+  // REAL bundle normally, or the previewed level's bundle while a superuser is
+  // "viewing as" a lower level (see preview.tsx) — so this whole page reshapes
+  // in preview. Authoring golds needs `gold.author` (level 3+); the Advanced
+  // link needs `advanced.view` (level 4+); the retrieved passages panel needs
+  // `passages.view` (level 4+).
+  const effectiveCaps = useEffectiveCaps(me?.capabilities ?? [])
+  const effectiveLevel = useEffectiveLevel(me?.level ?? 0)
   const gatingActive = !!me && me.demo_mode
-  const canEvaluate = !gatingActive || (me != null && me.capabilities.includes('gold.author'))
-  const showAdminLink = !!me && (!me.demo_mode || me.capabilities.includes('advanced.view'))
+  const canEvaluate = !gatingActive || effectiveCaps.includes('gold.author')
+  const showAdminLink = !!me && (!me.demo_mode || effectiveCaps.includes('advanced.view'))
+  const showPassages = !gatingActive || effectiveCaps.includes('passages.view')
 
   if (meForbidden) {
     return (
@@ -410,7 +418,7 @@ export default function App() {
                   <span>Demo</span>
                   <span className="text-muted-foreground/70">·</span>
                   <span className="font-medium text-foreground">{usage.guest_recipient}</span>
-                  {me && me.demo_mode && <LevelBadge level={me.level} />}
+                  {me && me.demo_mode && <LevelBadge level={effectiveLevel} />}
                 </p>
               )}
               {showAdminLink && (
@@ -656,6 +664,7 @@ export default function App() {
               )}
             </section>
 
+            {showPassages && (
             <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
               <button
                 type="button"
@@ -677,6 +686,7 @@ export default function App() {
                 </div>
               )}
             </section>
+            )}
           </>
         )}
       </main>

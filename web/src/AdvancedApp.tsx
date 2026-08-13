@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react'
 import { LevelBadge, levelLabel, levelNumber } from './levels'
+import { useEffectiveCaps, useEffectiveLevel } from './preview'
 
 // Advanced surface — capability-gated tabs (feedback / golds / sources / users
 // / audit) for reviewers, operators, and admins. Reached via URL hash
@@ -197,9 +198,13 @@ export default function AdvancedApp() {
   const [editName, setEditName] = useState('')
 
   // Everything is gated by CAPABILITY, not rank (docs/rbac-capabilities.md §6):
-  // the UI renders a control iff /me's capability bundle grants it, and the
+  // the UI renders a control iff the capability bundle grants it, and the
   // backend enforces the same. `advanced.view` (level 4+) opens the page at all.
-  const caps = me?.capabilities ?? []
+  // `caps` is the REAL bundle normally, or the previewed level's bundle while a
+  // superuser is "viewing as" a lower level (see preview.tsx) — so every tab and
+  // control below reshapes in preview, exactly as that level would see it.
+  const caps = useEffectiveCaps(me?.capabilities ?? [])
+  const effLevel = useEffectiveLevel(me?.level ?? 0)
   const can = (c: string) => caps.includes(c)
   const canUseAdmin = !!me && can('advanced.view')
 
@@ -708,7 +713,7 @@ export default function AdvancedApp() {
               <>
                 You need at least <span className="font-medium">Level 4</span> to see the
                 Advanced page. Your level is{' '}
-                <LevelBadge level={me.level} className="align-middle" /> — ask a superuser to
+                <LevelBadge level={effLevel} className="align-middle" /> — ask a superuser to
                 promote you.
               </>
             )}

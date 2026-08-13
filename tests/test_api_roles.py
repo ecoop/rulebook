@@ -82,6 +82,25 @@ def test_admin_tabs_are_capability_gated(client):
     assert client.get("/advanced/golds").status_code == 403
 
 
+def test_role_capabilities_map(client):
+    # The level→caps map powers the "View as level" preview. Gated on
+    # advanced.view (level 4+); returns every level as a sorted bundle.
+    import rulebook.roles as roles
+
+    _as(client, "tok_l4")
+    resp = client.get("/advanced/role-capabilities")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == set(roles.ROLE_CAPABILITIES)
+    assert body["level0"] == []
+    assert body["level1"] == ["ask", "feedback.tag", "rate"]
+    assert body["level8"] == sorted(roles.ROLE_CAPABILITIES["level8"])
+
+    # Below advanced.view (level 1 novice) → 403.
+    _as(client, "tok_nov")
+    assert client.get("/advanced/role-capabilities").status_code == 403
+
+
 def test_admin_roles_superuser_only(client):
     _as(client, "tok_nov")
     assert client.get("/advanced/roles").status_code == 403
