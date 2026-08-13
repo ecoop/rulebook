@@ -660,7 +660,7 @@ export default function AdvancedApp() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border bg-card">
-        <div className="px-6 py-4 lg:pr-[19rem]">
+        <div className="px-6 py-4 md:pr-[19rem]">
           <div className="flex items-baseline justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold tracking-tight">
@@ -680,7 +680,7 @@ export default function AdvancedApp() {
       {/* Left-aligned, full-width, with a right gutter reserving space for the
           floating widgets (they portal to <body> and show over this view too).
           Mirrors the main page's layout — content shifts left, widgets stay. */}
-      <main className="space-y-4 px-6 py-6 lg:pr-[19rem]">
+      <main className="space-y-4 px-6 py-6 md:pr-[19rem]">
         {error && (
           <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
             <div className="font-medium">Request failed</div>
@@ -1244,8 +1244,8 @@ export default function AdvancedApp() {
               </div>
             )}
             {inviteTokens !== null && userRows.length > 0 && (
-              <section className="w-fit max-w-full overflow-x-auto rounded-md border border-border bg-card shadow-sm">
-                <table className="text-sm">
+              <section className="w-full overflow-x-auto rounded-md border border-border bg-card shadow-sm">
+                <table className="w-full text-sm">
                   <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2">
