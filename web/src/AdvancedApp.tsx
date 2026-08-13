@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
-import { LevelBadge, levelLabel, levelNumber } from './levels'
+import { LevelBadge, levelInfo, levelNumber } from './levels'
 
 // Advanced surface — capability-gated tabs (feedback / golds / sources / users
 // / audit) for reviewers, operators, and admins. Reached via URL hash
@@ -1346,21 +1346,19 @@ export default function AdvancedApp() {
                             </button>
                           </td>
                           <td className="px-3 py-2">
-                            <div className="flex items-center gap-2">
-                              <LevelBadge level={levelNumber(u.role)} />
-                              <select
-                                value={u.role}
-                                disabled={busy || !can('users.change_role')}
-                                onChange={(e) => void changeRole(u.token, e.target.value)}
-                                className="rounded-md border border-input bg-card px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                              >
-                                {ladder.map((r) => (
-                                  <option key={r} value={r}>
-                                    {levelLabel(levelNumber(r))}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                            <select
+                              value={u.role}
+                              disabled={busy || !can('users.change_role')}
+                              onChange={(e) => void changeRole(u.token, e.target.value)}
+                              title={levelInfo(levelNumber(u.role)).description}
+                              className="rounded-md border border-input bg-card px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                            >
+                              {ladder.map((r) => (
+                                <option key={r} value={r}>
+                                  {levelInfo(levelNumber(r)).name}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{u.source}</td>
                           <td className="px-3 py-2">
