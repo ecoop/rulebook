@@ -146,6 +146,20 @@ def test_rung_boundaries():
     assert not hasattr(roles, "CAP_GOLDS_EDIT_ANY")
 
 
+def test_capability_fingerprint():
+    fp = roles.capability_fingerprint
+    # Order-independent: the same SET always yields the same 8-hex fingerprint.
+    assert fp(["ask", "rate", "gold.author"]) == fp(["gold.author", "ask", "rate"])
+    assert len(fp(["ask"])) == 8
+    # Any change to the set changes the fingerprint.
+    assert fp(["ask", "rate"]) != fp(["ask", "rate", "gold.author"])
+    # level3 (Contributor) = {ask, rate, feedback.tag, feedback.comment, gold.author};
+    # sorted+hashed → the value shown in docs/rbac-data-driven-roles.md.
+    assert roles.role_fingerprint("level3") == "8cee04a2"
+    # Distinct bundles → distinct fingerprints.
+    assert roles.role_fingerprint("level3") != roles.role_fingerprint("level4")
+
+
 def test_unknown_role_has_no_capabilities():
     assert roles.capabilities_for("wizard") == frozenset()
     assert not roles.has_capability("wizard", roles.CAP_ASK)

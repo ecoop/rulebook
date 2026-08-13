@@ -29,6 +29,7 @@ the public tier.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -189,6 +190,24 @@ def capabilities_for(role: str) -> frozenset[str]:
 
 def has_capability(role: str, capability: str) -> bool:
     return capability in capabilities_for(role)
+
+
+def capability_fingerprint(caps: Iterable[str]) -> str:
+    """Short content-address of a capability SET (docs/rbac-data-driven-roles.md).
+
+    Order-independent by construction (sort before hashing), so the same set of
+    capabilities always yields the same 8-hex fingerprint regardless of how it
+    was assembled. A fingerprint, NOT an identity: it changes whenever the set
+    changes, so it's for dedup / "did this role's powers change?" / audit — not
+    the assignment key.
+    """
+    canonical = ",".join(sorted(set(caps)))
+    return hashlib.sha256(canonical.encode()).hexdigest()[:8]
+
+
+def role_fingerprint(role: str) -> str:
+    """Fingerprint of a role's CURRENT capability bundle (empty set → its own hash)."""
+    return capability_fingerprint(capabilities_for(role))
 
 
 # ── Resolution ────────────────────────────────────────────────────────────
