@@ -14,7 +14,6 @@ import {
   DiagnosticsSummaryLine,
   type DiagnosticsSnapshot,
 } from './widgets/Diagnostics'
-import { DemoBody, DemoSummaryLine } from './widgets/Demo'
 import { LevelBadge } from './levels'
 
 // -----------------------------------------------------------------------------
@@ -334,12 +333,6 @@ export default function App() {
         header: (c) => <DiagnosticsSummaryLine diag={c.diag} />,
         render: (c) => <DiagnosticsBody diag={c.diag} />,
       },
-      {
-        id: 'demo',
-        defaultCollapsed: true,
-        header: (c) => <DemoSummaryLine usage={c.usage} />,
-        render: (c) => <DemoBody usage={c.usage} />,
-      },
     ],
     [],
   )
@@ -407,8 +400,6 @@ export default function App() {
               )}
               {usage?.guest_recipient && (
                 <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <span>Demo</span>
-                  <span className="text-muted-foreground/70">·</span>
                   <span className="font-medium text-foreground">{usage.guest_recipient}</span>
                   {me && me.demo_mode && <LevelBadge level={me.level} />}
                 </p>
