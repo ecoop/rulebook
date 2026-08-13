@@ -24,6 +24,7 @@ RATIONALE
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -57,20 +58,34 @@ QA_LOG_SCHEMA_VERSION = 3
 # chunks on the next rebuild so future similar questions surface them.
 #   v1  {qa_id, timestamp, question, gold_answer}
 #   v2  v1 + optional `author` (guest-auth recipient label; null before adoption)
-GOLD_SCHEMA_VERSION = 2
+#   v3  v2 + `gold_id` — golds are OWNED entities now (docs/rbac-capabilities.md
+#       §5): several golds can coexist per qa_id (different authors / clones), so
+#       identity moves from qa_id to a per-gold id. Legacy rows (no gold_id)
+#       resolve to gold_id == qa_id on read, so nothing needs migrating.
+GOLD_SCHEMA_VERSION = 3
 
 # Gold curation — admin decisions about whether a given gold should be
 # included in the next index rebuild. Kept SEPARATE from gold.jsonl so
 # gold stays "what the user authored" and curation stays "what the admin
-# decided". Both are append-only; latest row per qa_id wins.
-#   v1  {qa_id, included: bool, timestamp} (current)
-GOLD_CURATION_SCHEMA_VERSION = 1
+# decided". Both are append-only; latest row per gold wins.
+#   v1  {qa_id, included, timestamp}          (keyed by qa_id)
+#   v2  {gold_id, included, timestamp}        (keyed by gold_id; legacy v1
+#       rows key on qa_id == the legacy gold_id, so they still apply)
+GOLD_CURATION_SCHEMA_VERSION = 2
 
 # Source-file curation — admin decisions about whether a given source file
 # under rules/<sport>/ is picked up by the next index rebuild. Same shape
 # as gold curation but keyed by relative path.
 #   v1  {path, included: bool, timestamp} (current)
 SOURCE_CURATION_SCHEMA_VERSION = 1
+
+# Audit trail — an append-only record of shared-state mutations (curate,
+# clone, rebuild, user/role changes), so "who changed the shared system, and
+# when" is answerable (docs/rbac-capabilities.md §5). Self-scoped writes
+# (ratings, own golds) are already on the record via their own logs, so this
+# captures only the actions that touch others' / shared state.
+#   v1  {actor, action, target, detail, timestamp}
+AUDIT_SCHEMA_VERSION = 1
 
 # Append + last-row-wins reads come from the shared `jsonl-log` library
 # (jsonl_log.append_jsonl / read_latest / read_latest_list). It serializes
@@ -131,21 +146,25 @@ def log_qa(
 def log_gold(
     qa_id: str,
     *,
+    gold_id: str,
     question: str,
     gold_answer: str,
     author: str | None = None,
 ) -> None:
-    """Record a user-authored gold (canonical) answer for a qa_id.
+    """Record a user-authored gold (canonical) answer, identified by gold_id.
 
-    Same append-only semantics as feedback: multiple rows per qa_id are
-    allowed and the latest wins. Question text is duplicated from qa_log
-    so gold.jsonl is self-contained for downstream consumers (the index
+    Append-only; the latest row per gold_id wins (editing a gold appends a new
+    row with the same gold_id). Several golds can share a qa_id — different
+    authors, or clones (docs/rbac-capabilities.md §5). Question text is
+    duplicated from qa_log so gold.jsonl is self-contained for downstream
+    consumers (the index
     builder, a future admin UI, etc).
     """
     _append(
         "gold.jsonl",
         {
             "v": GOLD_SCHEMA_VERSION,
+            "gold_id": gold_id,
             "qa_id": qa_id,
             "timestamp": utc_now_iso(timespec="auto", z=False),
             "question": question,
@@ -155,11 +174,11 @@ def log_gold(
     )
 
 
-def log_gold_curation(qa_id: str, *, included: bool) -> None:
-    """Record an admin decision about whether a gold answer is included in
-    the RAG index on the next rebuild.
+def log_gold_curation(gold_id: str, *, included: bool) -> None:
+    """Record an admin decision about whether a gold is included in the RAG
+    index on the next rebuild.
 
-    Append-only; latest row per qa_id wins. Absent-from-file is treated
+    Append-only; latest row per gold_id wins. Absent-from-file is treated
     as "included by default" so a freshly-authored gold flows into the
     index without an admin having to approve it first.
     """
@@ -167,29 +186,68 @@ def log_gold_curation(qa_id: str, *, included: bool) -> None:
         "gold_curation.jsonl",
         {
             "v": GOLD_CURATION_SCHEMA_VERSION,
-            "qa_id": qa_id,
+            "gold_id": gold_id,
             "timestamp": utc_now_iso(timespec="auto", z=False),
             "included": included,
         },
     )
 
 
-def read_latest_golds() -> list[dict[str, Any]]:
-    """Return the latest gold row per qa_id, sorted newest-first.
+def _read_gold_rows() -> list[dict[str, Any]]:
+    """All gold rows, each with a resolved `gold_id` (legacy rows: == qa_id).
 
-    Empty list if the log doesn't exist yet.
+    Read raw rather than via read_latest_list because the key is computed
+    (gold_id-or-qa_id) — jsonl_log keys on a fixed field name, which can't
+    express the legacy fallback.
     """
-    return read_latest_list(_log_dir() / "gold.jsonl", "qa_id", sort_desc="timestamp")
+    path = _log_dir() / "gold.jsonl"
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    with path.open() as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            row["gold_id"] = row.get("gold_id") or row["qa_id"]
+            rows.append(row)
+    return rows
+
+
+def read_latest_golds() -> list[dict[str, Any]]:
+    """Latest gold row per gold_id, sorted newest-first.
+
+    Legacy rows (no gold_id) key on their qa_id, preserving the old
+    one-gold-per-qa_id history; new golds carry a distinct gold_id so several
+    can coexist per qa_id. Empty list if the log doesn't exist yet.
+    """
+    latest: dict[str, dict[str, Any]] = {}
+    for row in _read_gold_rows():  # append-only file → last write wins
+        latest[row["gold_id"]] = row
+    return sorted(latest.values(), key=lambda r: r.get("timestamp", ""), reverse=True)
 
 
 def read_latest_curation() -> dict[str, bool]:
-    """Return {qa_id: included} for the latest curation row per qa_id.
+    """Return {gold_id: included} for the latest curation row per gold.
 
-    Absent qa_ids default to included=True at the call site — this
-    function just reports what the log says, no defaulting.
+    Legacy curation rows key on qa_id, which equals the legacy gold_id, so
+    they still apply. Absent gold_ids default to included=True at the call
+    site — this function just reports what the log says, no defaulting.
     """
-    latest = read_latest(_log_dir() / "gold_curation.jsonl", "qa_id")
-    return {qa_id: bool(row["included"]) for qa_id, row in latest.items()}
+    path = _log_dir() / "gold_curation.jsonl"
+    if not path.exists():
+        return {}
+    latest: dict[str, bool] = {}
+    with path.open() as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            key = row.get("gold_id") or row["qa_id"]
+            latest[key] = bool(row["included"])
+    return latest
 
 
 def read_latest_feedback() -> list[dict[str, Any]]:
@@ -241,6 +299,48 @@ def read_latest_source_curation() -> dict[str, bool]:
     """
     latest = read_latest(_log_dir() / "source_curation.jsonl", "path")
     return {path: bool(row["included"]) for path, row in latest.items()}
+
+
+def log_audit(
+    *,
+    actor: str | None,
+    action: str,
+    target: str | None = None,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    """Append one row to the audit trail for a shared-state mutation.
+
+    `actor` is the guest recipient label, `action` the capability the write
+    exercised (e.g. "golds.curate"), `target` the affected id (gold_id, source
+    path, token…), `detail` any before→after specifics. Append-only; every row
+    is kept (this is the record, not a latest-wins state).
+    """
+    _append(
+        "audit.jsonl",
+        {
+            "v": AUDIT_SCHEMA_VERSION,
+            "timestamp": utc_now_iso(timespec="auto", z=False),
+            "actor": actor,
+            "action": action,
+            "target": target,
+            "detail": detail or {},
+        },
+    )
+
+
+def read_audit(limit: int | None = None) -> list[dict[str, Any]]:
+    """Return audit rows, newest-first (optionally capped at `limit`)."""
+    path = _log_dir() / "audit.jsonl"
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    with path.open() as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(json.loads(line))
+    rows.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
+    return rows[:limit] if limit is not None else rows
 
 
 def log_feedback(
