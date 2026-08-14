@@ -217,8 +217,10 @@ def test_users_tab_reports_engagement(client, monkeypatch):
     monkeypatch.setattr(settings, "state_backend_kind", "gcs")
     monkeypatch.setattr(settings, "gcs_state_bucket", "b")
     monkeypatch.setattr(main, "read_tokens_object", lambda *a: {"tok_zzz": "Zed", "tok_super": "boss"})
-    # Question counts key on the author label; join happens by label.
+    # Activity counts key on the author label; join happens by label.
     monkeypatch.setattr(main, "count_questions_by_author", lambda: {"Zed": 7})
+    monkeypatch.setattr(main, "count_comments_by_author", lambda: {"Zed": 3})
+    monkeypatch.setattr(main, "count_golds_by_author", lambda: {"Zed": 2})
 
     # A unique token so other tests' /me touches can't perturb the count.
     app_state.token_counter.record(1200, token="tok_zzz")
@@ -228,10 +230,14 @@ def test_users_tab_reports_engagement(client, monkeypatch):
     assert rows["Zed"]["weekly_tokens"] == 1200
     assert rows["Zed"]["last_seen"] is not None
     assert rows["Zed"]["questions"] == 7
-    # boss recorded no tokens / questions → 0 tokens / $0 / 0 questions.
+    assert rows["Zed"]["comments"] == 3
+    assert rows["Zed"]["golds"] == 2
+    # boss recorded no activity → all zero.
     assert rows["boss"]["weekly_tokens"] == 0
     assert rows["boss"]["weekly_usd"] == 0.0
     assert rows["boss"]["questions"] == 0
+    assert rows["boss"]["comments"] == 0
+    assert rows["boss"]["golds"] == 0
 
 
 def test_count_questions_by_author(monkeypatch):
@@ -245,3 +251,35 @@ def test_count_questions_by_author(monkeypatch):
     }
     monkeypatch.setattr(il, "read_latest", lambda *a, **k: fake)
     assert il.count_questions_by_author() == {"Ann": 2, "Bob": 1}
+
+
+def test_count_golds_by_author(monkeypatch):
+    import rulebook.interaction_log as il
+
+    rows = [{"author": "Ann"}, {"author": "Ann"}, {"author": "Bob"}, {"author": None}]
+    monkeypatch.setattr(il, "read_latest_golds", lambda: rows)
+    assert il.count_golds_by_author() == {"Ann": 2, "Bob": 1}
+
+
+def test_count_comments_by_author(tmp_path, monkeypatch):
+    import json
+
+    import rulebook.interaction_log as il
+
+    fb = tmp_path / "feedback.jsonl"
+    fb.write_text(
+        "\n".join(
+            json.dumps(r)
+            for r in [
+                {"qa_id": "q1", "author": "Ann", "rating": 5, "comment": "great"},
+                {"qa_id": "q1", "author": "Ann", "rating": 4, "comment": "edited"},  # same pair → 1
+                {"qa_id": "q2", "author": "Ann", "rating": 3, "comment": "  "},       # blank → not a comment
+                {"qa_id": "q3", "author": "Bob", "rating": 2, "comment": "meh"},
+                {"qa_id": "q4", "author": "Bob", "rating": 1},                        # no comment field
+                {"qa_id": "q5", "author": None, "rating": 5, "comment": "anon"},      # no author → skipped
+            ]
+        )
+        + "\n"
+    )
+    monkeypatch.setattr(il, "_log_dir", lambda: tmp_path)
+    assert il.count_comments_by_author() == {"Ann": 1, "Bob": 1}
