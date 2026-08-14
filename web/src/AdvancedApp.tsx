@@ -27,6 +27,16 @@ interface RebuildResult {
   stderr_tail: string
 }
 
+interface IndexInfo {
+  build_id: string | null
+  built_at: string | null
+  git_sha: string | null
+  build_num: string | null
+  count: number
+  sources: { sport: string; file: string }[]
+  gold_chunks: number
+}
+
 interface AdminSourceRow {
   path: string
   sport: string
@@ -225,6 +235,7 @@ export default function AdvancedApp() {
   const [pending, setPending] = useState<Set<string>>(() => new Set())
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildResult, setRebuildResult] = useState<RebuildResult | null>(null)
+  const [indexInfo, setIndexInfo] = useState<IndexInfo | null>(null)
   // Single-editor policy: only one row's gold_answer can be edited at a
   // time. Clicking "Edit" on another row discards the in-flight buffer.
   const [editingQaId, setEditingQaId] = useState<string | null>(null)
@@ -296,6 +307,7 @@ export default function AdvancedApp() {
     if (can('feedback.view')) void refreshFeedback()
     if (can('users.view')) void refreshUsers()
     if (can('attribution.view')) void refreshAudit()
+    if (can('index.rebuild')) void refreshIndexInfo()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canUseAdmin, caps.join(',')])
 
@@ -574,6 +586,15 @@ export default function AdvancedApp() {
     }
   }
 
+  async function refreshIndexInfo() {
+    try {
+      const resp = await fetch('/advanced/index-info')
+      if (resp.ok) setIndexInfo((await resp.json()) as IndexInfo)
+    } catch {
+      /* non-fatal — the line just won't show */
+    }
+  }
+
   async function rebuildIndex() {
     if (rebuilding) return
     setRebuilding(true)
@@ -585,6 +606,7 @@ export default function AdvancedApp() {
       setRebuildResult(data)
       // A rebuild may have picked up new files added on disk since page load.
       void refreshSources()
+      void refreshIndexInfo()
     } catch (err) {
       setRebuildResult({
         ok: false,
@@ -827,7 +849,18 @@ export default function AdvancedApp() {
           <>
         {/* Rebuild control — index.rebuild (level 6+); global to all tabs. */}
         {can('index.rebuild') && (
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[11px] text-muted-foreground">
+            {indexInfo?.built_at ? (
+              <>
+                Current index: built {new Date(indexInfo.built_at).toLocaleString()} · build{' '}
+                {indexInfo.build_num} ({indexInfo.git_sha}) · {indexInfo.count} chunks ·{' '}
+                {indexInfo.sources.length} sources · {indexInfo.gold_chunks} golds
+              </>
+            ) : (
+              <>Current index: no build stamp yet — rebuild to record provenance</>
+            )}
+          </div>
           <button
             type="button"
             onClick={rebuildIndex}
