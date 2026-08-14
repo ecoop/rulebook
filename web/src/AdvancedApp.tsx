@@ -115,7 +115,26 @@ type AdminTab = 'feedback' | 'golds' | 'sources' | 'users' | 'audit'
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
 type SourceSortCol = 'included' | 'sport' | 'path' | 'size_bytes' | 'modified_at'
-type UserSortCol = 'label' | 'role' | 'lastSeen' | 'questions' | 'comments' | 'golds' | 'weeklyTokens'
+type UserSortCol = 'label' | 'role' | 'lastSeen' | 'questions' | 'golds' | 'weeklyTokens'
+
+const USER_SORT_KEY = 'rulebook.usersSort'
+const USER_SORT_COLS: readonly UserSortCol[] = [
+  'label', 'role', 'lastSeen', 'questions', 'golds', 'weeklyTokens',
+]
+
+// Restore the persisted Users-tab sort, validating against current columns so
+// a stale/removed column (or a private-mode read error) falls back cleanly.
+function loadUserSort(): { col: UserSortCol; dir: SortDir } {
+  try {
+    const p = JSON.parse(localStorage.getItem(USER_SORT_KEY) ?? '')
+    if ((USER_SORT_COLS as readonly string[]).includes(p?.col) && (p?.dir === 'asc' || p?.dir === 'desc')) {
+      return { col: p.col, dir: p.dir }
+    }
+  } catch {
+    /* no/invalid stored value — use the default */
+  }
+  return { col: 'label', dir: 'asc' }
+}
 
 // Compact "3d ago" style for the Users tab's last-seen column.
 function fmtRelative(iso: string | null): string {
@@ -228,10 +247,18 @@ export default function AdvancedApp() {
     col: 'sport',
     dir: 'asc',
   })
-  const [userSort, setUserSort] = useState<{ col: UserSortCol; dir: SortDir }>({
-    col: 'label',
-    dir: 'asc',
-  })
+  // Users-tab sort persists across visits (localStorage) — handy in review
+  // mode where you keep coming back to the same sort.
+  const [userSort, setUserSort] = useState<{ col: UserSortCol; dir: SortDir }>(() =>
+    loadUserSort(),
+  )
+  useEffect(() => {
+    try {
+      localStorage.setItem(USER_SORT_KEY, JSON.stringify(userSort))
+    } catch {
+      /* storage unavailable (private mode / quota) — non-fatal */
+    }
+  }, [userSort])
   // Users tab (superuser). `me` powers tab visibility; the table joins the
   // invite allowlist with role assignments.
   const [me, setMe] = useState<MeResponse | null>(null)
@@ -714,7 +741,6 @@ export default function AdvancedApp() {
       if (col === 'role') return (roleRank(a.role) - roleRank(b.role)) * mult
       if (col === 'weeklyTokens') return (a.weeklyTokens - b.weeklyTokens) * mult
       if (col === 'questions') return (a.questions - b.questions) * mult
-      if (col === 'comments') return (a.comments - b.comments) * mult
       if (col === 'golds') return (a.golds - b.golds) * mult
       // ISO timestamps sort lexicographically = chronologically; never-seen
       // ('') sorts first, so ascending surfaces lurkers at the top.
@@ -1369,16 +1395,6 @@ export default function AdvancedApp() {
                       <th className="px-3 py-2 text-right">
                         <button
                           type="button"
-                          onClick={() => setUserSort((s) => nextSort(s, 'comments'))}
-                          className="uppercase hover:text-foreground"
-                          title="Lifetime answers this user has commented on"
-                        >
-                          # comments{sortIndicator(userSort.col === 'comments', userSort.dir)}
-                        </button>
-                      </th>
-                      <th className="px-3 py-2 text-right">
-                        <button
-                          type="button"
                           onClick={() => setUserSort((s) => nextSort(s, 'golds'))}
                           className="uppercase hover:text-foreground"
                           title="Gold answers this user owns"
@@ -1488,9 +1504,6 @@ export default function AdvancedApp() {
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
                             {u.questions > 0 ? u.questions : '—'}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                            {u.comments > 0 ? u.comments : '—'}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
                             {u.golds > 0 ? u.golds : '—'}
