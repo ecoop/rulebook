@@ -109,7 +109,7 @@ type AdminTab = 'feedback' | 'golds' | 'sources' | 'users' | 'audit'
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
 type SourceSortCol = 'included' | 'sport' | 'path' | 'size_bytes' | 'modified_at'
-type UserSortCol = 'label' | 'role' | 'source' | 'lastSeen' | 'weeklyTokens'
+type UserSortCol = 'label' | 'role' | 'lastSeen' | 'weeklyTokens'
 
 // Compact "3d ago" style for the Users tab's last-seen column.
 function fmtRelative(iso: string | null): string {
@@ -142,7 +142,7 @@ function fmtTokens(n: number): string {
 // "$0.03 · 1.2k" — combined weekly spend + tokens; em-dash when idle.
 function fmtEngagement(usd: number, tokens: number): string {
   if (!usd && !tokens) return '—'
-  return `${fmtMoney(usd)} · ${fmtTokens(tokens)}`
+  return `${fmtMoney(usd)} · ${fmtTokens(tokens)} tok`
 }
 
 // Logical role ordering (low→high) — numbered levels (docs/rbac-capabilities.md
@@ -1330,15 +1330,6 @@ export default function AdvancedApp() {
                       <th className="px-3 py-2">
                         <button
                           type="button"
-                          onClick={() => setUserSort((s) => nextSort(s, 'source'))}
-                          className="uppercase hover:text-foreground"
-                        >
-                          source{sortIndicator(userSort.col === 'source', userSort.dir)}
-                        </button>
-                      </th>
-                      <th className="px-3 py-2">
-                        <button
-                          type="button"
                           onClick={() => setUserSort((s) => nextSort(s, 'lastSeen'))}
                           className="uppercase hover:text-foreground"
                           title="Most recent visit (any page load) or question"
@@ -1440,7 +1431,6 @@ export default function AdvancedApp() {
                               ))}
                             </select>
                           </td>
-                          <td className="px-3 py-2 text-xs text-muted-foreground">{u.source}</td>
                           <td
                             className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground"
                             title={u.lastSeen ?? 'not seen since tracking began'}
@@ -1457,7 +1447,11 @@ export default function AdvancedApp() {
                                   type="button"
                                   onClick={() => void resetRole(u.token)}
                                   disabled={busy || u.source !== 'override'}
-                                  title="Clear the override → fall back to the env seed (or level 1)"
+                                  title={
+                                    u.source === 'override'
+                                      ? 'Clear this live role change → fall back to the seed (or Beginner)'
+                                      : 'Nothing to reset — this role isn’t a live override'
+                                  }
                                   className="rounded-md border border-input bg-card px-2 py-1 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
                                 >
                                   Reset
