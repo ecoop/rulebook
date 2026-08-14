@@ -120,9 +120,6 @@ def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[S
 # ~120k tokens per call; 64 is well under both for our chunk sizes.
 EMBED_BATCH_SIZE = 64
 
-# User-authored gold answers, appended by POST /gold. Optional — if the
-# file doesn't exist yet (no golds saved), we skip cleanly.
-GOLD_LOG = Path("data/logs/gold.jsonl")
 
 # Section-heading pattern for splitting a gold answer into per-sport
 # chunks. Matches a line beginning with "## Ultimate" or "## Goaltimate"
@@ -233,9 +230,11 @@ def _split_by_sport_heading(text: str, known_sports: set[str]) -> list[tuple[str
 
 
 def main() -> None:
-    repo_root = settings.repo_root
-
-    rules_root = repo_root / RULES_ROOT
+    # Use settings.rules_dir, not repo_root / RULES_ROOT: once rulebook is
+    # pip-installed, repo_root resolves to a site-packages ancestor with no
+    # rules/. rules_dir has the fallback the running app already relies on
+    # (CWD-relative rules/, i.e. /app/rules when we run with cwd=/app).
+    rules_root = settings.rules_dir
     if not rules_root.is_dir():
         raise FileNotFoundError(f"Missing rules directory: {rules_root}")
 
@@ -259,7 +258,11 @@ def main() -> None:
 
         all_chunks.extend(chunks)
 
-    gold_chunks = load_gold_chunks(repo_root / GOLD_LOG)
+    # Golds live under settings.data_dir/logs (where log_sync pulls prod's
+    # gold.jsonl) — NOT repo_root, which is a site-packages ancestor once
+    # installed. Reading the wrong path here would silently drop every
+    # user-authored gold from the rebuilt index.
+    gold_chunks = load_gold_chunks(settings.data_dir / "logs" / "gold.jsonl")
     if gold_chunks:
         by_sport: dict[str, int] = {}
         for c in gold_chunks:
