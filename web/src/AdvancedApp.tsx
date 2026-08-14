@@ -148,8 +148,10 @@ function fmtEngagement(usd: number, tokens: number): string {
 }
 
 // The shareable invite URL for a token — what an admin actually wants to copy.
-function inviteLinkFor(token: string): string {
-  return `${window.location.origin}/?token=${token}`
+// The `name` param is ignored by the server (only `token` is read); it's a
+// sanity check so the sender can eyeball whose link they're about to send.
+function inviteLinkFor(token: string, label: string): string {
+  return `${window.location.origin}/?token=${token}&name=${encodeURIComponent(label)}`
 }
 
 // Logical role ordering (low→high) — numbered levels (docs/rbac-capabilities.md
@@ -1280,7 +1282,7 @@ export default function AdvancedApp() {
               </div>
               {newInvite &&
                 (() => {
-                  const link = `${window.location.origin}/?token=${newInvite.token}`
+                  const link = inviteLinkFor(newInvite.token, newInvite.label)
                   return (
                     <div className="mt-3 rounded-md border border-green-300 bg-green-50 p-3 text-xs text-green-900">
                       <div className="mb-1 font-medium">
@@ -1428,11 +1430,11 @@ export default function AdvancedApp() {
                           <td className="px-3 py-2">
                             <button
                               type="button"
-                              onClick={() => void copy(inviteLinkFor(u.token))}
+                              onClick={() => void copy(inviteLinkFor(u.token, u.label))}
                               title="Click to copy this user's invite link"
                               className="font-mono text-xs text-muted-foreground hover:text-foreground"
                             >
-                              {u.token.slice(0, 12)}…{copied === inviteLinkFor(u.token) ? ' ✓' : ''}
+                              {u.token.slice(0, 12)}…{copied === inviteLinkFor(u.token, u.label) ? ' ✓' : ''}
                             </button>
                           </td>
                           <td className="px-3 py-2">
