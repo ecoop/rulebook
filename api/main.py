@@ -1099,9 +1099,15 @@ def admin_rebuild_index() -> RebuildIndexResponse:
     ever goes multi-user.
     """
     started = time.monotonic()
+    # api/main.py lives at <root>/api/main.py in both the repo and the /app
+    # image, so derive the app root from __file__. settings.repo_root can't be
+    # used here: once rulebook is pip-installed it resolves to a site-packages
+    # ancestor (/opt/venv/…), where scripts/ doesn't exist — the rebuild button
+    # failed with "can't open …/scripts/build_index.py".
+    app_root = Path(__file__).resolve().parent.parent
     proc = subprocess.run(
-        [sys.executable, "scripts/build_index.py"],
-        cwd=str(settings.repo_root),
+        [sys.executable, str(app_root / "scripts" / "build_index.py")],
+        cwd=str(app_root),
         capture_output=True,
         text=True,
         timeout=300,
