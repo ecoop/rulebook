@@ -657,7 +657,7 @@ export default function App() {
                   {sourcesOpen ? '▼' : '▶'} Retrieved sources ({result.chunks.length})
                 </span>
                 <span className="text-xs font-normal text-muted-foreground">
-                  these chunks fed the model above
+                  the sources the model drew from above
                 </span>
               </button>
               {sourcesOpen && (
