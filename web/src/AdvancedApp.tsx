@@ -73,6 +73,9 @@ interface AuditRow {
 interface InviteTokenOut {
   token: string
   label: string
+  last_seen: string | null
+  weekly_usd: number
+  weekly_tokens: number
 }
 
 interface InviteTokensResponse {
@@ -90,12 +93,15 @@ interface AdminRolesResponse {
   ladder: string[]
 }
 
-// One row per invite token, joined with its effective role.
+// One row per invite token, joined with its effective role + engagement.
 interface UserRow {
   token: string
   label: string
   role: string
   source: string
+  lastSeen: string | null
+  weeklyUsd: number
+  weeklyTokens: number
 }
 
 type AdminTab = 'feedback' | 'golds' | 'sources' | 'users' | 'audit'
@@ -103,7 +109,41 @@ type AdminTab = 'feedback' | 'golds' | 'sources' | 'users' | 'audit'
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
 type SourceSortCol = 'included' | 'sport' | 'path' | 'size_bytes' | 'modified_at'
-type UserSortCol = 'label' | 'role' | 'source'
+type UserSortCol = 'label' | 'role' | 'source' | 'lastSeen' | 'weeklyTokens'
+
+// Compact "3d ago" style for the Users tab's last-seen column.
+function fmtRelative(iso: string | null): string {
+  if (!iso) return '—'
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return '—'
+  const secs = Math.max(0, (Date.now() - then) / 1000)
+  if (secs < 60) return 'now'
+  const mins = secs / 60
+  if (mins < 60) return `${Math.floor(mins)}m`
+  const hrs = mins / 60
+  if (hrs < 24) return `${Math.floor(hrs)}h`
+  const days = hrs / 24
+  if (days < 30) return `${Math.floor(days)}d`
+  return `${Math.floor(days / 30)}mo`
+}
+
+function fmtMoney(n: number): string {
+  if (n <= 0) return '$0'
+  return n < 0.01 ? '<$0.01' : `$${n.toFixed(2)}`
+}
+
+function fmtTokens(n: number): string {
+  if (!n) return '0'
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`
+  return `${(n / 1_000_000).toFixed(1)}M`
+}
+
+// "$0.03 · 1.2k" — combined weekly spend + tokens; em-dash when idle.
+function fmtEngagement(usd: number, tokens: number): string {
+  if (!usd && !tokens) return '—'
+  return `${fmtMoney(usd)} · ${fmtTokens(tokens)}`
+}
 
 // Logical role ordering (low→high) — numbered levels (docs/rbac-capabilities.md
 // §4), a fallback when the backend ladder from GET /advanced/roles hasn't loaded.
@@ -642,14 +682,26 @@ export default function AdvancedApp() {
   const userRows: UserRow[] = (inviteTokens ?? [])
     .map((t) => {
       const r = roleByToken.get(t.token)
-      return { token: t.token, label: t.label, role: r?.role ?? 'level1', source: r?.source ?? '—' }
+      return {
+        token: t.token,
+        label: t.label,
+        role: r?.role ?? 'level1',
+        source: r?.source ?? '—',
+        lastSeen: t.last_seen,
+        weeklyUsd: t.weekly_usd,
+        weeklyTokens: t.weekly_tokens,
+      }
     })
     .sort((a, b) => {
       const { col, dir } = userSort
       const mult = dir === 'asc' ? 1 : -1
       if (col === 'role') return (roleRank(a.role) - roleRank(b.role)) * mult
+      if (col === 'weeklyTokens') return (a.weeklyTokens - b.weeklyTokens) * mult
+      // ISO timestamps sort lexicographically = chronologically; never-seen
+      // ('') sorts first, so ascending surfaces lurkers at the top.
+      if (col === 'lastSeen') return (a.lastSeen ?? '').localeCompare(b.lastSeen ?? '') * mult
       // Label and Source are case-insensitive alphabetical.
-      return a[col].localeCompare(b[col], undefined, { sensitivity: 'base' }) * mult
+      return String(a[col] ?? '').localeCompare(String(b[col] ?? ''), undefined, { sensitivity: 'base' }) * mult
     })
   // The Users tab shows with `users.view`; the controls inside gate on their
   // own caps (change_role / add / remove / rename), so level 7 (admin) manages
@@ -1284,6 +1336,26 @@ export default function AdvancedApp() {
                           source{sortIndicator(userSort.col === 'source', userSort.dir)}
                         </button>
                       </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => setUserSort((s) => nextSort(s, 'lastSeen'))}
+                          className="uppercase hover:text-foreground"
+                          title="Most recent visit (any page load) or question"
+                        >
+                          last seen{sortIndicator(userSort.col === 'lastSeen', userSort.dir)}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setUserSort((s) => nextSort(s, 'weeklyTokens'))}
+                          className="uppercase hover:text-foreground"
+                          title="This week's spend · tokens (resets Monday)"
+                        >
+                          this week{sortIndicator(userSort.col === 'weeklyTokens', userSort.dir)}
+                        </button>
+                      </th>
                       <th className="px-3 py-2 text-right">actions</th>
                     </tr>
                   </thead>
@@ -1369,6 +1441,15 @@ export default function AdvancedApp() {
                             </select>
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{u.source}</td>
+                          <td
+                            className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground"
+                            title={u.lastSeen ?? 'not seen since tracking began'}
+                          >
+                            {fmtRelative(u.lastSeen)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                            {fmtEngagement(u.weeklyUsd, u.weeklyTokens)}
+                          </td>
                           <td className="px-3 py-2">
                             <div className="flex justify-end gap-2 text-xs">
                               {can('users.change_role') && (

@@ -34,7 +34,7 @@ from typing import Callable, Optional
 from fastapi import Request
 
 from guest_auth import get_current_guest
-from llm_cost_governor.counters import CostCounter
+from llm_cost_governor.counters import CapDimension, CostCounter, RollingWeekCounter
 from llm_cost_governor.fastapi_ext import make_enforce_ip_rate_limit
 from llm_cost_governor.provider_totals import ProviderTotals, ProviderTotalsHook
 from llm_cost_governor.ratelimit import IPRateLimiter
@@ -44,6 +44,10 @@ from .config import Settings
 
 # Module-level singletons, populated by initialize().
 cost_counter: Optional[CostCounter] = None
+# Per-token engagement tally: weekly token count + last_seen, keyed by invite
+# token. Not a guardrail (no cap enforced) — reuses the rolling-week counter
+# purely to power the Users tab's "last seen" and "this week" columns.
+token_counter: Optional[RollingWeekCounter] = None
 ip_rate_limiter: Optional[IPRateLimiter] = None
 state_backend: Optional[StateBackend] = None
 _enforce_ip_rate_limit_impl: Optional[Callable[[Request], None]] = None
@@ -71,7 +75,7 @@ def current_guest_token() -> str | None:
 
 def initialize(settings: Settings) -> None:
     """Construct the guardrail singletons. Call once, before any router loads."""
-    global cost_counter, ip_rate_limiter, state_backend, _enforce_ip_rate_limit_impl
+    global cost_counter, token_counter, ip_rate_limiter, state_backend, _enforce_ip_rate_limit_impl
     global provider_totals, provider_totals_hook
 
     state_backend = get_backend(
@@ -90,6 +94,18 @@ def initialize(settings: Settings) -> None:
         per_token_cap_usd=settings.cap_per_token_usd,
     )
     cost_counter.load()
+
+    # Engagement tally — one "token" dimension, no real cap (analytics, not a
+    # guardrail): record() adds token counts on /ask and touches last_seen on
+    # /me; we never call enforce(). Persists on the same backend as the caps.
+    token_counter = RollingWeekCounter(
+        name="token_usage",
+        object_name="token_usage.json",
+        backend=state_backend,
+        dimensions=[CapDimension(name="token", cap=float("inf"), cap_id="token_week")],
+        enabled=settings.guardrails_enabled,
+    )
+    token_counter.load()
 
     ip_rate_limiter = IPRateLimiter()
     _enforce_ip_rate_limit_impl = make_enforce_ip_rate_limit(

@@ -205,3 +205,26 @@ def test_invite_tokens_need_gcs(client):
     assert client.post("/advanced/invite-tokens", json={"label": "x"}).status_code == 400
     assert client.patch("/advanced/invite-tokens/tok_x", json={"label": "y"}).status_code == 400
     assert client.delete("/advanced/invite-tokens/tok_x").status_code == 400
+
+
+def test_users_tab_reports_engagement(client, monkeypatch):
+    # The Users list joins each token's weekly tokens + last_seen (from the
+    # engagement counter) onto its allowlist row.
+    import api.main as main
+    import rulebook.app_state as app_state
+    from rulebook.config import settings
+
+    monkeypatch.setattr(settings, "state_backend_kind", "gcs")
+    monkeypatch.setattr(settings, "gcs_state_bucket", "b")
+    monkeypatch.setattr(main, "read_tokens_object", lambda *a: {"tok_zzz": "Zed", "tok_super": "boss"})
+
+    # A unique token so other tests' /me touches can't perturb the count.
+    app_state.token_counter.record(1200, token="tok_zzz")
+
+    _as(client, "tok_super")
+    rows = {r["label"]: r for r in client.get("/advanced/invite-tokens").json()["tokens"]}
+    assert rows["Zed"]["weekly_tokens"] == 1200
+    assert rows["Zed"]["last_seen"] is not None
+    # boss recorded no tokens → 0 tokens / $0 (last_seen may or may not be set).
+    assert rows["boss"]["weekly_tokens"] == 0
+    assert rows["boss"]["weekly_usd"] == 0.0

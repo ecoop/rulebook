@@ -23,6 +23,7 @@ from dataclasses import asdict
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from guest_auth import InviteAuthMiddleware, get_current_guest
+from llm_cost_governor.counters import _week_of  # canonical Monday-UTC week key; matches the cost counter's weekly buckets
 from pydantic import BaseModel, Field
 
 # Wire the guardrails singletons BEFORE anything Depends()-related runs.
@@ -312,6 +313,12 @@ class RoleChangeResponse(BaseModel):
 class InviteTokenOut(BaseModel):
     token: str
     label: str = Field(..., description="Human-readable recipient label.")
+    last_seen: str | None = Field(
+        None,
+        description="ISO timestamp of this user's most recent authenticated visit (/me) or question; null if never seen since tracking began.",
+    )
+    weekly_usd: float = Field(0.0, description="This user's spend this week (Mon-reset, USD).")
+    weekly_tokens: int = Field(0, description="This user's input+output tokens this week (Mon-reset).")
 
 
 class InviteTokensResponse(BaseModel):
@@ -534,6 +541,14 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
         author=(guest.recipient if guest else None),
     )
 
+    # Engagement tally for the Users tab's "this week" column. USD is recorded
+    # separately by the WindowedCapHook during generation; here we attribute
+    # the raw token count to the caller. Updates last_seen too.
+    if guest is not None and app_state.token_counter is not None:
+        app_state.token_counter.record(
+            result.input_tokens + result.output_tokens, token=guest.token
+        )
+
     return AskResponse(
         qa_id=qa_id,
         question=result.question,
@@ -632,6 +647,11 @@ def me_endpoint() -> MeResponse:
     novice default.
     """
     guest = get_current_guest()
+    # "Last seen" (Option A): the frontend calls /me once per page load, so
+    # touching the tally here (0 tokens) records a visit even for lurkers who
+    # open their invite link but never ask — exactly who we want to spot.
+    if guest is not None and app_state.token_counter is not None:
+        app_state.token_counter.record(0, token=guest.token)
     role = resolve_role(guest.token if guest else None)
     return MeResponse(
         recipient=(guest.recipient if guest else None),
@@ -739,18 +759,52 @@ def _require_gcs_for_invite_tokens() -> tuple[str, str]:
     return settings.gcs_state_bucket, settings.invite_tokens_object
 
 
+def _usage_by_token() -> dict[str, dict]:
+    """Per-token engagement for the Users tab: this week's $ + tokens + last seen.
+
+    This is a superuser-gated surface (the caller already sees every token),
+    so keying by raw invite token here is acceptable — unlike the public
+    /usage panel, which must never expose the per-token map.
+    """
+    per_usd: dict[str, float] = {}
+    if app_state.cost_counter is not None:
+        per_usd = app_state.cost_counter.current_usage().get("per_token", {})
+    tok_table: dict[str, dict] = {}
+    if app_state.token_counter is not None:
+        tok_table = app_state.token_counter.to_dict().get("dimensions", {}).get("token", {})
+
+    week = _week_of()
+    out: dict[str, dict] = {}
+    for tok in set(per_usd) | set(tok_table):
+        stat = tok_table.get(tok, {})
+        this_week = stat.get("week_of") == week
+        out[tok] = {
+            "weekly_usd": round(per_usd.get(tok, 0.0), 4),
+            "weekly_tokens": int(stat.get("amount_cumulative_week", 0)) if this_week else 0,
+            "last_seen": stat.get("last_seen"),
+        }
+    return out
+
+
 @app.get(
     "/advanced/invite-tokens",
     response_model=InviteTokensResponse,
     dependencies=[Depends(require_capability(CAP_USERS_VIEW))],
 )
 def admin_list_invite_tokens() -> InviteTokensResponse:
-    """Current GCS invite allowlist. Powers the Users tab's list."""
+    """Current GCS invite allowlist + per-user engagement. Powers the Users tab."""
     bucket, obj = _require_gcs_for_invite_tokens()
     tokens = read_tokens_object(bucket, obj)
+    usage = _usage_by_token()
     return InviteTokensResponse(
         tokens=[
-            InviteTokenOut(token=tok, label=label)
+            InviteTokenOut(
+                token=tok,
+                label=label,
+                last_seen=usage.get(tok, {}).get("last_seen"),
+                weekly_usd=usage.get(tok, {}).get("weekly_usd", 0.0),
+                weekly_tokens=usage.get(tok, {}).get("weekly_tokens", 0),
+            )
             for tok, label in sorted(tokens.items(), key=lambda kv: kv[1])
         ]
     )
