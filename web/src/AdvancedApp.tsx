@@ -35,6 +35,7 @@ interface IndexInfo {
   count: number
   sources: { sport: string; file: string }[]
   gold_chunks: number
+  chunks_by_sport: Record<string, number>
 }
 
 interface AdminSourceRow {
@@ -120,7 +121,7 @@ interface UserRow {
   golds: number
 }
 
-type AdminTab = 'feedback' | 'golds' | 'sources' | 'users' | 'audit'
+type AdminTab = 'feedback' | 'golds' | 'sources' | 'indices' | 'users' | 'audit'
 
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
@@ -847,51 +848,6 @@ export default function AdvancedApp() {
 
         {me && canUseAdmin && (
           <>
-        {/* Rebuild control — index.rebuild (level 6+); global to all tabs. */}
-        {can('index.rebuild') && (
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-[11px] text-muted-foreground">
-            {indexInfo?.built_at ? (
-              <>
-                Current index: built {new Date(indexInfo.built_at).toLocaleString()} · build{' '}
-                {indexInfo.build_num} ({indexInfo.git_sha}) · {indexInfo.count} chunks ·{' '}
-                {indexInfo.sources.length} sources · {indexInfo.gold_chunks} golds
-              </>
-            ) : (
-              <>Current index: no build stamp yet — rebuild to record provenance</>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={rebuildIndex}
-            disabled={rebuilding}
-            title="Runs scripts/build_index.py — typically 15s, occasionally up to a minute or two when Voyage is slow"
-            className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-          >
-            {rebuilding ? 'Rebuilding…' : 'Rebuild index'}
-          </button>
-        </div>
-        )}
-        {rebuildResult && (
-          <div
-            className={
-              'rounded-md border p-3 text-xs ' +
-              (rebuildResult.ok
-                ? 'border-green-300 bg-green-50 text-green-900'
-                : 'border-destructive/30 bg-destructive/10 text-destructive')
-            }
-          >
-            <div className="mb-1 font-medium">
-              {rebuildResult.ok
-                ? `Rebuilt in ${rebuildResult.duration_seconds}s`
-                : 'Rebuild failed'}
-            </div>
-            <pre className="whitespace-pre-wrap font-mono text-[11px] leading-snug">
-              {rebuildResult.ok ? rebuildResult.stdout_tail : rebuildResult.stderr_tail}
-            </pre>
-          </div>
-        )}
-
         {/* Tab bar — each tab shows only if the caller's capabilities grant it.
             Counts baked into labels so both are visible regardless of active tab. */}
         <div className="flex gap-1 border-b border-border text-sm">
@@ -899,6 +855,7 @@ export default function AdvancedApp() {
             ...(can('feedback.view') ? (['feedback'] as AdminTab[]) : []),
             ...(can('golds.view') ? (['golds'] as AdminTab[]) : []),
             ...(can('sources.view') ? (['sources'] as AdminTab[]) : []),
+            ...(can('index.rebuild') ? (['indices'] as AdminTab[]) : []),
             ...(showUsersTab ? (['users'] as AdminTab[]) : []),
             ...(can('attribution.view') ? (['audit'] as AdminTab[]) : []),
           ] as AdminTab[]).map((t) => {
@@ -912,9 +869,11 @@ export default function AdvancedApp() {
                     ? `Sources (${sourceIncluded}/${sourceTotal})`
                     : t === 'audit'
                       ? `Audit${audit ? ` (${audit.length})` : ''}`
-                      : canManageUsers
-                        ? `Users (${userRows.length})`
-                        : 'Users'
+                      : t === 'indices'
+                        ? 'Indices'
+                        : canManageUsers
+                          ? `Users (${userRows.length})`
+                          : 'Users'
             return (
               <button
                 key={t}
@@ -1625,6 +1584,82 @@ export default function AdvancedApp() {
               </tbody>
             </table>
           </section>
+        )}
+
+        {activeTab === 'indices' && (
+          <div className="space-y-4">
+            <section className="rounded-md border border-border bg-card p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-medium text-foreground">Active index</h3>
+                <button
+                  type="button"
+                  onClick={rebuildIndex}
+                  disabled={rebuilding}
+                  title="Runs scripts/build_index.py — typically 15s, occasionally a minute or two when Voyage is slow"
+                  className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                >
+                  {rebuilding ? 'Rebuilding…' : 'Rebuild index'}
+                </button>
+              </div>
+              {indexInfo?.built_at ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                    <span>built <span className="text-foreground">{new Date(indexInfo.built_at).toLocaleString()}</span></span>
+                    <span>build <span className="font-mono text-foreground">{indexInfo.build_num} ({indexInfo.git_sha})</span></span>
+                    <span><span className="text-foreground">{indexInfo.count}</span> chunks</span>
+                    <span><span className="text-foreground">{indexInfo.gold_chunks}</span> gold chunks</span>
+                    <span>
+                      {Object.entries(indexInfo.chunks_by_sport)
+                        .map(([sp, n]) => `${sp} ${n}`)
+                        .join(' · ')}
+                    </span>
+                  </div>
+                  <table className="w-full text-left text-xs">
+                    <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="py-1 pr-3 font-normal">sport</th>
+                        <th className="py-1 font-normal">source file</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {indexInfo.sources.map((s, i) => (
+                        <tr key={i}>
+                          <td className="whitespace-nowrap py-1.5 pr-3">
+                            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">{s.sport}</span>
+                          </td>
+                          <td className="py-1.5 font-mono text-[11px] text-foreground">{s.file}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  No build stamp yet — click Rebuild index to record provenance.
+                </div>
+              )}
+            </section>
+
+            {rebuildResult && (
+              <div
+                className={
+                  'rounded-md border p-3 text-xs ' +
+                  (rebuildResult.ok
+                    ? 'border-green-300 bg-green-50 text-green-900'
+                    : 'border-destructive/30 bg-destructive/10 text-destructive')
+                }
+              >
+                <div className="mb-1 font-medium">
+                  {rebuildResult.ok
+                    ? `Rebuilt in ${rebuildResult.duration_seconds}s`
+                    : 'Rebuild failed'}
+                </div>
+                <pre className="whitespace-pre-wrap font-mono text-[11px] leading-snug">
+                  {rebuildResult.ok ? rebuildResult.stdout_tail : rebuildResult.stderr_tail}
+                </pre>
+              </div>
+            )}
+          </div>
         )}
           </>
         )}
