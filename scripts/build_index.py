@@ -292,6 +292,14 @@ def main() -> None:
     print(f"[store ]  wrote {written} rows to {settings.resolved_index_path}")
     print(f"[done  ]  index dimension = {len(vectors[0])}")
 
+    # On a hosted (gcs) deploy, push the fresh index to the bucket so the
+    # rebuild is durable — otherwise it lives only in this instance's /tmp
+    # and the next restart re-pulls the old objects. No-op in local dev.
+    from rulebook.index_sync import publish_index_to_gcs
+
+    if publish_index_to_gcs():
+        print(f"[publish]  uploaded index to gs://{settings.gcs_state_bucket}/{'index/'}")
+
 
 if __name__ == "__main__":
     main()
