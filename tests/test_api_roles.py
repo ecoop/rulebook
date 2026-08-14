@@ -217,6 +217,8 @@ def test_users_tab_reports_engagement(client, monkeypatch):
     monkeypatch.setattr(settings, "state_backend_kind", "gcs")
     monkeypatch.setattr(settings, "gcs_state_bucket", "b")
     monkeypatch.setattr(main, "read_tokens_object", lambda *a: {"tok_zzz": "Zed", "tok_super": "boss"})
+    # Question counts key on the author label; join happens by label.
+    monkeypatch.setattr(main, "count_questions_by_author", lambda: {"Zed": 7})
 
     # A unique token so other tests' /me touches can't perturb the count.
     app_state.token_counter.record(1200, token="tok_zzz")
@@ -225,6 +227,21 @@ def test_users_tab_reports_engagement(client, monkeypatch):
     rows = {r["label"]: r for r in client.get("/advanced/invite-tokens").json()["tokens"]}
     assert rows["Zed"]["weekly_tokens"] == 1200
     assert rows["Zed"]["last_seen"] is not None
-    # boss recorded no tokens → 0 tokens / $0 (last_seen may or may not be set).
+    assert rows["Zed"]["questions"] == 7
+    # boss recorded no tokens / questions → 0 tokens / $0 / 0 questions.
     assert rows["boss"]["weekly_tokens"] == 0
     assert rows["boss"]["weekly_usd"] == 0.0
+    assert rows["boss"]["questions"] == 0
+
+
+def test_count_questions_by_author(monkeypatch):
+    import rulebook.interaction_log as il
+
+    fake = {
+        "q1": {"author": "Ann"},
+        "q2": {"author": "Ann"},
+        "q3": {"author": "Bob"},
+        "q4": {"author": None},  # anonymous / pre-adoption — skipped
+    }
+    monkeypatch.setattr(il, "read_latest", lambda *a, **k: fake)
+    assert il.count_questions_by_author() == {"Ann": 2, "Bob": 1}
