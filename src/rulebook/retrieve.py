@@ -26,11 +26,28 @@ PERFORMANCE NOTE
     the loaded Store in a module-level singleton behind a lock.
 """
 
+import re
 from dataclasses import dataclass
 
 from .config import settings
 from .embeddings import get_embedder
 from .store import open_store
+
+_WHITESPACE_RUN = re.compile(r"\s+")
+
+
+def _normalize_ws(text: str) -> str:
+    """Collapse whitespace runs into single spaces.
+
+    Some source PDFs extract as one word per line (``word\\n\\nword``),
+    which is baked into the stored chunks. Left as-is it renders as a
+    column of single words in the sources panel AND is what the model
+    receives. Collapsing runs of whitespace here — the one seam every
+    retrieved chunk passes through — cleans both the prompt context and
+    the panel without rebuilding the index. (Rule ids come from the
+    chunk header, not this text, so flattening structure is safe.)
+    """
+    return _WHITESPACE_RUN.sub(" ", text).strip()
 
 
 @dataclass
@@ -46,7 +63,7 @@ class RetrievedChunk:
 
 def _row_to_chunk(row: dict) -> RetrievedChunk:
     return RetrievedChunk(
-        text=row["text"],
+        text=_normalize_ws(row["text"]),
         source=row["source"],
         sport=row["sport"],
         rule_id=row["rule_id"],
