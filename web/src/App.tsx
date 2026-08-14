@@ -61,7 +61,7 @@ type IssueTag = 'wrong' | 'incomplete' | 'retrieval' | 'format'
 const TAG_LABELS: Record<IssueTag, string> = {
   wrong: 'wrong facts — needs correction',
   incomplete: 'missing context — corpus needs more info',
-  retrieval: 'wrong sources retrieved — retrieval quality issue',
+  retrieval: 'wrong passages retrieved — retrieval quality issue',
   format: 'facts right, delivery off — prompt tuning',
 }
 
@@ -654,10 +654,10 @@ export default function App() {
                 className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-accent"
               >
                 <span>
-                  {sourcesOpen ? '▼' : '▶'} Retrieved sources ({result.chunks.length})
+                  {sourcesOpen ? '▼' : '▶'} Retrieved passages ({result.chunks.length})
                 </span>
                 <span className="text-xs font-normal text-muted-foreground">
-                  the sources the model drew from above
+                  the passages the model drew from above
                 </span>
               </button>
               {sourcesOpen && (
