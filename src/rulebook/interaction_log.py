@@ -276,6 +276,22 @@ def read_qa_questions() -> dict[str, str]:
     return {qa_id: row.get("question", "") for qa_id, row in latest.items()}
 
 
+def count_questions_by_author() -> dict[str, int]:
+    """Lifetime question counts keyed by author (guest-auth recipient label).
+
+    One qa_id == one asked question, so we tally distinct qa_id rows per
+    author. Rows with no author (pre-adoption / anonymous) are skipped.
+    Powers the Users tab's "# questions" column.
+    """
+    latest = read_latest(_log_dir() / "qa_log.jsonl", "qa_id")
+    counts: dict[str, int] = {}
+    for row in latest.values():
+        author = row.get("author")
+        if author:
+            counts[author] = counts.get(author, 0) + 1
+    return counts
+
+
 def log_source_curation(source_path: str, *, included: bool) -> None:
     """Record an admin decision about a source file's inclusion.
 

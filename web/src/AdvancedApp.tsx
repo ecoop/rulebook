@@ -76,6 +76,7 @@ interface InviteTokenOut {
   last_seen: string | null
   weekly_usd: number
   weekly_tokens: number
+  questions: number
 }
 
 interface InviteTokensResponse {
@@ -102,6 +103,7 @@ interface UserRow {
   lastSeen: string | null
   weeklyUsd: number
   weeklyTokens: number
+  questions: number
 }
 
 type AdminTab = 'feedback' | 'golds' | 'sources' | 'users' | 'audit'
@@ -109,7 +111,7 @@ type AdminTab = 'feedback' | 'golds' | 'sources' | 'users' | 'audit'
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
 type SourceSortCol = 'included' | 'sport' | 'path' | 'size_bytes' | 'modified_at'
-type UserSortCol = 'label' | 'role' | 'lastSeen' | 'weeklyTokens'
+type UserSortCol = 'label' | 'role' | 'lastSeen' | 'questions' | 'weeklyTokens'
 
 // Compact "3d ago" style for the Users tab's last-seen column.
 function fmtRelative(iso: string | null): string {
@@ -695,6 +697,7 @@ export default function AdvancedApp() {
         lastSeen: t.last_seen,
         weeklyUsd: t.weekly_usd,
         weeklyTokens: t.weekly_tokens,
+        questions: t.questions,
       }
     })
     .sort((a, b) => {
@@ -702,6 +705,7 @@ export default function AdvancedApp() {
       const mult = dir === 'asc' ? 1 : -1
       if (col === 'role') return (roleRank(a.role) - roleRank(b.role)) * mult
       if (col === 'weeklyTokens') return (a.weeklyTokens - b.weeklyTokens) * mult
+      if (col === 'questions') return (a.questions - b.questions) * mult
       // ISO timestamps sort lexicographically = chronologically; never-seen
       // ('') sorts first, so ascending surfaces lurkers at the top.
       if (col === 'lastSeen') return (a.lastSeen ?? '').localeCompare(b.lastSeen ?? '') * mult
@@ -1345,6 +1349,16 @@ export default function AdvancedApp() {
                       <th className="px-3 py-2 text-right">
                         <button
                           type="button"
+                          onClick={() => setUserSort((s) => nextSort(s, 'questions'))}
+                          className="uppercase hover:text-foreground"
+                          title="Lifetime questions asked"
+                        >
+                          # questions{sortIndicator(userSort.col === 'questions', userSort.dir)}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2 text-right">
+                        <button
+                          type="button"
                           onClick={() => setUserSort((s) => nextSort(s, 'weeklyTokens'))}
                           className="uppercase hover:text-foreground"
                           title="This week's spend · tokens (resets Monday)"
@@ -1441,6 +1455,9 @@ export default function AdvancedApp() {
                             title={u.lastSeen ?? 'not seen since tracking began'}
                           >
                             {fmtRelative(u.lastSeen)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                            {u.questions > 0 ? u.questions : '—'}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
                             {fmtEngagement(u.weeklyUsd, u.weeklyTokens)}
