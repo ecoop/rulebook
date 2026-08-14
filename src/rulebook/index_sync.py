@@ -86,3 +86,56 @@ def sync_index_from_gcs() -> bool:
             _GCS_PREFIX,
         )
         return False
+
+
+def publish_index_to_gcs() -> bool:
+    """Upload the freshly-built index from ``resolved_index_path`` to GCS.
+
+    The mirror of :func:`sync_index_from_gcs`. Without it, a rebuild (the
+    ``/advanced/rebuild-index`` button) writes only the instance's ephemeral
+    ``/tmp`` copy and is lost on the next restart, which re-pulls the *old*
+    objects — so a hosted rebuild never sticks. Call this after
+    ``build_index`` writes the store so the rebuild is durable and every
+    instance converges on it at next boot.
+
+    No-op (returns ``False``) unless ``state_backend_kind == "gcs"`` and a
+    bucket is set. Best-effort: a failed push logs and returns ``False``
+    rather than failing the build.
+    """
+    if settings.state_backend_kind != "gcs" or not settings.gcs_state_bucket:
+        return False
+
+    bucket_name = settings.gcs_state_bucket
+    src = settings.resolved_index_path
+
+    try:
+        from google.cloud import storage
+
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+
+        pushed = 0
+        for name in _INDEX_FILES:
+            path = src / name
+            if not path.exists():
+                log.warning("index publish: %s missing — skipping", path)
+                continue
+            bucket.blob(f"{_GCS_PREFIX}{name}").upload_from_filename(str(path))
+            pushed += 1
+
+        log.info(
+            "index publish: pushed %d/%d files from %s to gs://%s/%s",
+            pushed,
+            len(_INDEX_FILES),
+            src,
+            bucket_name,
+            _GCS_PREFIX,
+        )
+        return pushed > 0
+    except Exception:  # noqa: BLE001 — a bad push shouldn't crash the rebuild
+        log.exception(
+            "index publish: failed pushing index to gs://%s/%s",
+            bucket_name,
+            _GCS_PREFIX,
+        )
+        return False
