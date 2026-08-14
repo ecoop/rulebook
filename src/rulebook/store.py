@@ -143,6 +143,7 @@ def write_store(
     *,
     provider: str,
     model: str,
+    manifest_extra: dict | None = None,
 ) -> int:
     """Persist chunks + vectors to disk. Returns rows written.
 
@@ -169,18 +170,17 @@ def write_store(
         for c in chunk_list:
             f.write(json.dumps(asdict(c)) + "\n")
 
+    manifest = {
+        "provider": provider,
+        "model": model,
+        "count": len(chunk_list),
+        "dimension": int(arr.shape[1]) if arr.size else 0,
+        "sports": sorted({c.sport for c in chunk_list}),
+    }
+    if manifest_extra:
+        manifest.update(manifest_extra)
     with (path / MANIFEST_FILE).open("w") as f:
-        json.dump(
-            {
-                "provider": provider,
-                "model": model,
-                "count": len(chunk_list),
-                "dimension": int(arr.shape[1]) if arr.size else 0,
-                "sports": sorted({c.sport for c in chunk_list}),
-            },
-            f,
-            indent=2,
-        )
+        json.dump(manifest, f, indent=2)
 
     return len(chunk_list)
 

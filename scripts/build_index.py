@@ -285,14 +285,38 @@ def main() -> None:
             embedder.embed([c.text for c in batch], input_type="document")
         )
 
+    # Build provenance stamped into the manifest so the index is self-describing
+    # (when it was built, from which commit + sources + golds) — the foundation
+    # for build history / rollback (#77).
+    from datetime import datetime, timezone
+
+    from rulebook.build_info import BUILD_INFO
+
+    now = datetime.now(timezone.utc)
+    chunks_by_sport: dict[str, int] = {}
+    for c in all_chunks:
+        chunks_by_sport[c.sport] = chunks_by_sport.get(c.sport, 0) + 1
+    provenance = {
+        "build_id": now.strftime("%Y%m%dT%H%M%SZ"),
+        "built_at": now.isoformat(timespec="seconds"),
+        "git_sha": BUILD_INFO.sha,
+        "build_num": BUILD_INFO.build_num,
+        "sources": [{"sport": s.sport, "file": s.path.name} for s in sources],
+        "gold_chunks": len(gold_chunks),
+        "chunks_by_sport": dict(sorted(chunks_by_sport.items())),
+    }
+
     written = write_store(
         settings.resolved_index_path,
         all_chunks,
         vectors,
         provider=settings.embedding_provider,
         model=settings.embedding_model,
+        manifest_extra=provenance,
     )
     print(f"[store ]  wrote {written} rows to {settings.resolved_index_path}")
+    print(f"[stamp ]  build {provenance['build_id']} @ {provenance['git_sha']} — "
+          f"{len(sources)} sources, {provenance['gold_chunks']} gold chunks")
     print(f"[done  ]  index dimension = {len(vectors[0])}")
 
     # On a hosted (gcs) deploy, push the fresh index to the bucket so the

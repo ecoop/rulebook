@@ -274,6 +274,21 @@ class RebuildIndexResponse(BaseModel):
     stderr_tail: str = Field(..., description="Last few lines of stderr if the build failed; empty on success.")
 
 
+class IndexInfoResponse(BaseModel):
+    """Provenance of the live index, read from its manifest (all null before a
+    stamped build exists)."""
+    build_id: str | None = None
+    built_at: str | None = None
+    git_sha: str | None = None
+    build_num: str | None = None
+    count: int = 0
+    dimension: int = 0
+    sports: list[str] = Field(default_factory=list)
+    gold_chunks: int = 0
+    sources: list[dict] = Field(default_factory=list)
+    chunks_by_sport: dict[str, int] = Field(default_factory=dict)
+
+
 class MeResponse(BaseModel):
     recipient: str | None = Field(
         default=None,
@@ -1124,6 +1139,39 @@ def admin_rebuild_index() -> RebuildIndexResponse:
         duration_seconds=round(elapsed, 2),
         stdout_tail=_tail(proc.stdout),
         stderr_tail=_tail(proc.stderr) if proc.returncode != 0 else "",
+    )
+
+
+@app.get(
+    "/advanced/index-info",
+    response_model=IndexInfoResponse,
+    dependencies=[Depends(require_capability(CAP_INDEX_REBUILD))],
+)
+def admin_index_info() -> IndexInfoResponse:
+    """Provenance of the live index, from its manifest — powers the
+    'Current index' line so the running index is self-describing (#77)."""
+    import json
+
+    from rulebook.store import MANIFEST_FILE
+
+    path = settings.resolved_index_path / MANIFEST_FILE
+    if not path.exists():
+        return IndexInfoResponse()
+    try:
+        d = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return IndexInfoResponse()
+    return IndexInfoResponse(
+        build_id=d.get("build_id"),
+        built_at=d.get("built_at"),
+        git_sha=d.get("git_sha"),
+        build_num=d.get("build_num"),
+        count=d.get("count", 0),
+        dimension=d.get("dimension", 0),
+        sports=d.get("sports", []),
+        gold_chunks=d.get("gold_chunks", 0),
+        sources=d.get("sources", []),
+        chunks_by_sport=d.get("chunks_by_sport", {}),
     )
 
 
