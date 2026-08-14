@@ -59,6 +59,8 @@ from rulebook.interaction_log import (  # noqa: E402
     read_latest_feedback,
     read_latest_golds,
     read_latest_source_curation,
+    count_comments_by_author,
+    count_golds_by_author,
     count_questions_by_author,
     read_qa_questions,
 )
@@ -321,6 +323,8 @@ class InviteTokenOut(BaseModel):
     weekly_usd: float = Field(0.0, description="This user's spend this week (Mon-reset, USD).")
     weekly_tokens: int = Field(0, description="This user's input+output tokens this week (Mon-reset).")
     questions: int = Field(0, description="Lifetime count of questions this user has asked.")
+    comments: int = Field(0, description="Lifetime count of answers this user has commented on.")
+    golds: int = Field(0, description="Lifetime count of gold answers this user owns.")
 
 
 class InviteTokensResponse(BaseModel):
@@ -798,8 +802,10 @@ def admin_list_invite_tokens() -> InviteTokensResponse:
     bucket, obj = _require_gcs_for_invite_tokens()
     tokens = read_tokens_object(bucket, obj)
     usage = _usage_by_token()
-    # Question counts key on the author *label*, not the token; join by label.
+    # Activity counts key on the author *label*, not the token; join by label.
     questions = count_questions_by_author()
+    comments = count_comments_by_author()
+    golds = count_golds_by_author()
     return InviteTokensResponse(
         tokens=[
             InviteTokenOut(
@@ -809,6 +815,8 @@ def admin_list_invite_tokens() -> InviteTokensResponse:
                 weekly_usd=usage.get(tok, {}).get("weekly_usd", 0.0),
                 weekly_tokens=usage.get(tok, {}).get("weekly_tokens", 0),
                 questions=questions.get(label, 0),
+                comments=comments.get(label, 0),
+                golds=golds.get(label, 0),
             )
             for tok, label in sorted(tokens.items(), key=lambda kv: kv[1])
         ]

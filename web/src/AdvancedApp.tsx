@@ -77,6 +77,8 @@ interface InviteTokenOut {
   weekly_usd: number
   weekly_tokens: number
   questions: number
+  comments: number
+  golds: number
 }
 
 interface InviteTokensResponse {
@@ -104,6 +106,8 @@ interface UserRow {
   weeklyUsd: number
   weeklyTokens: number
   questions: number
+  comments: number
+  golds: number
 }
 
 type AdminTab = 'feedback' | 'golds' | 'sources' | 'users' | 'audit'
@@ -111,7 +115,7 @@ type AdminTab = 'feedback' | 'golds' | 'sources' | 'users' | 'audit'
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
 type SourceSortCol = 'included' | 'sport' | 'path' | 'size_bytes' | 'modified_at'
-type UserSortCol = 'label' | 'role' | 'lastSeen' | 'questions' | 'weeklyTokens'
+type UserSortCol = 'label' | 'role' | 'lastSeen' | 'questions' | 'comments' | 'golds' | 'weeklyTokens'
 
 // Compact "3d ago" style for the Users tab's last-seen column.
 function fmtRelative(iso: string | null): string {
@@ -700,6 +704,8 @@ export default function AdvancedApp() {
         weeklyUsd: t.weekly_usd,
         weeklyTokens: t.weekly_tokens,
         questions: t.questions,
+        comments: t.comments,
+        golds: t.golds,
       }
     })
     .sort((a, b) => {
@@ -708,6 +714,8 @@ export default function AdvancedApp() {
       if (col === 'role') return (roleRank(a.role) - roleRank(b.role)) * mult
       if (col === 'weeklyTokens') return (a.weeklyTokens - b.weeklyTokens) * mult
       if (col === 'questions') return (a.questions - b.questions) * mult
+      if (col === 'comments') return (a.comments - b.comments) * mult
+      if (col === 'golds') return (a.golds - b.golds) * mult
       // ISO timestamps sort lexicographically = chronologically; never-seen
       // ('') sorts first, so ascending surfaces lurkers at the top.
       if (col === 'lastSeen') return (a.lastSeen ?? '').localeCompare(b.lastSeen ?? '') * mult
@@ -1361,6 +1369,26 @@ export default function AdvancedApp() {
                       <th className="px-3 py-2 text-right">
                         <button
                           type="button"
+                          onClick={() => setUserSort((s) => nextSort(s, 'comments'))}
+                          className="uppercase hover:text-foreground"
+                          title="Lifetime answers this user has commented on"
+                        >
+                          # comments{sortIndicator(userSort.col === 'comments', userSort.dir)}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setUserSort((s) => nextSort(s, 'golds'))}
+                          className="uppercase hover:text-foreground"
+                          title="Gold answers this user owns"
+                        >
+                          # gold{sortIndicator(userSort.col === 'golds', userSort.dir)}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2 text-right">
+                        <button
+                          type="button"
                           onClick={() => setUserSort((s) => nextSort(s, 'weeklyTokens'))}
                           className="uppercase hover:text-foreground"
                           title="This week's spend · tokens (resets Monday)"
@@ -1460,6 +1488,12 @@ export default function AdvancedApp() {
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
                             {u.questions > 0 ? u.questions : '—'}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                            {u.comments > 0 ? u.comments : '—'}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                            {u.golds > 0 ? u.golds : '—'}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
                             {fmtEngagement(u.weeklyUsd, u.weeklyTokens)}
