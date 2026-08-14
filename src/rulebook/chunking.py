@@ -98,6 +98,22 @@ MAX_CHARS = 1500       # ~350 tokens; comfortably under any embedder's cap
 MIN_CHARS = 60         # discard shorter fragments (headings-only, page numbers)
 SPLIT_OVERLAP = 150    # overlap between hard-cut pieces of an oversize section
 
+_WHITESPACE_RUN = re.compile(r"\s+")
+
+
+def _normalize_ws(text: str) -> str:
+    """Collapse whitespace runs to single spaces for a chunk's stored text.
+
+    pypdf extracts some text pages one word per line (``word\\n \\nword``);
+    anchor detection runs on the raw joined text (so rule ids stay correct),
+    but the text we store *and embed* per chunk should read as prose — clean
+    text embeds better (retrieval quality) and renders cleanly in the
+    passages panel. Applied after section splitting, so paragraph structure
+    is only used for splitting, not preserved in the chunk body. (The serving
+    path has a twin in retrieve._normalize_ws as a belt-and-suspenders.)
+    """
+    return _WHITESPACE_RUN.sub(" ", text).strip()
+
 
 def chunk_pages(pages: list[PageText], *, source: str, sport: str) -> list[Chunk]:
     """Chunk a list of PageText into a list of Chunk records."""
@@ -126,7 +142,7 @@ def chunk_pages(pages: list[PageText], *, source: str, sport: str) -> list[Chunk
                         rule_id="preamble",
                         page_start=1,
                         page_end=page_end,
-                        text=piece,
+                        text=_normalize_ws(piece),
                     )
                 )
 
@@ -144,7 +160,7 @@ def chunk_pages(pages: list[PageText], *, source: str, sport: str) -> list[Chunk
                     rule_id=rule_id,
                     page_start=page_start,
                     page_end=page_end,
-                    text=piece,
+                    text=_normalize_ws(piece),
                 )
             )
 
@@ -370,7 +386,7 @@ def _fallback_per_page(pages: list[PageText], *, source: str, sport: str) -> lis
             rule_id=f"page-{p.page_number}",
             page_start=p.page_number,
             page_end=p.page_number,
-            text=p.text.strip(),
+            text=_normalize_ws(p.text),
             ordinal=i,
         )
         for i, p in enumerate(pages)
