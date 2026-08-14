@@ -145,6 +145,11 @@ function fmtEngagement(usd: number, tokens: number): string {
   return `${fmtMoney(usd)} · ${fmtTokens(tokens)} tok`
 }
 
+// The shareable invite URL for a token — what an admin actually wants to copy.
+function inviteLinkFor(token: string): string {
+  return `${window.location.origin}/?token=${token}`
+}
+
 // Logical role ordering (low→high) — numbered levels (docs/rbac-capabilities.md
 // §4), a fallback when the backend ladder from GET /advanced/roles hasn't loaded.
 const ROLE_LADDER_FALLBACK = [
@@ -1317,7 +1322,7 @@ export default function AdvancedApp() {
                           name{sortIndicator(userSort.col === 'label', userSort.dir)}
                         </button>
                       </th>
-                      <th className="px-3 py-2">token</th>
+                      <th className="px-3 py-2">invite</th>
                       <th className="px-3 py-2">
                         <button
                           type="button"
@@ -1409,11 +1414,11 @@ export default function AdvancedApp() {
                           <td className="px-3 py-2">
                             <button
                               type="button"
-                              onClick={() => void copy(u.token)}
-                              title="Click to copy token"
+                              onClick={() => void copy(inviteLinkFor(u.token))}
+                              title="Click to copy this user's invite link"
                               className="font-mono text-xs text-muted-foreground hover:text-foreground"
                             >
-                              {u.token.slice(0, 12)}…{copied === u.token ? ' ✓' : ''}
+                              {u.token.slice(0, 12)}…{copied === inviteLinkFor(u.token) ? ' ✓' : ''}
                             </button>
                           </td>
                           <td className="px-3 py-2">
