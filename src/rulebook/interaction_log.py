@@ -292,6 +292,49 @@ def count_questions_by_author() -> dict[str, int]:
     return counts
 
 
+def count_comments_by_author() -> dict[str, int]:
+    """Per-author count of distinct answers they've left a comment on.
+
+    Feedback is append-only with several rows per qa_id (each save is an
+    event) and is keyed by qa_id alone — so a later rating by a *different*
+    user would hide an earlier comment. To count fairly we keep the latest
+    row per ``(qa_id, author)`` (dedupes self-edits, survives others'
+    ratings) and tally authors whose latest row carries a non-empty comment.
+    """
+    path = _log_dir() / "feedback.jsonl"
+    if not path.exists():
+        return {}
+    latest: dict[tuple[str, str], dict[str, Any]] = {}
+    with path.open() as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            author, qa_id = row.get("author"), row.get("qa_id")
+            if author and qa_id:
+                latest[(qa_id, author)] = row  # last write wins per pair
+    counts: dict[str, int] = {}
+    for (_qa_id, author), row in latest.items():
+        comment = row.get("comment")
+        if comment and str(comment).strip():
+            counts[author] = counts.get(author, 0) + 1
+    return counts
+
+
+def count_golds_by_author() -> dict[str, int]:
+    """Per-author count of gold answers they own (latest row per gold_id)."""
+    counts: dict[str, int] = {}
+    for row in read_latest_golds():
+        author = row.get("author")
+        if author:
+            counts[author] = counts.get(author, 0) + 1
+    return counts
+
+
 def log_source_curation(source_path: str, *, included: bool) -> None:
     """Record an admin decision about a source file's inclusion.
 
