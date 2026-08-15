@@ -23,6 +23,7 @@ export default defineConfig({
       '/admin': 'http://127.0.0.1:8000',
       '/usage': 'http://127.0.0.1:8000',
       '/diagnostics': 'http://127.0.0.1:8000',
+      '/advanced': 'http://127.0.0.1:8000',
     },
   },
 })

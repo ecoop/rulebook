@@ -350,10 +350,11 @@ export default function App() {
   )
 
   // UI gating by capability, active only in demo_mode. Authoring golds needs
-  // `gold.author` (level 3+); the Advanced link needs `advanced.view` (level 4+).
+  // `gold.author` (level 3+); the "Your activity" link needs `activity.view`
+  // (level 1+) — everyone signed-in gets a personal, self-scoped activity page.
   const gatingActive = !!me && me.demo_mode
   const canEvaluate = !gatingActive || (me != null && me.capabilities.includes('gold.author'))
-  const showAdminLink = !!me && (!me.demo_mode || me.capabilities.includes('advanced.view'))
+  const showActivityLink = !!me && (!me.demo_mode || me.capabilities.includes('activity.view'))
 
   if (meForbidden) {
     return (
@@ -413,12 +414,12 @@ export default function App() {
                 >
                   How it works
                 </button>
-                {showAdminLink && (
+                {showActivityLink && (
                   <a
                     href="#/advanced"
                     className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
                   >
-                    Advanced
+                    Your activity
                   </a>
                 )}
               </div>
