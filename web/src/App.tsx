@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { PanelRightOpen } from 'lucide-react'
+import { Info, PanelRightOpen } from 'lucide-react'
 import {
   FloatingWidgetStack,
   LayoutProvider,
@@ -14,7 +14,6 @@ import {
   DiagnosticsSummaryLine,
   type DiagnosticsSnapshot,
 } from './widgets/Diagnostics'
-import { LevelBadge } from './levels'
 import { HowItWorks } from './HowItWorks'
 
 // -----------------------------------------------------------------------------
@@ -153,8 +152,16 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null)
   const [meForbidden, setMeForbidden] = useState(false)
   const [showHowItWorks, setShowHowItWorks] = useState(false)
+  const [showVersion, setShowVersion] = useState(false)
   const headerRef = useRef<HTMLElement>(null)
   const stackRef = useRef<FloatingWidgetStackHandle>(null)
+
+  // Superusers are developers — surface build + model info by default rather
+  // than making them click. Everyone else starts collapsed behind "Version".
+  const isSuperuser = !!me?.demo_mode && me.level >= 8
+  useEffect(() => {
+    if (isSuperuser) setShowVersion(true)
+  }, [isSuperuser])
 
   useEffect(() => {
     fetch('/meta')
@@ -366,46 +373,22 @@ export default function App() {
         <header ref={headerRef} className="border-b border-border bg-card">
           <div className="flex items-start justify-between gap-4 px-6 py-4">
             <div className="min-w-0">
-              <h1 className="text-xl font-medium">Rulebook</h1>
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-xl font-medium">Rulebook</h1>
+                <button
+                  type="button"
+                  onClick={() => setShowVersion((v) => !v)}
+                  aria-expanded={showVersion}
+                  aria-label="Version and build info"
+                  title="Version and build info"
+                  className="rounded-full p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <Info className="h-4 w-4" />
+                </button>
+              </div>
               <p className="text-sm text-muted-foreground">
                 Ask about the rules of ultimate and goaltimate. Answers cite the actual rule numbers.
               </p>
-              {meta && (
-                <p className="text-sm text-muted-foreground">
-                  build{' '}
-                  <span className="opacity-70">
-                    {meta.build_num && `${meta.build_num} (`}
-                    <span
-                      className="font-mono"
-                      title={
-                        meta.build_dirty
-                          ? 'Uncommitted changes were present at server start'
-                          : `Commit ${meta.build_sha}`
-                      }
-                    >
-                      {meta.build_sha}
-                      {meta.build_dirty && '*'}
-                    </span>
-                    {meta.build_num && ')'}
-                    {' · started '}
-                    {formatStartedAt(meta.started_at)}
-                  </span>
-                  {import.meta.env.DEV && (
-                    <span
-                      className="ml-1.5 inline-flex items-center rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 ring-1 ring-inset ring-amber-500/30 dark:bg-amber-950/60 dark:text-amber-200"
-                      title="Vite dev server is running with HMR — the frontend may not match the reported build SHA"
-                    >
-                      dev
-                    </span>
-                  )}
-                </p>
-              )}
-              {usage?.guest_recipient && (
-                <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">{usage.guest_recipient}</span>
-                  {me && me.demo_mode && <LevelBadge level={me.level} />}
-                </p>
-              )}
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -419,10 +402,43 @@ export default function App() {
                     href="#/advanced"
                     className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
                   >
-                    Advanced <span aria-hidden>→</span>
+                    Advanced
                   </a>
                 )}
               </div>
+              {showVersion && meta && (
+                <div className="mt-2 space-y-0.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 font-mono text-xs text-muted-foreground">
+                  <div>
+                    build{' '}
+                    {meta.build_num && `${meta.build_num} (`}
+                    <span
+                      title={
+                        meta.build_dirty
+                          ? 'Uncommitted changes were present at server start'
+                          : `Commit ${meta.build_sha}`
+                      }
+                    >
+                      {meta.build_sha}
+                      {meta.build_dirty && '*'}
+                    </span>
+                    {meta.build_num && ')'}
+                    {' · started '}
+                    {formatStartedAt(meta.started_at)}
+                    {import.meta.env.DEV && (
+                      <span
+                        className="ml-1.5 inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-amber-900 ring-1 ring-inset ring-amber-500/30 dark:bg-amber-950/60 dark:text-amber-200"
+                        title="Vite dev server is running with HMR — the frontend may not match the reported build SHA"
+                      >
+                        dev
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    embeddings: {meta.embedding_provider}/{meta.embedding_model} · gen:{' '}
+                    {meta.claude_model}
+                  </div>
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -685,12 +701,6 @@ export default function App() {
         )}
       </main>
 
-      {meta && (
-        <footer className="px-6 py-4 text-xs text-muted-foreground lg:pr-[19rem]">
-          embeddings: {meta.embedding_provider}/{meta.embedding_model} · gen:{' '}
-          {meta.claude_model}
-        </footer>
-      )}
       <FloatingWidgetStack<WidgetCtx>
         ref={stackRef}
         widgets={widgets}
