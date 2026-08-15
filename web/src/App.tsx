@@ -15,6 +15,8 @@ import {
   type DiagnosticsSnapshot,
 } from './widgets/Diagnostics'
 import { HowItWorks } from './HowItWorks'
+import { HowRolesWork } from './HowRolesWork'
+import { levelInfo } from './levels'
 
 // -----------------------------------------------------------------------------
 // Types mirroring the FastAPI response shape. Kept inline (rather than in a
@@ -153,6 +155,7 @@ export default function App() {
   const [meForbidden, setMeForbidden] = useState(false)
   const [showHowItWorks, setShowHowItWorks] = useState(false)
   const [showVersion, setShowVersion] = useState(false)
+  const [showRoles, setShowRoles] = useState(false)
   const headerRef = useRef<HTMLElement>(null)
   const stackRef = useRef<FloatingWidgetStackHandle>(null)
 
@@ -389,6 +392,19 @@ export default function App() {
               <p className="text-sm text-muted-foreground">
                 Ask about the rules of ultimate and goaltimate. Answers cite the actual rule numbers.
               </p>
+              {me?.demo_mode && (
+                <button
+                  type="button"
+                  onClick={() => setShowRoles(true)}
+                  title="See how roles work"
+                  className="mt-0.5 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  You're a{' '}
+                  <span className="font-medium text-foreground underline decoration-dotted underline-offset-2">
+                    {levelInfo(me.level).name}
+                  </span>
+                </button>
+              )}
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -453,6 +469,10 @@ export default function App() {
         </header>
 
       {showHowItWorks && <HowItWorks onClose={() => setShowHowItWorks(false)} />}
+
+      {showRoles && me && (
+        <HowRolesWork currentLevel={me.level} onClose={() => setShowRoles(false)} />
+      )}
 
       <main className="space-y-6 px-6 py-8 lg:pr-[19rem]">
         <form onSubmit={submit} className="space-y-3">
