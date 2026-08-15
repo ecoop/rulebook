@@ -21,7 +21,7 @@ export const LEVELS: readonly LevelInfo[] = [
     name: 'Beginner',
     color: '#E8E8E8',
     description: 'Ask and rate answers',
-    unlocks: 'Ask questions and rate the answers.',
+    unlocks: 'Ask questions and rate the answers — and revisit them anytime on Your activity.',
   },
   {
     name: 'Annotator',
@@ -32,14 +32,14 @@ export const LEVELS: readonly LevelInfo[] = [
   {
     name: 'Contributor',
     color: '#E07A20',
-    description: 'Suggest gold answers',
-    unlocks: 'Suggest a gold answer — your own best version of the answer.',
+    description: 'Suggest and revisit your own golds',
+    unlocks: 'Suggest a gold answer — your own best version — and revisit or edit it anytime.',
   },
   {
     name: 'Builder',
     color: '#3A8C3A',
-    description: 'Advanced page for own items; edit own golds',
-    unlocks: 'Revisit and edit your own feedback and golds, and see the passages behind each answer.',
+    description: 'See the passages and sources behind answers',
+    unlocks: 'See the passages and sources behind each answer.',
   },
   {
     name: 'Reviewer',
