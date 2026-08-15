@@ -34,8 +34,9 @@ interface IndexBuild {
   build_num: string | null
   count: number
   sources: { sport: string; file: string }[]
+  gold_answers: number
   gold_chunks: number
-  chunks_by_sport: Record<string, number>
+  golds: { gold_id: string | null; author: string | null; question: string }[]
 }
 
 interface AdminSourceRow {
@@ -238,6 +239,7 @@ export default function AdvancedApp() {
   const [rebuildResult, setRebuildResult] = useState<RebuildResult | null>(null)
   const [indexBuilds, setIndexBuilds] = useState<IndexBuild[] | null>(null)
   const [activeBuildId, setActiveBuildId] = useState<string | null>(null)
+  const [expandedBuild, setExpandedBuild] = useState<string | null>(null)
   // Single-editor policy: only one row's gold_answer can be edited at a
   // time. Clicking "Edit" on another row discards the in-flight buffer.
   const [editingQaId, setEditingQaId] = useState<string | null>(null)
@@ -1620,6 +1622,7 @@ export default function AdvancedApp() {
                 <table className="w-full text-sm">
                   <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
+                      <th className="w-6 px-2 py-2"></th>
                       <th className="px-3 py-2">built</th>
                       <th className="px-3 py-2">build</th>
                       <th className="px-3 py-2 text-right">chunks</th>
@@ -1631,25 +1634,72 @@ export default function AdvancedApp() {
                   <tbody className="divide-y divide-border">
                     {indexBuilds.map((b, i) => {
                       const active = b.build_id != null && b.build_id === activeBuildId
+                      const expanded = b.build_id != null && b.build_id === expandedBuild
                       return (
-                        <tr key={b.build_id ?? i} className={active ? 'bg-accent/40' : 'hover:bg-accent/30'}>
-                          <td className="whitespace-nowrap px-3 py-2 text-foreground">
-                            {b.built_at ? new Date(b.built_at).toLocaleString() : '—'}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
-                            {b.build_num} ({b.git_sha})
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums">{b.count}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{b.sources.length}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{b.gold_chunks}</td>
-                          <td className="px-3 py-2">
-                            {active && (
-                              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                                active
-                              </span>
-                            )}
-                          </td>
-                        </tr>
+                        <Fragment key={b.build_id ?? i}>
+                          <tr
+                            onClick={() => setExpandedBuild(expanded ? null : b.build_id)}
+                            title="Click to see the sources and golds in this build"
+                            className={'cursor-pointer ' + (active ? 'bg-accent/40' : 'hover:bg-accent/30')}
+                          >
+                            <td className="px-2 py-2 text-[10px] text-muted-foreground">{expanded ? '▼' : '▶'}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-foreground">
+                              {b.built_at ? new Date(b.built_at).toLocaleString() : '—'}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
+                              {b.build_num} ({b.git_sha})
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">{b.count}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{b.sources.length}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{b.gold_answers}</td>
+                            <td className="px-3 py-2">
+                              {active && (
+                                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                  active
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                          {expanded && (
+                            <tr className="bg-muted/30">
+                              <td></td>
+                              <td colSpan={6} className="px-3 py-3">
+                                <div className="grid gap-5 md:grid-cols-2">
+                                  <div>
+                                    <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                      sources ({b.sources.length})
+                                    </div>
+                                    <ul className="space-y-1">
+                                      {b.sources.map((s, j) => (
+                                        <li key={j} className="font-mono text-[11px]">
+                                          <span className="mr-1.5 rounded bg-muted px-1 py-0.5 text-muted-foreground">{s.sport}</span>
+                                          <span className="text-foreground">{s.file}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                  <div>
+                                    <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                      golds ({b.gold_answers} → {b.gold_chunks} chunks)
+                                    </div>
+                                    {b.golds.length === 0 ? (
+                                      <div className="text-xs text-muted-foreground">none</div>
+                                    ) : (
+                                      <ul className="space-y-1">
+                                        {b.golds.map((g, j) => (
+                                          <li key={j} className="truncate text-xs">
+                                            <span className="text-muted-foreground">{g.author ?? '—'}: </span>
+                                            <span className="text-foreground">{g.question || '(no question text)'}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       )
                     })}
                   </tbody>

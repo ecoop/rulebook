@@ -134,7 +134,7 @@ EMBED_BATCH_SIZE = 64
 _SPORT_HEADING = re.compile(r"^\s*##\s+([A-Za-z][A-Za-z_ -]*?)\s*$", re.M)
 
 
-def load_gold_chunks(gold_path: Path) -> list[Chunk]:
+def load_gold_chunks(gold_path: Path) -> tuple[list[Chunk], list[dict]]:
     """Turn user-authored gold answers into per-sport retrievable chunks.
 
     Gold answers are append-only in gold.jsonl (latest row per qa_id
@@ -150,7 +150,7 @@ def load_gold_chunks(gold_path: Path) -> list[Chunk]:
         page    = 0 (no meaningful page for user text)
     """
     if not gold_path.exists():
-        return []
+        return [], []
 
     # Latest row per gold_id wins — walk the file and keep last-write-wins.
     # Golds are owned entities now, so several can share a qa_id; legacy rows
@@ -173,11 +173,17 @@ def load_gold_chunks(gold_path: Path) -> list[Chunk]:
 
     known = set(DEFAULT_SPORTS)
     chunks: list[Chunk] = []
+    records: list[dict] = []  # one per contributing gold, for build provenance
     for row in latest.values():
         text = row["gold_answer"].strip()
         if not text:
             continue
 
+        records.append({
+            "gold_id": row.get("gold_id"),
+            "author": row.get("author"),
+            "question": row.get("question", ""),
+        })
         sections = _split_by_sport_heading(text, known)
         if not sections:
             # No sport headings — index once per sport so the whole
@@ -206,7 +212,7 @@ def load_gold_chunks(gold_path: Path) -> list[Chunk]:
                     text=section_text,
                 )
             )
-    return chunks
+    return chunks, records
 
 
 def _split_by_sport_heading(text: str, known_sports: set[str]) -> list[tuple[str, str]]:
@@ -267,7 +273,7 @@ def main() -> None:
     # gold.jsonl) — NOT repo_root, which is a site-packages ancestor once
     # installed. Reading the wrong path here would silently drop every
     # user-authored gold from the rebuilt index.
-    gold_chunks = load_gold_chunks(settings.data_dir / "logs" / "gold.jsonl")
+    gold_chunks, gold_records = load_gold_chunks(settings.data_dir / "logs" / "gold.jsonl")
     if gold_chunks:
         by_sport: dict[str, int] = {}
         for c in gold_chunks:
@@ -307,7 +313,9 @@ def main() -> None:
         "git_sha": BUILD_INFO.sha,
         "build_num": BUILD_INFO.build_num,
         "sources": [{"sport": s.sport, "file": s.path.name} for s in sources],
-        "gold_chunks": len(gold_chunks),
+        "gold_answers": len(gold_records),  # distinct gold answers that went in
+        "gold_chunks": len(gold_chunks),    # …expanded to this many chunks (per-sport)
+        "golds": gold_records,              # {gold_id, author, question} for the drill-down
         "chunks_by_sport": dict(sorted(chunks_by_sport.items())),
     }
 
