@@ -288,8 +288,10 @@ class IndexInfoResponse(BaseModel):
     count: int = 0
     dimension: int = 0
     sports: list[str] = Field(default_factory=list)
+    gold_answers: int = 0
     gold_chunks: int = 0
     sources: list[dict] = Field(default_factory=list)
+    golds: list[dict] = Field(default_factory=list)
     chunks_by_sport: dict[str, int] = Field(default_factory=dict)
 
 
@@ -299,9 +301,10 @@ class IndexBuildRow(BaseModel):
     git_sha: str | None = None
     build_num: str | None = None
     count: int = 0
+    gold_answers: int = 0
     gold_chunks: int = 0
     sources: list[dict] = Field(default_factory=list)
-    chunks_by_sport: dict[str, int] = Field(default_factory=dict)
+    golds: list[dict] = Field(default_factory=list)
 
 
 class IndexBuildsResponse(BaseModel):
@@ -1190,8 +1193,10 @@ def admin_index_info() -> IndexInfoResponse:
         count=d.get("count", 0),
         dimension=d.get("dimension", 0),
         sports=d.get("sports", []),
+        gold_answers=d.get("gold_answers", 0),
         gold_chunks=d.get("gold_chunks", 0),
         sources=d.get("sources", []),
+        golds=d.get("golds", []),
         chunks_by_sport=d.get("chunks_by_sport", {}),
     )
 
@@ -1214,9 +1219,10 @@ def admin_index_builds() -> IndexBuildsResponse:
             git_sha=d.get("git_sha"),
             build_num=d.get("build_num"),
             count=d.get("count", 0),
+            gold_answers=d.get("gold_answers", 0),
             gold_chunks=d.get("gold_chunks", 0),
             sources=d.get("sources", []),
-            chunks_by_sport=d.get("chunks_by_sport", {}),
+            golds=d.get("golds", []),
         )
 
     info = admin_index_info()
@@ -1230,9 +1236,10 @@ def admin_index_builds() -> IndexBuildsResponse:
                 git_sha=info.git_sha,
                 build_num=info.build_num,
                 count=info.count,
+                gold_answers=info.gold_answers,
                 gold_chunks=info.gold_chunks,
                 sources=info.sources,
-                chunks_by_sport=info.chunks_by_sport,
+                golds=info.golds,
             ),
         )
     return IndexBuildsResponse(active_build_id=info.build_id, builds=rows)
