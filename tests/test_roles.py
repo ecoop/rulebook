@@ -110,18 +110,26 @@ def test_rungs_are_monotonic():
 
 def test_rung_boundaries():
     has = roles.has_capability
-    # level1: ask/rate/tag, but no comment and nothing behind the curtain.
+    # level1: ask/rate/tag + a personal "Your activity" page (revisit your own
+    # questions/ratings), but no comment and nothing behind the curtain.
     assert has("level1", roles.CAP_FEEDBACK_TAG)
+    assert has("level1", roles.CAP_ACTIVITY_VIEW)
+    assert has("level1", roles.CAP_FEEDBACK_VIEW)
     assert not has("level1", roles.CAP_FEEDBACK_COMMENT)
+    assert not has("level1", roles.CAP_GOLDS_VIEW)
     assert not has("level1", roles.CAP_ADVANCED_VIEW)
-    # level2 gains the comment; level3 gains gold authoring.
+    # level2 gains the comment; level3 gains gold authoring + revisiting own golds.
     assert has("level2", roles.CAP_FEEDBACK_COMMENT)
     assert not has("level2", roles.CAP_GOLD_AUTHOR)
     assert has("level3", roles.CAP_GOLD_AUTHOR)
+    assert has("level3", roles.CAP_GOLDS_VIEW)
+    assert has("level3", roles.CAP_GOLDS_EDIT_OWN)
     assert not has("level3", roles.CAP_ADVANCED_VIEW)
-    # level4: behind the curtain, self, read-mostly — edits own, not curate.
+    # level4: the retrieval machinery (passages/sources), self, read-mostly —
+    # it no longer INTRODUCES the self views (those moved down), but inherits them.
     assert has("level4", roles.CAP_ADVANCED_VIEW)
     assert has("level4", roles.CAP_PASSAGES_VIEW)
+    assert has("level4", roles.CAP_SOURCES_VIEW)
     assert has("level4", roles.CAP_GOLDS_EDIT_OWN)
     for cap in (roles.CAP_GOLDS_VIEW_ALL, roles.CAP_GOLDS_CURATE, roles.CAP_ATTRIBUTION_VIEW):
         assert not has("level4", cap)
@@ -154,9 +162,9 @@ def test_capability_fingerprint():
     assert len(fp(["ask"])) == 8
     # Any change to the set changes the fingerprint.
     assert fp(["ask", "rate"]) != fp(["ask", "rate", "gold.author"])
-    # level3 (Contributor) = {ask, rate, feedback.tag, feedback.comment, gold.author};
-    # sorted+hashed → the value shown in docs/rbac-data-driven-roles.md.
-    assert roles.role_fingerprint("level3") == "8cee04a2"
+    # level3 (Contributor) = {ask, rate, feedback.tag, activity.view, feedback.view,
+    # feedback.comment, gold.author, golds.view, golds.edit.own}; sorted+hashed.
+    assert roles.role_fingerprint("level3") == "f4c9d61a"
     # Distinct bundles → distinct fingerprints.
     assert roles.role_fingerprint("level3") != roles.role_fingerprint("level4")
 

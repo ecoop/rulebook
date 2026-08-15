@@ -1,6 +1,6 @@
 # RBAC — capabilities and the eight rungs
 
-_Last updated: 2026-08-12_
+_Last updated: 2026-08-15_
 
 > **Status: bundles match the eight rungs (numbered levels); behaviours follow.** The
 > capability *mechanism* **and** the eight-rung *bundles* ship in `roles.py` +
@@ -75,11 +75,17 @@ capability churn — the fossil an `admin.*` name would have left never happened
 | `gold.author` | suggest a gold answer for your own Q&A |
 | `passages.view` | see the Retrieved passages panel under an answer |
 
-**Advanced surface**
+**Your-activity / Advanced surface**
+
+Both live on the same page (`AdvancedApp`). The self-scoped "revisit your own work"
+caps sit LOW on the ladder — everyone gets a personal **Your activity** page that grows
+tab-by-tab as they climb (see #74/#51). `advanced.view` and the `*.view.all` /
+curate / users caps are the operator extras layered on top.
 
 | Capability | Guards |
 |---|---|
-| `advanced.view` | see the Advanced page shell + the nav button |
+| `activity.view` | open the **Your activity** page shell + the nav button (personal, self-scoped) |
+| `advanced.view` | + the retrieval machinery: passages and the Sources tab |
 | `feedback.view` | Feedback tab — **your own** rows |
 | `feedback.view.all` | Feedback tab shows **everyone's** rows |
 | `golds.view` | Golds tab — **your own** rows |
@@ -114,10 +120,10 @@ table lists only **what each level adds**.
 | Level | Description | Adds |
 |---|---|---|
 | **0** | suspended — no access | *(none)* |
-| **1** | beginner — ask and rate | `ask`, `rate`, `feedback.tag` |
+| **1** | beginner — ask, rate, and revisit your own | `ask`, `rate`, `feedback.tag`, `activity.view`, `feedback.view` |
 | **2** | + explain a rating | `feedback.comment` |
-| **3** | + suggest answers | `gold.author` |
-| **4** | peek behind the curtain — self, read-mostly | `advanced.view`, `passages.view`, `feedback.view`, `golds.view`, `golds.edit.own`, `sources.view` |
+| **3** | + suggest & revisit your own golds | `gold.author`, `golds.view`, `golds.edit.own` |
+| **4** | + the retrieval machinery — self, read-mostly | `advanced.view`, `passages.view`, `sources.view` |
 | **5** | read all, write own | `feedback.view.all`, `golds.view.all` |
 | **6** | operator | `golds.curate`, `golds.clone`, `sources.curate`, `index.rebuild`, `attribution.view` *(+ audit — §5)* |
 | **7** | admin | `users.view`, `users.change_role`, `users.add` |
@@ -131,11 +137,10 @@ Reference matrix (✓ = has it; columns are cumulative left→right, by level):
 | Capability | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `ask`, `rate`, `feedback.tag` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `activity.view` · `feedback.view` (own) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `feedback.comment` | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `gold.author` | | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `advanced.view` · `passages.view` | | | | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `feedback.view` · `golds.view` (own) | | | | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `golds.edit.own` · `sources.view` | | | | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `gold.author` · `golds.view` · `golds.edit.own` (own) | | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `advanced.view` · `passages.view` · `sources.view` | | | | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `feedback.view.all` · `golds.view.all` | | | | | ✓ | ✓ | ✓ | ✓ |
 | `golds.curate` · `golds.clone` | | | | | | ✓ | ✓ | ✓ |
 | `sources.curate` · `index.rebuild` | | | | | | ✓ | ✓ | ✓ |
@@ -144,7 +149,11 @@ Reference matrix (✓ = has it; columns are cumulative left→right, by level):
 | `users.remove` · `users.rename` · `roles.manage` | | | | | | | | ✓ |
 
 What each boundary means, in one line:
-- **3→4** is the Advanced button appearing — the first "behind the curtain" level.
+- **1–3** is *your own work*: everyone gets the **Your activity** page (`activity.view`)
+  and can revisit their own ratings (`feedback.view`); level 3 adds authoring and
+  revisiting their own golds. The page is never empty — it grows tab-by-tab as you climb.
+- **3→4** is the *retrieval machinery* appearing — passages and the Sources tab. Still
+  self-scoped (you see only your own feedback/gold rows), just "behind the curtain."
 - **4→5** is scope: self → all (read). Level 4 sees only its own feedback/golds; level 5
   sees everyone's. Tab counts read "your X" at 4, the global total at 5.
 - **5→6** is two things at once: **write on others' assets** (curate, clone, rebuild) *and*
