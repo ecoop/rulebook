@@ -27,7 +27,7 @@ interface RebuildResult {
   stderr_tail: string
 }
 
-interface IndexInfo {
+interface IndexBuild {
   build_id: string | null
   built_at: string | null
   git_sha: string | null
@@ -236,7 +236,8 @@ export default function AdvancedApp() {
   const [pending, setPending] = useState<Set<string>>(() => new Set())
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildResult, setRebuildResult] = useState<RebuildResult | null>(null)
-  const [indexInfo, setIndexInfo] = useState<IndexInfo | null>(null)
+  const [indexBuilds, setIndexBuilds] = useState<IndexBuild[] | null>(null)
+  const [activeBuildId, setActiveBuildId] = useState<string | null>(null)
   // Single-editor policy: only one row's gold_answer can be edited at a
   // time. Clicking "Edit" on another row discards the in-flight buffer.
   const [editingQaId, setEditingQaId] = useState<string | null>(null)
@@ -308,7 +309,7 @@ export default function AdvancedApp() {
     if (can('feedback.view')) void refreshFeedback()
     if (can('users.view')) void refreshUsers()
     if (can('attribution.view')) void refreshAudit()
-    if (can('index.rebuild')) void refreshIndexInfo()
+    if (can('index.rebuild')) void refreshIndexBuilds()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canUseAdmin, caps.join(',')])
 
@@ -587,12 +588,16 @@ export default function AdvancedApp() {
     }
   }
 
-  async function refreshIndexInfo() {
+  async function refreshIndexBuilds() {
     try {
-      const resp = await fetch('/advanced/index-info')
-      if (resp.ok) setIndexInfo((await resp.json()) as IndexInfo)
+      const resp = await fetch('/advanced/index-builds')
+      if (resp.ok) {
+        const data = (await resp.json()) as { active_build_id: string | null; builds: IndexBuild[] }
+        setIndexBuilds(data.builds)
+        setActiveBuildId(data.active_build_id)
+      }
     } catch {
-      /* non-fatal — the line just won't show */
+      /* non-fatal — the list just won't populate */
     }
   }
 
@@ -607,7 +612,7 @@ export default function AdvancedApp() {
       setRebuildResult(data)
       // A rebuild may have picked up new files added on disk since page load.
       void refreshSources()
-      void refreshIndexInfo()
+      void refreshIndexBuilds()
     } catch (err) {
       setRebuildResult({
         ok: false,
@@ -855,8 +860,8 @@ export default function AdvancedApp() {
             ...(can('feedback.view') ? (['feedback'] as AdminTab[]) : []),
             ...(can('golds.view') ? (['golds'] as AdminTab[]) : []),
             ...(can('sources.view') ? (['sources'] as AdminTab[]) : []),
-            ...(can('index.rebuild') ? (['indices'] as AdminTab[]) : []),
             ...(showUsersTab ? (['users'] as AdminTab[]) : []),
+            ...(can('index.rebuild') ? (['indices'] as AdminTab[]) : []),
             ...(can('attribution.view') ? (['audit'] as AdminTab[]) : []),
           ] as AdminTab[]).map((t) => {
             const active = activeTab === t
@@ -1588,57 +1593,69 @@ export default function AdvancedApp() {
 
         {activeTab === 'indices' && (
           <div className="space-y-4">
-            <section className="rounded-md border border-border bg-card p-4 shadow-sm">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-medium text-foreground">Active index</h3>
-                <button
-                  type="button"
-                  onClick={rebuildIndex}
-                  disabled={rebuilding}
-                  title="Runs scripts/build_index.py — typically 15s, occasionally a minute or two when Voyage is slow"
-                  className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-                >
-                  {rebuilding ? 'Rebuilding…' : 'Rebuild index'}
-                </button>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground">
+                {indexBuilds === null
+                  ? 'Loading…'
+                  : `${indexBuilds.length} build${indexBuilds.length === 1 ? '' : 's'} recorded · newest first`}
+              </span>
+              <button
+                type="button"
+                onClick={rebuildIndex}
+                disabled={rebuilding}
+                title="Runs scripts/build_index.py — typically 15s, occasionally a minute or two when Voyage is slow"
+                className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+              >
+                {rebuilding ? 'Rebuilding…' : 'Rebuild index'}
+              </button>
+            </div>
+
+            {indexBuilds !== null && indexBuilds.length === 0 && (
+              <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
+                No index builds recorded yet — click Rebuild index.
               </div>
-              {indexInfo?.built_at ? (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
-                    <span>built <span className="text-foreground">{new Date(indexInfo.built_at).toLocaleString()}</span></span>
-                    <span>build <span className="font-mono text-foreground">{indexInfo.build_num} ({indexInfo.git_sha})</span></span>
-                    <span><span className="text-foreground">{indexInfo.count}</span> chunks</span>
-                    <span><span className="text-foreground">{indexInfo.gold_chunks}</span> gold chunks</span>
-                    <span>
-                      {Object.entries(indexInfo.chunks_by_sport)
-                        .map(([sp, n]) => `${sp} ${n}`)
-                        .join(' · ')}
-                    </span>
-                  </div>
-                  <table className="w-full text-left text-xs">
-                    <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      <tr>
-                        <th className="py-1 pr-3 font-normal">sport</th>
-                        <th className="py-1 font-normal">source file</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {indexInfo.sources.map((s, i) => (
-                        <tr key={i}>
-                          <td className="whitespace-nowrap py-1.5 pr-3">
-                            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">{s.sport}</span>
+            )}
+            {indexBuilds !== null && indexBuilds.length > 0 && (
+              <section className="overflow-x-auto rounded-md border border-border bg-card shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2">built</th>
+                      <th className="px-3 py-2">build</th>
+                      <th className="px-3 py-2 text-right">chunks</th>
+                      <th className="px-3 py-2 text-right">sources</th>
+                      <th className="px-3 py-2 text-right">golds</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {indexBuilds.map((b, i) => {
+                      const active = b.build_id != null && b.build_id === activeBuildId
+                      return (
+                        <tr key={b.build_id ?? i} className={active ? 'bg-accent/40' : 'hover:bg-accent/30'}>
+                          <td className="whitespace-nowrap px-3 py-2 text-foreground">
+                            {b.built_at ? new Date(b.built_at).toLocaleString() : '—'}
                           </td>
-                          <td className="py-1.5 font-mono text-[11px] text-foreground">{s.file}</td>
+                          <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
+                            {b.build_num} ({b.git_sha})
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">{b.count}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{b.sources.length}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{b.gold_chunks}</td>
+                          <td className="px-3 py-2">
+                            {active && (
+                              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                active
+                              </span>
+                            )}
+                          </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground">
-                  No build stamp yet — click Rebuild index to record provenance.
-                </div>
-              )}
-            </section>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </section>
+            )}
 
             {rebuildResult && (
               <div

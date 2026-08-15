@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
 
 from tqdm import tqdm
@@ -34,7 +35,11 @@ from rulebook.chunking import Chunk, chunk_pages
 from rulebook.config import settings
 from rulebook.embeddings import get_embedder
 from rulebook.ingest import extract_pages
-from rulebook.interaction_log import read_latest_curation, read_latest_source_curation
+from rulebook.interaction_log import (
+    log_index_build,
+    read_latest_curation,
+    read_latest_source_curation,
+)
 from rulebook.pipeline import DEFAULT_SPORTS
 from rulebook.store import write_store
 
@@ -288,11 +293,11 @@ def main() -> None:
     # Build provenance stamped into the manifest so the index is self-describing
     # (when it was built, from which commit + sources + golds) — the foundation
     # for build history / rollback (#77).
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from rulebook.build_info import BUILD_INFO
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     chunks_by_sport: dict[str, int] = {}
     for c in all_chunks:
         chunks_by_sport[c.sport] = chunks_by_sport.get(c.sport, 0) + 1
@@ -317,6 +322,18 @@ def main() -> None:
     print(f"[store ]  wrote {written} rows to {settings.resolved_index_path}")
     print(f"[stamp ]  build {provenance['build_id']} @ {provenance['git_sha']} — "
           f"{len(sources)} sources, {provenance['gold_chunks']} gold chunks")
+
+    # Append this build to the durable history (Indices tab). Full manifest so
+    # each row is self-contained.
+    log_index_build({
+        **provenance,
+        "provider": settings.embedding_provider,
+        "model": settings.embedding_model,
+        "count": written,
+        "dimension": len(vectors[0]) if vectors else 0,
+        "sports": sorted(chunks_by_sport.keys()),
+    })
+
     print(f"[done  ]  index dimension = {len(vectors[0])}")
 
     # On a hosted (gcs) deploy, push the fresh index to the bucket so the

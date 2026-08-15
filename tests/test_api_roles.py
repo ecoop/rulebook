@@ -283,3 +283,15 @@ def test_count_comments_by_author(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(il, "_log_dir", lambda: tmp_path)
     assert il.count_comments_by_author() == {"Ann": 1, "Bob": 1}
+
+
+def test_index_build_history(tmp_path, monkeypatch):
+    import rulebook.interaction_log as il
+
+    monkeypatch.setattr(il, "_log_dir", lambda: tmp_path)
+    assert il.read_index_builds() == []  # none yet
+    il.log_index_build({"build_id": "b1", "count": 100})
+    il.log_index_build({"build_id": "b2", "count": 200})
+    builds = il.read_index_builds()
+    assert [b["build_id"] for b in builds] == ["b2", "b1"]  # newest first
+    assert il.read_index_builds(limit=1)[0]["build_id"] == "b2"

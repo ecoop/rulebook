@@ -35,6 +35,7 @@ LOG_FILES: tuple[str, ...] = (
     "gold.jsonl",
     "gold_curation.jsonl",
     "source_curation.jsonl",
+    "index_builds.jsonl",
 )
 _GCS_PREFIX = "logs/"
 

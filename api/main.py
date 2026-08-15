@@ -19,11 +19,14 @@ import sys
 import time
 import uuid
 from dataclasses import asdict
+from datetime import UTC
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from guest_auth import InviteAuthMiddleware, get_current_guest
-from llm_cost_governor.counters import _week_of  # canonical Monday-UTC week key; matches the cost counter's weekly buckets
+from llm_cost_governor.counters import (
+    _week_of,  # canonical Monday-UTC week key; matches the cost counter's weekly buckets
+)
 from pydantic import BaseModel, Field
 
 # Wire the guardrails singletons BEFORE anything Depends()-related runs.
@@ -47,7 +50,12 @@ sync_index_from_gcs()
 # writes through to GCS (interaction_log._append). No-op in local dev.
 sync_logs_from_gcs()
 
+from jsonl_log import utc_now_iso  # noqa: E402
+
 from rulebook.interaction_log import (  # noqa: E402
+    count_comments_by_author,
+    count_golds_by_author,
+    count_questions_by_author,
     log_audit,
     log_feedback,
     log_gold,
@@ -59,9 +67,6 @@ from rulebook.interaction_log import (  # noqa: E402
     read_latest_feedback,
     read_latest_golds,
     read_latest_source_curation,
-    count_comments_by_author,
-    count_golds_by_author,
-    count_questions_by_author,
     read_qa_questions,
 )
 from rulebook.pipeline import DEFAULT_SPORTS, ask  # noqa: E402
@@ -106,7 +111,6 @@ from rulebook.tokens import (  # noqa: E402
     read_tokens_object,
     write_tokens_object,
 )
-from jsonl_log import utc_now_iso  # noqa: E402
 
 app = FastAPI(title="rulebook", description="RAG over disc-sport rules.")
 
@@ -289,6 +293,22 @@ class IndexInfoResponse(BaseModel):
     chunks_by_sport: dict[str, int] = Field(default_factory=dict)
 
 
+class IndexBuildRow(BaseModel):
+    build_id: str | None = None
+    built_at: str | None = None
+    git_sha: str | None = None
+    build_num: str | None = None
+    count: int = 0
+    gold_chunks: int = 0
+    sources: list[dict] = Field(default_factory=list)
+    chunks_by_sport: dict[str, int] = Field(default_factory=dict)
+
+
+class IndexBuildsResponse(BaseModel):
+    active_build_id: str | None = None
+    builds: list[IndexBuildRow] = Field(default_factory=list)
+
+
 class MeResponse(BaseModel):
     recipient: str | None = Field(
         default=None,
@@ -445,9 +465,10 @@ def diagnostics_endpoint() -> DiagnosticsResponse:
     directly — no aggregation cache. Fast enough because the numbers
     are all small.
     """
-    from collections import Counter
-    from datetime import datetime, timezone
     import json as _json
+    from collections import Counter
+    from datetime import datetime
+
     from scripts.build_index import discover_sources
 
     index_path = settings.resolved_index_path
@@ -462,7 +483,7 @@ def diagnostics_endpoint() -> DiagnosticsResponse:
         chunk_count = int(manifest.get("count", 0))
         dimension = int(manifest.get("dimension", 0))
         index_built_at = datetime.fromtimestamp(
-            manifest_path.stat().st_mtime, tz=timezone.utc
+            manifest_path.stat().st_mtime, tz=UTC
         ).isoformat(timespec="seconds")
 
         chunks_path = index_path / "chunks.jsonl"
@@ -1066,7 +1087,7 @@ def admin_list_sources() -> AdminSourceListResponse:
     excluded files show up in the admin table — the exclusion is
     surfaced via the ``included`` field so the UI can render a toggle.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from scripts.build_index import discover_sources
 
@@ -1084,7 +1105,7 @@ def admin_list_sources() -> AdminSourceListResponse:
                 path=rel,
                 sport=src.sport,
                 size_bytes=st.st_size,
-                modified_at=datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(timespec="seconds"),
+                modified_at=datetime.fromtimestamp(st.st_mtime, tz=UTC).isoformat(timespec="seconds"),
                 included=curation.get(rel, True),
             )
         )
@@ -1175,6 +1196,48 @@ def admin_index_info() -> IndexInfoResponse:
     )
 
 
+@app.get(
+    "/advanced/index-builds",
+    response_model=IndexBuildsResponse,
+    dependencies=[Depends(require_capability(CAP_INDEX_REBUILD))],
+)
+def admin_index_builds() -> IndexBuildsResponse:
+    """Durable index-build history (Indices tab list), newest first, active
+    build flagged. Synthesizes a row for the live index if it predates history
+    logging, so the list is never empty when an index exists."""
+    from rulebook.interaction_log import read_index_builds
+
+    def _row(d: dict) -> IndexBuildRow:
+        return IndexBuildRow(
+            build_id=d.get("build_id"),
+            built_at=d.get("built_at"),
+            git_sha=d.get("git_sha"),
+            build_num=d.get("build_num"),
+            count=d.get("count", 0),
+            gold_chunks=d.get("gold_chunks", 0),
+            sources=d.get("sources", []),
+            chunks_by_sport=d.get("chunks_by_sport", {}),
+        )
+
+    info = admin_index_info()
+    rows = [_row(b) for b in read_index_builds(limit=50)]
+    if info.build_id and not any(r.build_id == info.build_id for r in rows):
+        rows.insert(
+            0,
+            IndexBuildRow(
+                build_id=info.build_id,
+                built_at=info.built_at,
+                git_sha=info.git_sha,
+                build_num=info.build_num,
+                count=info.count,
+                gold_chunks=info.gold_chunks,
+                sources=info.sources,
+                chunks_by_sport=info.chunks_by_sport,
+            ),
+        )
+    return IndexBuildsResponse(active_build_id=info.build_id, builds=rows)
+
+
 # ── Web bundle (production only) ──────────────────────────────────────────────
 # Mount LAST so all API routes take precedence. Vite dev serves the frontend
 # itself and proxies /ask etc. back to this server; in that mode web/dist/
@@ -1187,6 +1250,7 @@ def admin_index_info() -> IndexInfoResponse:
 # Both `uv run` in dev and the container's WORKDIR=/app have web/dist
 # under CWD, so this works in both modes.
 from pathlib import Path  # noqa: E402
+
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 _web_dist = Path("web/dist").resolve()
