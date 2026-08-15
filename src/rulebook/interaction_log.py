@@ -335,6 +335,36 @@ def count_golds_by_author() -> dict[str, int]:
     return counts
 
 
+INDEX_BUILDS_LOG = "index_builds.jsonl"
+
+
+def log_index_build(record: dict[str, Any]) -> None:
+    """Append one index-build record (its manifest provenance) to the durable
+    build history that powers the Indices tab. Append-only, one row per build;
+    persists to GCS like the other logs."""
+    _append(INDEX_BUILDS_LOG, record)
+
+
+def read_index_builds(limit: int | None = None) -> list[dict[str, Any]]:
+    """All recorded index builds, newest first. Empty until the first build
+    under the history-logging path runs."""
+    path = _log_dir() / INDEX_BUILDS_LOG
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    with path.open() as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    rows.reverse()  # appended in build order → newest first
+    return rows[:limit] if limit is not None else rows
+
+
 def log_source_curation(source_path: str, *, included: bool) -> None:
     """Record an admin decision about a source file's inclusion.
 
