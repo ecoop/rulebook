@@ -1,6 +1,6 @@
 # User roles (RBAC)
 
-_Last updated: 2026-08-13_
+_Last updated: 2026-08-15_
 
 > **This is the overview.** The authoritative references are
 > [`rbac-capabilities.md`](rbac-capabilities.md) (the capability set and which
@@ -31,8 +31,8 @@ security boundary.
 | `level0` | Suspended | No access |
 | `level1` | Beginner | Ask and rate answers |
 | `level2` | Annotator | Comment on answers |
-| `level3` | Contributor | Suggest gold answers |
-| `level4` | Builder | Advanced page for own items; edit own golds |
+| `level3` | Contributor | Suggest and revisit your own golds |
+| `level4` | Builder | See the passages and sources behind answers |
 | `level5` | Reviewer | Review everyone's work |
 | `level6` | Director | Curate & clone golds, rebuild index, audit |
 | `level7` | Admin | Users tab; change roles |
@@ -92,10 +92,10 @@ Representative gates (full matrix in [`rbac-capabilities.md`](rbac-capabilities.
 
 | Surface | Capability | Lowest level |
 |---|---|---|
-| ask, rate | `ask`, `rate` | level1 |
+| ask, rate, revisit your own | `ask`, `rate`, `activity.view`, `feedback.view` | level1 |
 | comment on an answer | `feedback.comment` | level2 |
-| suggest a gold answer | `gold.author` | level3 |
-| Advanced page, own items | `advanced.view`, `golds.edit.own` | level4 |
+| suggest & revisit your own golds | `gold.author`, `golds.view`, `golds.edit.own` | level3 |
+| passages + Sources tab, own items | `advanced.view`, `passages.view`, `sources.view` | level4 |
 | review everyone's items | `golds.view.all`, `feedback.view.all` | level5 |
 | curate / clone / rebuild / audit | `golds.curate`, `golds.clone`, `index.rebuild`, `attribution.view` | level6 |
 | Users tab, change role, add invitee | `users.view`, `users.change_role`, `users.add` | level7 |
