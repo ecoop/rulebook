@@ -61,8 +61,9 @@ def test_me_defaults_to_level1(client):
     body = client.get("/me").json()
     assert body["role"] == "level1"
     assert body["level"] == 1
-    # The casual tier: ask, rate, and issue tags — nothing behind the curtain.
-    assert body["capabilities"] == ["ask", "feedback.tag", "rate"]
+    # The casual tier: ask, rate, issue tags, plus a personal "Your activity"
+    # page to revisit their own questions/ratings — nothing behind the curtain.
+    assert body["capabilities"] == ["activity.view", "ask", "feedback.tag", "feedback.view", "rate"]
 
 
 def test_users_split_admin_vs_superuser(client):

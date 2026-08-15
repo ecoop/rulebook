@@ -73,8 +73,10 @@ CAP_FEEDBACK_TAG = "feedback.tag"             # attach issue tags to a rating
 CAP_FEEDBACK_COMMENT = "feedback.comment"     # attach a free-text comment (≤400)
 CAP_GOLD_AUTHOR = "gold.author"               # suggest a gold answer (POST /gold)
 CAP_PASSAGES_VIEW = "passages.view"           # Retrieved-passages panel (frontend gate)
-# Advanced surface.
-CAP_ADVANCED_VIEW = "advanced.view"           # see the Advanced page shell at all
+# Your-activity surface (the personal, self-scoped page — a floor for everyone).
+CAP_ACTIVITY_VIEW = "activity.view"           # open the "Your activity" page shell
+# Advanced surface (the operator extras that grow on top of Your activity).
+CAP_ADVANCED_VIEW = "advanced.view"           # + the retrieval machinery (passages, sources)
 CAP_FEEDBACK_VIEW = "feedback.view"           # Feedback tab — your own rows
 CAP_FEEDBACK_VIEW_ALL = "feedback.view.all"   # …everyone's rows  (self/all slice)
 CAP_GOLDS_VIEW = "golds.view"                 # Golds tab — your own rows
@@ -96,6 +98,7 @@ CAP_ROLES_MANAGE = "roles.manage"             # edit the RBAC config itself (no 
 # The full closed set — every capability a role may be granted.
 CAPABILITIES: frozenset[str] = frozenset({
     CAP_ASK, CAP_RATE, CAP_FEEDBACK_TAG, CAP_FEEDBACK_COMMENT, CAP_GOLD_AUTHOR,
+    CAP_ACTIVITY_VIEW,
     CAP_PASSAGES_VIEW, CAP_ADVANCED_VIEW, CAP_FEEDBACK_VIEW, CAP_FEEDBACK_VIEW_ALL,
     CAP_GOLDS_VIEW, CAP_GOLDS_VIEW_ALL, CAP_GOLDS_EDIT_OWN, CAP_GOLDS_CLONE,
     CAP_GOLDS_CURATE, CAP_SOURCES_VIEW, CAP_SOURCES_CURATE, CAP_INDEX_REBUILD,
@@ -104,12 +107,18 @@ CAPABILITIES: frozenset[str] = frozenset({
 })
 
 # The eight rungs, cumulative (each = the previous ∪ its additions). See §4.
-_R1 = frozenset({CAP_ASK, CAP_RATE, CAP_FEEDBACK_TAG})            # casual player
+# The self-scoped "revisit your own work" caps live LOW on the ladder — everyone
+# gets a personal "Your activity" page that grows as they climb (issue #74/#51).
+_R1 = frozenset({                                                # casual player + your activity
+    CAP_ASK, CAP_RATE, CAP_FEEDBACK_TAG,
+    CAP_ACTIVITY_VIEW, CAP_FEEDBACK_VIEW,                        # revisit your own questions/ratings
+})
 _R2 = _R1 | {CAP_FEEDBACK_COMMENT}                               # + explain a rating
-_R3 = _R2 | {CAP_GOLD_AUTHOR}                                    # + suggest answers
-_R4 = _R3 | {                                                    # peek behind the curtain (self)
-    CAP_ADVANCED_VIEW, CAP_PASSAGES_VIEW,
-    CAP_FEEDBACK_VIEW, CAP_GOLDS_VIEW, CAP_GOLDS_EDIT_OWN, CAP_SOURCES_VIEW,
+_R3 = _R2 | {                                                    # + suggest & revisit your own golds
+    CAP_GOLD_AUTHOR, CAP_GOLDS_VIEW, CAP_GOLDS_EDIT_OWN,
+}
+_R4 = _R3 | {                                                    # + the retrieval machinery (self)
+    CAP_ADVANCED_VIEW, CAP_PASSAGES_VIEW, CAP_SOURCES_VIEW,
 }
 _R5 = _R4 | {CAP_FEEDBACK_VIEW_ALL, CAP_GOLDS_VIEW_ALL}          # read all, write own
 _R6 = _R5 | {                                                    # operator
@@ -143,8 +152,8 @@ ROLE_LEVELS: dict[str, dict[str, object]] = {
     "level0": {"level": 0, "name": "Suspended", "color": "#9AA0A6", "description": "No access"},
     "level1": {"level": 1, "name": "Beginner", "color": "#E8E8E8", "description": "Ask and rate answers"},
     "level2": {"level": 2, "name": "Annotator", "color": "#E5B80B", "description": "Comment on answers"},
-    "level3": {"level": 3, "name": "Contributor", "color": "#E07A20", "description": "Suggest gold answers"},
-    "level4": {"level": 4, "name": "Builder", "color": "#3A8C3A", "description": "Advanced page for own items; edit own golds"},
+    "level3": {"level": 3, "name": "Contributor", "color": "#E07A20", "description": "Suggest and revisit your own golds"},
+    "level4": {"level": 4, "name": "Builder", "color": "#3A8C3A", "description": "See the passages and sources behind answers"},
     "level5": {"level": 5, "name": "Reviewer", "color": "#2C64B4", "description": "Review everyone's work"},
     "level6": {"level": 6, "name": "Director", "color": "#7A4A2B", "description": "Curate & clone golds, rebuild index, audit"},
     "level7": {"level": 7, "name": "Admin", "color": "#1A1A1A", "description": "Users tab; change roles"},
