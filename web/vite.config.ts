@@ -17,6 +17,7 @@ export default defineConfig({
       // request. Pinning to 127.0.0.1 avoids that.
       '/ask': 'http://127.0.0.1:8000',
       '/meta': 'http://127.0.0.1:8000',
+      '/me': 'http://127.0.0.1:8000',
       '/feedback': 'http://127.0.0.1:8000',
       '/gold': 'http://127.0.0.1:8000',
       '/admin': 'http://127.0.0.1:8000',
