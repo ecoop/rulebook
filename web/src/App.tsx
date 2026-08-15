@@ -15,6 +15,7 @@ import {
   type DiagnosticsSnapshot,
 } from './widgets/Diagnostics'
 import { LevelBadge } from './levels'
+import { HowItWorks } from './HowItWorks'
 
 // -----------------------------------------------------------------------------
 // Types mirroring the FastAPI response shape. Kept inline (rather than in a
@@ -151,6 +152,7 @@ export default function App() {
   // Current guest's effective role (UI gating) + suspended flag.
   const [me, setMe] = useState<Me | null>(null)
   const [meForbidden, setMeForbidden] = useState(false)
+  const [showHowItWorks, setShowHowItWorks] = useState(false)
   const headerRef = useRef<HTMLElement>(null)
   const stackRef = useRef<FloatingWidgetStackHandle>(null)
 
@@ -404,14 +406,23 @@ export default function App() {
                   {me && me.demo_mode && <LevelBadge level={me.level} />}
                 </p>
               )}
-              {showAdminLink && (
-                <a
-                  href="#/advanced"
-                  className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowHowItWorks(true)}
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
                 >
-                  Advanced <span aria-hidden>→</span>
-                </a>
-              )}
+                  How it works
+                </button>
+                {showAdminLink && (
+                  <a
+                    href="#/advanced"
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
+                  >
+                    Advanced <span aria-hidden>→</span>
+                  </a>
+                )}
+              </div>
             </div>
             <button
               type="button"
@@ -424,6 +435,8 @@ export default function App() {
             </button>
           </div>
         </header>
+
+      {showHowItWorks && <HowItWorks onClose={() => setShowHowItWorks(false)} />}
 
       <main className="space-y-6 px-6 py-8 lg:pr-[19rem]">
         <form onSubmit={submit} className="space-y-3">
