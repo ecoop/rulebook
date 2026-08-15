@@ -66,7 +66,7 @@ class Store:
         self.metadata: list[dict] = []
         self.manifest: dict = {}
 
-    def load(self) -> "Store":
+    def load(self) -> Store:
         if not (self.path / VECTORS_FILE).exists():
             # Empty store — leave vectors=None so search() raises clearly
             # if someone queries before building the index.
