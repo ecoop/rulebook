@@ -293,10 +293,12 @@ export default function AdvancedApp() {
 
   // Everything is gated by CAPABILITY, not rank (docs/rbac-capabilities.md §6):
   // the UI renders a control iff /me's capability bundle grants it, and the
-  // backend enforces the same. `advanced.view` (level 4+) opens the page at all.
+  // backend enforces the same. `activity.view` (level 1+) opens the page at all —
+  // it's the personal "Your activity" surface; the operator tabs layer on top by
+  // their own caps (advanced.view, *.view.all, curate, users, …).
   const caps = me?.capabilities ?? []
   const can = (c: string) => caps.includes(c)
-  const canUseAdmin = !!me && can('advanced.view')
+  const canUseActivity = !!me && can('activity.view')
 
   useEffect(() => {
     void refreshMe()
@@ -305,7 +307,7 @@ export default function AdvancedApp() {
   // Fetch each dataset only if the caller's capabilities grant that tab —
   // avoids 403 banners on tabs the role can't see.
   useEffect(() => {
-    if (!canUseAdmin) return
+    if (!canUseActivity) return
     if (can('golds.view')) void refresh()
     if (can('sources.view')) void refreshSources()
     if (can('feedback.view')) void refreshFeedback()
@@ -313,7 +315,7 @@ export default function AdvancedApp() {
     if (can('attribution.view')) void refreshAudit()
     if (can('index.rebuild')) void refreshIndexBuilds()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canUseAdmin, caps.join(',')])
+  }, [canUseActivity, caps.join(',')])
 
   async function refresh() {
     setError(null)
@@ -791,10 +793,12 @@ export default function AdvancedApp() {
           <div className="flex items-baseline justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold tracking-tight">
-                Rulebook <span className="text-muted-foreground">/ Advanced</span>
+                Rulebook <span className="text-muted-foreground">/ Your activity</span>
               </h1>
               <p className="text-sm text-muted-foreground">
-                Curate gold answers and source files. Excluded rows are skipped by the next index rebuild.
+                {can('golds.curate')
+                  ? 'Revisit your own work, curate golds and sources, and manage the index. Excluded rows are skipped by the next rebuild.'
+                  : 'Revisit the questions, ratings, and golds you’ve contributed.'}
               </p>
             </div>
             <div className="flex flex-col items-end gap-1">
@@ -833,27 +837,13 @@ export default function AdvancedApp() {
           </div>
         )}
 
-        {me && !meForbidden && !canUseAdmin && (
+        {me && !meForbidden && !canUseActivity && (
           <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
-            {!me.demo_mode ? (
-              <>
-                The Advanced page isn't available on this deploy. It needs a gated deploy
-                (<span className="font-mono">RULEBOOK_DEMO_MODE=true</span> with{' '}
-                <span className="font-mono">STATE_BACKEND_KIND=gcs</span>) and a role of{' '}
-                <span className="font-medium">Level 4</span> or higher.
-              </>
-            ) : (
-              <>
-                You need at least <span className="font-medium">Level 4</span> to see the
-                Advanced page. Your level is{' '}
-                <LevelBadge level={me.level} className="align-middle" /> — ask a superuser to
-                promote you.
-              </>
-            )}
+            You need to be signed in to see your activity.
           </div>
         )}
 
-        {me && canUseAdmin && (
+        {me && canUseActivity && (
           <>
         {/* Tab bar — each tab shows only if the caller's capabilities grant it.
             Counts baked into labels so both are visible regardless of active tab. */}
