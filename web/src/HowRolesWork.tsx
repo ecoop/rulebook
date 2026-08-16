@@ -23,8 +23,14 @@ export function HowRolesWork({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Rungs 1–8 form the ladder; level 0 (Suspended) is an aside, not a step.
-  const rungs = LEVELS.map((info, level) => ({ ...info, level })).filter((r) => r.level >= 1)
+  // Rungs form the ladder; level 0 (Suspended) is an aside, not a step. Admin (7)
+  // and Superuser (8) are internal/operator roles — a general user doesn't need
+  // them advertised as aspirations, so we show through Director (6) and only
+  // reveal the top two to someone who's already Admin+ (#89).
+  const ceiling = currentLevel >= 7 ? 8 : 6
+  const rungs = LEVELS.map((info, level) => ({ ...info, level })).filter(
+    (r) => r.level >= 1 && r.level <= ceiling,
+  )
 
   return (
     <div
