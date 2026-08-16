@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import AdvancedApp from './AdvancedApp'
+import ActivityApp from './ActivityApp'
 import App from './App'
 import './index.css'
 
 // Hash-based routing to avoid pulling in react-router for a two-view app.
-// `#/advanced` → AdvancedApp; everything else → App. Old `#/admin` bookmarks
-// are redirected to `#/advanced`.
+// `#/activity` → ActivityApp; everything else → App. Old `#/advanced` and
+// `#/admin` bookmarks are redirected to `#/activity`.
 //
-// App stays MOUNTED across the switch and is merely hidden when Advanced is
-// open, so a question/answer you're mid-engagement with — plus any in-progress
-// rating, tags, or comment — survives the round trip to Advanced and back.
-// Unmounting it (the old ternary) discarded all that state. AdvancedApp mounts
-// on demand, so its /me + advanced fetches only run when the tab is opened.
+// App stays MOUNTED across the switch and is merely hidden when the activity
+// view is open, so a question/answer you're mid-engagement with — plus any
+// in-progress rating, tags, or comment — survives the round trip and back.
+// Unmounting it (the old ternary) discarded all that state. ActivityApp mounts
+// on demand, so its /me + advanced fetches only run when the view is opened.
+const LEGACY_HASHES = new Set(['#/advanced', '#/admin'])
+
 function Root() {
   const [hash, setHash] = useState(() => window.location.hash)
   useEffect(() => {
@@ -21,15 +23,15 @@ function Root() {
     return () => window.removeEventListener('hashchange', onChange)
   }, [])
   useEffect(() => {
-    if (hash === '#/admin') window.location.hash = '#/advanced' // legacy redirect
+    if (LEGACY_HASHES.has(hash)) window.location.hash = '#/activity' // legacy redirect
   }, [hash])
-  const showAdvanced = hash === '#/advanced' || hash === '#/admin'
+  const showActivity = hash === '#/activity' || LEGACY_HASHES.has(hash)
   return (
     <>
-      <div style={{ display: showAdvanced ? 'none' : undefined }}>
+      <div style={{ display: showActivity ? 'none' : undefined }}>
         <App />
       </div>
-      {showAdvanced && <AdvancedApp />}
+      {showActivity && <ActivityApp />}
     </>
   )
 }
