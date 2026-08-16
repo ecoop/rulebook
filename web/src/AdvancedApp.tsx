@@ -62,6 +62,20 @@ interface AdminFeedbackRow {
   is_own: boolean
 }
 
+interface AdminQuestionRow {
+  qa_id: string
+  question: string
+  answer: string
+  sport: string | null
+  timestamp: string
+  rating: number | null
+  has_gold: boolean
+}
+
+interface AdminQuestionListResponse {
+  questions: AdminQuestionRow[]
+}
+
 interface AdminFeedbackListResponse {
   feedback: AdminFeedbackRow[]
 }
@@ -123,7 +137,7 @@ interface UserRow {
   golds: number
 }
 
-type AdminTab = 'feedback' | 'golds' | 'sources' | 'indices' | 'users' | 'audit'
+type AdminTab = 'questions' | 'feedback' | 'golds' | 'sources' | 'indices' | 'users' | 'audit'
 
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
@@ -248,9 +262,16 @@ export default function AdvancedApp() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   // Sources tab state
-  const [activeTab, setActiveTab] = useState<AdminTab>('feedback')
+  const [activeTab, setActiveTab] = useState<AdminTab>('questions')
   const [sources, setSources] = useState<AdminSourceRow[] | null>(null)
   const [sourcePending, setSourcePending] = useState<Set<string>>(() => new Set())
+  const [questions, setQuestions] = useState<AdminQuestionRow[] | null>(null)
+  const [expandedQ, setExpandedQ] = useState<Set<string>>(() => new Set())
+  // Add a gold to a past question (#51): the promotion payoff — reuses POST /gold.
+  const [addGoldQa, setAddGoldQa] = useState<string | null>(null)
+  const [addGoldBuffer, setAddGoldBuffer] = useState('')
+  const [addGoldSaving, setAddGoldSaving] = useState(false)
+  const [addGoldError, setAddGoldError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<AdminFeedbackRow[] | null>(null)
   // Inline feedback editing (own rows): re-rate + edit comment, re-POST /feedback.
   const [editingFb, setEditingFb] = useState<string | null>(null)
@@ -315,6 +336,7 @@ export default function AdvancedApp() {
   // avoids 403 banners on tabs the role can't see.
   useEffect(() => {
     if (!canUseActivity) return
+    void refreshQuestions()
     if (can('golds.view')) void refresh()
     if (can('sources.view')) void refreshSources()
     if (can('feedback.view')) void refreshFeedback()
@@ -344,6 +366,58 @@ export default function AdvancedApp() {
       setFeedback(data.feedback)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function refreshQuestions() {
+    try {
+      const resp = await fetch('/advanced/questions')
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      const data: AdminQuestionListResponse = await resp.json()
+      setQuestions(data.questions)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  function toggleExpandedQ(qa_id: string) {
+    setExpandedQ((prev) => {
+      const next = new Set(prev)
+      if (next.has(qa_id)) next.delete(qa_id)
+      else next.add(qa_id)
+      return next
+    })
+  }
+
+  // Author a gold for a past question (#51). Same POST /gold upsert the main
+  // page uses; refresh both lists so has_gold and the Golds tab reflect it.
+  async function saveAddGold(row: AdminQuestionRow) {
+    if (addGoldSaving) return
+    if (!addGoldBuffer.trim()) {
+      setAddGoldError('Gold answer cannot be empty.')
+      return
+    }
+    setAddGoldSaving(true)
+    setAddGoldError(null)
+    try {
+      const resp = await fetch('/gold', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          qa_id: row.qa_id,
+          question: row.question,
+          gold_answer: addGoldBuffer,
+        }),
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      await refreshQuestions()
+      if (can('golds.view')) void refresh()
+      setAddGoldQa(null)
+      setAddGoldBuffer('')
+    } catch (err) {
+      setAddGoldError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAddGoldSaving(false)
     }
   }
 
@@ -890,6 +964,7 @@ export default function AdvancedApp() {
             Counts baked into labels so both are visible regardless of active tab. */}
         <div className="flex gap-1 border-b border-border text-sm">
           {([
+            ...(can('activity.view') ? (['questions'] as AdminTab[]) : []),
             ...(can('feedback.view') ? (['feedback'] as AdminTab[]) : []),
             ...(can('golds.view') ? (['golds'] as AdminTab[]) : []),
             ...(can('sources.view') ? (['sources'] as AdminTab[]) : []),
@@ -899,7 +974,9 @@ export default function AdvancedApp() {
           ] as AdminTab[]).map((t) => {
             const active = activeTab === t
             const label =
-              t === 'feedback'
+              t === 'questions'
+                ? `Questions${questions ? ` (${questions.length})` : ''}`
+                : t === 'feedback'
                 ? `Feedback (${feedbackNeedsAttention} to review · ${feedbackTotal})`
                 : t === 'golds'
                   ? `Golds (${goldIncluded}/${goldTotal})`
@@ -929,6 +1006,142 @@ export default function AdvancedApp() {
             )
           })}
         </div>
+
+        {activeTab === 'questions' && questions === null && !error && (
+          <div className="text-sm text-muted-foreground">Loading questions…</div>
+        )}
+        {activeTab === 'questions' && questions !== null && questions.length === 0 && (
+          <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
+            You haven't asked any questions yet. Ask one on the main page and it'll show up here.
+          </div>
+        )}
+        {activeTab === 'questions' && questions !== null && questions.length > 0 && (
+          <section className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Question</th>
+                  <th className="px-3 py-2 text-center font-medium">Rating</th>
+                  <th className="px-3 py-2 text-center font-medium">Gold</th>
+                  <th className="px-3 py-2 font-medium">When</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {questions.map((q) => {
+                  const open = expandedQ.has(q.qa_id)
+                  const adding = addGoldQa === q.qa_id
+                  return (
+                    <Fragment key={q.qa_id}>
+                      <tr className="hover:bg-accent">
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpandedQ(q.qa_id)}
+                            className="text-left"
+                          >
+                            <span className="mr-1 text-muted-foreground">{open ? '▼' : '▶'}</span>
+                            <span className="text-foreground">
+                              {q.question || (
+                                <span className="italic text-muted-foreground">(no question text)</span>
+                              )}
+                            </span>
+                          </button>
+                          <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                            {q.qa_id.slice(0, 8)}
+                            {q.sport ? ` · ${q.sport}` : ''}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {q.rating != null ? (
+                            <span
+                              className={
+                                'inline-flex h-6 w-6 items-center justify-center rounded-full font-mono text-xs ' +
+                                (q.rating <= 2
+                                  ? 'bg-red-100 text-red-700'
+                                  : q.rating === 3
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-green-100 text-green-700')
+                              }
+                            >
+                              {q.rating}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/50" title="Not rated">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {q.has_gold ? (
+                            <span title="Gold answer authored" className="text-green-600">✓</span>
+                          ) : (
+                            <span title="No gold yet" className="text-muted-foreground/50">·</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {formatWhen(q.timestamp)}
+                        </td>
+                      </tr>
+                      {open && (
+                        <tr className="bg-muted/30">
+                          <td colSpan={4} className="px-3 py-3">
+                            <div className="whitespace-pre-wrap text-sm text-foreground">
+                              {q.answer || (
+                                <span className="italic text-muted-foreground">(no stored answer)</span>
+                              )}
+                            </div>
+                            {can('gold.author') && !q.has_gold && !adding && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAddGoldQa(q.qa_id)
+                                  setAddGoldBuffer('')
+                                  setAddGoldError(null)
+                                }}
+                                className="mt-3 rounded-md border border-border px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                              >
+                                Add gold answer
+                              </button>
+                            )}
+                            {adding && (
+                              <div className="mt-3">
+                                <textarea
+                                  value={addGoldBuffer}
+                                  onChange={(e) => setAddGoldBuffer(e.target.value)}
+                                  rows={5}
+                                  placeholder="Write the canonical answer (markdown) — cite rules as [sport rule_id]."
+                                  className="w-full resize-y rounded-md border border-border bg-background p-2 text-sm"
+                                />
+                                {addGoldError && (
+                                  <div className="mt-1 text-xs text-destructive">{addGoldError}</div>
+                                )}
+                                <div className="mt-2 flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => saveAddGold(q)}
+                                    disabled={addGoldSaving}
+                                    className="rounded-md bg-foreground px-3 py-1 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
+                                  >
+                                    {addGoldSaving ? 'Saving…' : 'Save gold'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setAddGoldQa(null)}
+                                    className="rounded-md border border-border px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </section>
+        )}
 
         {activeTab === 'feedback' && feedback === null && !error && (
           <div className="text-sm text-muted-foreground">Loading feedback…</div>

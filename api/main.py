@@ -67,10 +67,12 @@ from rulebook.interaction_log import (  # noqa: E402
     read_latest_feedback,
     read_latest_golds,
     read_latest_source_curation,
+    read_qa_entries,
     read_qa_questions,
 )
 from rulebook.pipeline import DEFAULT_SPORTS, ask  # noqa: E402
 from rulebook.roles import (  # noqa: E402
+    CAP_ACTIVITY_VIEW,
     CAP_ASK,
     CAP_ATTRIBUTION_VIEW,
     CAP_FEEDBACK_COMMENT,
@@ -249,6 +251,20 @@ class AdminFeedbackRow(BaseModel):
 
 class AdminFeedbackListResponse(BaseModel):
     feedback: list[AdminFeedbackRow]
+
+
+class AdminQuestionRow(BaseModel):
+    qa_id: str
+    question: str
+    answer: str = Field(..., description="The stored answer, so you can revisit it.")
+    sport: str | None = None
+    timestamp: str
+    rating: int | None = Field(default=None, description="Your rating for this Q&A, if you gave one.")
+    has_gold: bool = Field(..., description="True if you've authored a gold for this qa_id.")
+
+
+class AdminQuestionListResponse(BaseModel):
+    questions: list[AdminQuestionRow]
 
 
 class AdminSourceRow(BaseModel):
@@ -1086,6 +1102,40 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
             )
         )
     return AdminFeedbackListResponse(feedback=rows)
+
+
+@app.get("/advanced/questions", response_model=AdminQuestionListResponse, dependencies=[Depends(require_capability(CAP_ACTIVITY_VIEW))])
+def admin_list_questions() -> AdminQuestionListResponse:
+    """The caller's own asked questions, newest-first — the "my questions"
+    history (#51).
+
+    Always self-scoped: even a view-all reader sees only the questions they
+    asked. Joins the caller's own ratings and golds so the UI can flag which
+    past questions they haven't acted on yet (e.g. add a gold after a
+    promotion). `activity.view` (level 1+) gates it — the personal surface.
+    """
+    guest = get_current_guest()
+    me_author = guest.recipient if guest else None
+    my_ratings = {
+        f["qa_id"]: int(f["rating"])
+        for f in read_latest_feedback()
+        if f.get("author") == me_author
+    }
+    my_golds = {g["qa_id"] for g in read_latest_golds() if g.get("author") == me_author}
+    rows = [
+        AdminQuestionRow(
+            qa_id=r["qa_id"],
+            question=r.get("question", ""),
+            answer=r.get("answer", ""),
+            sport=r.get("sport"),
+            timestamp=r["timestamp"],
+            rating=my_ratings.get(r["qa_id"]),
+            has_gold=r["qa_id"] in my_golds,
+        )
+        for r in read_qa_entries()
+        if r.get("author") == me_author
+    ]
+    return AdminQuestionListResponse(questions=rows)
 
 
 @app.get("/advanced/sources", response_model=AdminSourceListResponse, dependencies=[Depends(require_capability(CAP_SOURCES_VIEW))])
