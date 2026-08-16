@@ -59,6 +59,7 @@ interface AdminFeedbackRow {
   comment: string | null
   question: string
   has_gold: boolean
+  is_own: boolean
 }
 
 interface AdminFeedbackListResponse {
@@ -251,6 +252,12 @@ export default function AdvancedApp() {
   const [sources, setSources] = useState<AdminSourceRow[] | null>(null)
   const [sourcePending, setSourcePending] = useState<Set<string>>(() => new Set())
   const [feedback, setFeedback] = useState<AdminFeedbackRow[] | null>(null)
+  // Inline feedback editing (own rows): re-rate + edit comment, re-POST /feedback.
+  const [editingFb, setEditingFb] = useState<string | null>(null)
+  const [fbRating, setFbRating] = useState(0)
+  const [fbComment, setFbComment] = useState('')
+  const [fbSaving, setFbSaving] = useState(false)
+  const [fbError, setFbError] = useState<string | null>(null)
   const [audit, setAudit] = useState<AuditRow[] | null>(null)
   // Sort state per table. Defaults chosen to match the backend's natural
   // return order so a first render doesn't reshuffle.
@@ -685,6 +692,40 @@ export default function AdvancedApp() {
     }
   }
 
+  function startEditFeedback(f: AdminFeedbackRow) {
+    setEditingFb(f.qa_id)
+    setFbRating(f.rating)
+    setFbComment(f.comment ?? '')
+    setFbError(null)
+  }
+
+  // Edit your own feedback — a re-POST to /feedback (last-write-wins per qa_id).
+  // Tags are preserved as-is; comment only changes if you hold feedback.comment.
+  async function saveFeedbackEdit(row: AdminFeedbackRow) {
+    if (fbSaving) return
+    if (fbRating < 1) {
+      setFbError('Pick a rating from 1 to 5.')
+      return
+    }
+    setFbSaving(true)
+    setFbError(null)
+    try {
+      const comment = can('feedback.comment') ? fbComment.trim() || null : (row.comment ?? null)
+      const resp = await fetch('/feedback', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ qa_id: row.qa_id, rating: fbRating, tags: row.tags, comment }),
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      await refreshFeedback()
+      setEditingFb(null)
+    } catch (err) {
+      setFbError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setFbSaving(false)
+    }
+  }
+
   // Fork someone else's gold into the caller's own editable copy (golds.clone).
   async function cloneGold(row: AdminGoldRow) {
     setError(null)
@@ -936,9 +977,10 @@ export default function AdvancedApp() {
               <tbody className="divide-y divide-border">
                 {sortedFeedback!.map((f) => {
                   const needsAttention = f.rating <= 3 && !f.has_gold
+                  const editing = editingFb === f.qa_id
                   return (
+                    <Fragment key={f.qa_id + '-' + f.timestamp}>
                     <tr
-                      key={f.qa_id + '-' + f.timestamp}
                       className={needsAttention ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-accent'}
                     >
                       <td className="px-3 py-2 text-center">
@@ -999,9 +1041,73 @@ export default function AdvancedApp() {
                         </div>
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">
-                        {formatWhen(f.timestamp)}
+                        <div>{formatWhen(f.timestamp)}</div>
+                        {f.is_own && can('rate') && !editing && (
+                          <button
+                            type="button"
+                            onClick={() => startEditFeedback(f)}
+                            className="mt-1 rounded border border-border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                          >
+                            Edit
+                          </button>
+                        )}
                       </td>
                     </tr>
+                    {editing && (
+                      <tr className="bg-muted/30">
+                        <td colSpan={5} className="px-3 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-medium text-muted-foreground">Rating</span>
+                            {[1, 2, 3, 4, 5].map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => setFbRating(n)}
+                                className={
+                                  'h-7 w-7 rounded-full font-mono text-xs ' +
+                                  (fbRating === n
+                                    ? 'bg-foreground text-background'
+                                    : 'border border-border text-muted-foreground hover:bg-accent')
+                                }
+                              >
+                                {n}
+                              </button>
+                            ))}
+                          </div>
+                          {can('feedback.comment') && (
+                            <textarea
+                              value={fbComment}
+                              onChange={(e) => setFbComment(e.target.value)}
+                              maxLength={400}
+                              rows={3}
+                              placeholder="Optional note — what worked, what didn't."
+                              className="mt-2 w-full resize-y rounded-md border border-border bg-background p-2 text-sm"
+                            />
+                          )}
+                          {fbError && (
+                            <div className="mt-1 text-xs text-destructive">{fbError}</div>
+                          )}
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => saveFeedbackEdit(f)}
+                              disabled={fbSaving}
+                              className="rounded-md bg-foreground px-3 py-1 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
+                            >
+                              {fbSaving ? 'Saving…' : 'Save'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingFb(null)}
+                              className="rounded-md border border-border px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   )
                 })}
               </tbody>
