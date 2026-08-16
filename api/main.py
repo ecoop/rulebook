@@ -244,6 +244,7 @@ class AdminFeedbackRow(BaseModel):
     comment: str | None = None
     question: str = Field(..., description="From qa_log; may be empty for orphan feedback rows.")
     has_gold: bool = Field(..., description="True if the user has authored a gold answer for this qa_id.")
+    is_own: bool = Field(..., description="Whether the current caller authored it — gates inline Edit.")
 
 
 class AdminFeedbackListResponse(BaseModel):
@@ -1064,6 +1065,10 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
     gold_qa_ids = {g["qa_id"] for g in read_latest_golds()}
 
     see_all, author = _view_scope(CAP_FEEDBACK_VIEW_ALL)
+    # is_own compares against the caller's own label regardless of scope — a
+    # view-all reader still only gets Edit on the rows they authored.
+    guest = get_current_guest()
+    me_author = guest.recipient if guest else None
     rows: list[AdminFeedbackRow] = []
     for r in read_latest_feedback():
         if not see_all and r.get("author") != author:
@@ -1077,6 +1082,7 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
                 comment=r.get("comment"),
                 question=questions.get(r["qa_id"], ""),
                 has_gold=r["qa_id"] in gold_qa_ids,
+                is_own=r.get("author") == me_author,
             )
         )
     return AdminFeedbackListResponse(feedback=rows)

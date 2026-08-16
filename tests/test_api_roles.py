@@ -131,10 +131,13 @@ def test_golds_and_feedback_self_scoped(client, monkeypatch):
     assert [g["qa_id"] for g in client.get("/advanced/golds").json()["golds"]] == ["q1"]
     assert [f["qa_id"] for f in client.get("/advanced/feedback").json()["feedback"]] == ["q1"]
 
-    # level8 has *.view.all → sees everyone's.
+    # level8 has *.view.all → sees everyone's, with is_own flagging its own rows
+    # (boss authored q2, gina authored q1) so the UI only offers Edit on own.
     _as(client, "tok_super")
     assert {g["qa_id"] for g in client.get("/advanced/golds").json()["golds"]} == {"q1", "q2"}
-    assert {f["qa_id"] for f in client.get("/advanced/feedback").json()["feedback"]} == {"q1", "q2"}
+    fb = {f["qa_id"]: f for f in client.get("/advanced/feedback").json()["feedback"]}
+    assert set(fb) == {"q1", "q2"}
+    assert fb["q2"]["is_own"] is True and fb["q1"]["is_own"] is False
 
 
 def test_clone_gold_creates_owned_copy(client, monkeypatch):
