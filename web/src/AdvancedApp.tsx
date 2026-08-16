@@ -275,6 +275,14 @@ export default function AdvancedApp() {
   const [addGoldBuffer, setAddGoldBuffer] = useState('')
   const [addGoldSaving, setAddGoldSaving] = useState(false)
   const [addGoldError, setAddGoldError] = useState<string | null>(null)
+  // Rate a past question you never rated (#51) — a fresh POST /feedback. Only
+  // offered for un-rated own questions; changing an existing rating lives in the
+  // Feedback tab (which preserves the comment/tags).
+  const [rateQa, setRateQa] = useState<string | null>(null)
+  const [rateVal, setRateVal] = useState(0)
+  const [rateComment, setRateComment] = useState('')
+  const [rateSaving, setRateSaving] = useState(false)
+  const [rateError, setRateError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<AdminFeedbackRow[] | null>(null)
   // Inline feedback editing (own rows): re-rate + edit comment, re-POST /feedback.
   const [editingFb, setEditingFb] = useState<string | null>(null)
@@ -803,6 +811,34 @@ export default function AdvancedApp() {
     }
   }
 
+  // First rating for a past question that was never rated (#51). Fresh row, so
+  // no comment/tags to preserve; a comment rides along if the caller can leave one.
+  async function saveQuestionRating(row: AdminQuestionRow) {
+    if (rateSaving) return
+    if (rateVal < 1) {
+      setRateError('Pick a rating from 1 to 5.')
+      return
+    }
+    setRateSaving(true)
+    setRateError(null)
+    try {
+      const comment = can('feedback.comment') ? rateComment.trim() || null : null
+      const resp = await fetch('/feedback', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ qa_id: row.qa_id, rating: rateVal, tags: [], comment }),
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      await refreshQuestions()
+      if (can('feedback.view')) void refreshFeedback()
+      setRateQa(null)
+    } catch (err) {
+      setRateError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRateSaving(false)
+    }
+  }
+
   // Fork someone else's gold into the caller's own editable copy (golds.clone).
   async function cloneGold(row: AdminGoldRow) {
     setError(null)
@@ -1099,6 +1135,72 @@ export default function AdvancedApp() {
                                 <span className="italic text-muted-foreground">(no stored answer)</span>
                               )}
                             </div>
+                            {q.is_own && can('rate') && q.rating == null && rateQa !== q.qa_id && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRateQa(q.qa_id)
+                                  setRateVal(0)
+                                  setRateComment('')
+                                  setRateError(null)
+                                }}
+                                className="mr-2 mt-3 rounded-md border border-border px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                              >
+                                Rate this answer
+                              </button>
+                            )}
+                            {rateQa === q.qa_id && (
+                              <div className="mt-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-xs font-medium text-muted-foreground">Rating</span>
+                                  {[1, 2, 3, 4, 5].map((n) => (
+                                    <button
+                                      key={n}
+                                      type="button"
+                                      onClick={() => setRateVal(n)}
+                                      className={
+                                        'h-7 w-7 rounded-full font-mono text-xs ' +
+                                        (rateVal === n
+                                          ? 'bg-foreground text-background'
+                                          : 'border border-border text-muted-foreground hover:bg-accent')
+                                      }
+                                    >
+                                      {n}
+                                    </button>
+                                  ))}
+                                </div>
+                                {can('feedback.comment') && (
+                                  <textarea
+                                    value={rateComment}
+                                    onChange={(e) => setRateComment(e.target.value)}
+                                    maxLength={400}
+                                    rows={3}
+                                    placeholder="Optional note — what worked, what didn't."
+                                    className="mt-2 w-full resize-y rounded-md border border-border bg-background p-2 text-sm"
+                                  />
+                                )}
+                                {rateError && (
+                                  <div className="mt-1 text-xs text-destructive">{rateError}</div>
+                                )}
+                                <div className="mt-2 flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => saveQuestionRating(q)}
+                                    disabled={rateSaving}
+                                    className="rounded-md bg-foreground px-3 py-1 text-xs font-medium text-background hover:opacity-90 disabled:opacity-50"
+                                  >
+                                    {rateSaving ? 'Saving…' : 'Save rating'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRateQa(null)}
+                                    className="rounded-md border border-border px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                             {q.is_own && can('gold.author') && !q.has_gold && !adding && (
                               <button
                                 type="button"
