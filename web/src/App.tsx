@@ -17,6 +17,7 @@ import {
 import { HowItWorks } from './HowItWorks'
 import { HowRolesWork } from './HowRolesWork'
 import { levelInfo } from './levels'
+import { type IssueTag, TAG_LABELS, TAGS } from './tags'
 
 // -----------------------------------------------------------------------------
 // Types mirroring the FastAPI response shape. Kept inline (rather than in a
@@ -54,20 +55,8 @@ const RATING_LABELS: Record<Rating, string> = {
   5: 'perfect',
 }
 
-// Issue tags — a small, action-oriented taxonomy. Multi-select. The
-// point isn't to fully classify every answer; it's to separate failure
-// modes that need different downstream fixes (correction vs corpus
-// augmentation vs retrieval tuning vs prompt tuning).
-type IssueTag = 'wrong' | 'incomplete' | 'retrieval' | 'format'
-
-const TAG_LABELS: Record<IssueTag, string> = {
-  wrong: 'wrong facts — needs correction',
-  incomplete: 'missing context — corpus needs more info',
-  retrieval: 'wrong passages retrieved — retrieval quality issue',
-  format: 'facts right, delivery off — prompt tuning',
-}
-
-const TAGS: IssueTag[] = ['wrong', 'incomplete', 'retrieval', 'format']
+// Issue tags — the shared taxonomy (see tags.ts), reused by the "Your
+// activity" rate/edit editors so the vocabulary stays in one place.
 
 // Bundle passed to each floating widget's header/render function.
 // Kept as a plain object (view-model), NOT a place to call hooks.
