@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Info, PanelRightOpen } from 'lucide-react'
+import { Eye, EyeOff, Info, PanelRightOpen } from 'lucide-react'
 import {
   FloatingWidgetStack,
   LayoutProvider,
@@ -145,8 +145,23 @@ export default function App() {
   const [showHowItWorks, setShowHowItWorks] = useState(false)
   const [showVersion, setShowVersion] = useState(false)
   const [showRoles, setShowRoles] = useState(false)
+  // Floating widgets need a side gutter to live in — the layout only reserves
+  // one at desktop width (lg). Below that they'd float over the content, so
+  // default them hidden and let the header toggle summon them (#mobile).
+  const [showWidgets, setShowWidgets] = useState(
+    () => window.matchMedia('(min-width: 1024px)').matches,
+  )
   const headerRef = useRef<HTMLElement>(null)
   const stackRef = useRef<FloatingWidgetStackHandle>(null)
+
+  // Re-apply the breakpoint default when the viewport crosses it (a manual
+  // toggle sticks until the next crossing — and a phone never crosses).
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const apply = () => setShowWidgets(mq.matches)
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
 
   useEffect(() => {
     fetch('/meta')
@@ -439,15 +454,29 @@ export default function App() {
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => stackRef.current?.snapAll()}
-              title="Snap widgets back to the corner"
-              aria-label="Snap widgets back to the corner"
-              className="-mr-1.5 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <PanelRightOpen className="h-4 w-4" />
-            </button>
+            <div className="flex shrink-0 items-center">
+              {showWidgets && (
+                <button
+                  type="button"
+                  onClick={() => stackRef.current?.snapAll()}
+                  title="Snap widgets back to the corner"
+                  aria-label="Snap widgets back to the corner"
+                  className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <PanelRightOpen className="h-4 w-4" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowWidgets((v) => !v)}
+                title={showWidgets ? 'Hide widgets' : 'Show widgets'}
+                aria-label={showWidgets ? 'Hide widgets' : 'Show widgets'}
+                aria-pressed={showWidgets}
+                className="-mr-1.5 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                {showWidgets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
         </header>
 
@@ -457,7 +486,7 @@ export default function App() {
         <HowRolesWork currentLevel={me.level} onClose={() => setShowRoles(false)} />
       )}
 
-      <main className="space-y-6 px-6 py-8 lg:pr-[19rem]">
+      <main className={'space-y-6 px-6 py-8' + (showWidgets ? ' lg:pr-[19rem]' : '')}>
         <form onSubmit={submit} className="space-y-3">
           <textarea
             value={question}
@@ -704,11 +733,13 @@ export default function App() {
         )}
       </main>
 
-      <FloatingWidgetStack<WidgetCtx>
-        ref={stackRef}
-        widgets={widgets}
-        ctx={widgetCtx}
-      />
+      {showWidgets && (
+        <FloatingWidgetStack<WidgetCtx>
+          ref={stackRef}
+          widgets={widgets}
+          ctx={widgetCtx}
+        />
+      )}
       </div>
     </LayoutProvider>
   )
