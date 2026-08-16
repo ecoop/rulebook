@@ -1,5 +1,41 @@
 import { Fragment, useEffect, useState } from 'react'
 import { LevelBadge, levelInfo, levelNumber } from './levels'
+import { type IssueTag, TAG_LABELS, TAGS } from './tags'
+
+// Multi-select issue-tag chips, shared by the rate and feedback-edit editors.
+// Only rendered where the caller holds `feedback.tag` (the callers gate it).
+function TagPicker({
+  selected,
+  onToggle,
+}: {
+  selected: Set<IssueTag>
+  onToggle: (t: IssueTag) => void
+}) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {TAGS.map((t) => {
+        const on = selected.has(t)
+        return (
+          <button
+            key={t}
+            type="button"
+            onClick={() => onToggle(t)}
+            title={TAG_LABELS[t]}
+            aria-pressed={on}
+            className={
+              'rounded-full border px-2 py-0.5 text-xs font-medium ' +
+              (on
+                ? 'border-foreground bg-foreground text-background'
+                : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
+            }
+          >
+            {t}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 // Advanced surface — capability-gated tabs (feedback / golds / sources / users
 // / audit) for reviewers, operators, and admins. Reached via URL hash
@@ -281,6 +317,7 @@ export default function AdvancedApp() {
   const [rateQa, setRateQa] = useState<string | null>(null)
   const [rateVal, setRateVal] = useState(0)
   const [rateComment, setRateComment] = useState('')
+  const [rateTags, setRateTags] = useState<Set<IssueTag>>(() => new Set())
   const [rateSaving, setRateSaving] = useState(false)
   const [rateError, setRateError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<AdminFeedbackRow[] | null>(null)
@@ -288,6 +325,7 @@ export default function AdvancedApp() {
   const [editingFb, setEditingFb] = useState<string | null>(null)
   const [fbRating, setFbRating] = useState(0)
   const [fbComment, setFbComment] = useState('')
+  const [fbTags, setFbTags] = useState<Set<IssueTag>>(() => new Set())
   const [fbSaving, setFbSaving] = useState(false)
   const [fbError, setFbError] = useState<string | null>(null)
   const [audit, setAudit] = useState<AuditRow[] | null>(null)
@@ -781,11 +819,14 @@ export default function AdvancedApp() {
     setEditingFb(f.qa_id)
     setFbRating(f.rating)
     setFbComment(f.comment ?? '')
+    setFbTags(new Set(f.tags as IssueTag[]))
     setFbError(null)
   }
 
   // Edit your own feedback — a re-POST to /feedback (last-write-wins per qa_id).
-  // Tags are preserved as-is; comment only changes if you hold feedback.comment.
+  // Comment and tags only change if you hold the matching cap; otherwise the
+  // existing values are preserved (a demoted user can still re-rate without
+  // wiping a comment/tags they can no longer edit).
   async function saveFeedbackEdit(row: AdminFeedbackRow) {
     if (fbSaving) return
     if (fbRating < 1) {
@@ -796,10 +837,11 @@ export default function AdvancedApp() {
     setFbError(null)
     try {
       const comment = can('feedback.comment') ? fbComment.trim() || null : (row.comment ?? null)
+      const tags = can('feedback.tag') ? Array.from(fbTags) : row.tags
       const resp = await fetch('/feedback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ qa_id: row.qa_id, rating: fbRating, tags: row.tags, comment }),
+        body: JSON.stringify({ qa_id: row.qa_id, rating: fbRating, tags, comment }),
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       await refreshFeedback()
@@ -812,7 +854,7 @@ export default function AdvancedApp() {
   }
 
   // First rating for a past question that was never rated (#51). Fresh row, so
-  // no comment/tags to preserve; a comment rides along if the caller can leave one.
+  // nothing to preserve; a comment and tags ride along per the caller's caps.
   async function saveQuestionRating(row: AdminQuestionRow) {
     if (rateSaving) return
     if (rateVal < 1) {
@@ -823,10 +865,11 @@ export default function AdvancedApp() {
     setRateError(null)
     try {
       const comment = can('feedback.comment') ? rateComment.trim() || null : null
+      const tags = can('feedback.tag') ? Array.from(rateTags) : []
       const resp = await fetch('/feedback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ qa_id: row.qa_id, rating: rateVal, tags: [], comment }),
+        body: JSON.stringify({ qa_id: row.qa_id, rating: rateVal, tags, comment }),
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       await refreshQuestions()
@@ -1142,6 +1185,7 @@ export default function AdvancedApp() {
                                   setRateQa(q.qa_id)
                                   setRateVal(0)
                                   setRateComment('')
+                                  setRateTags(new Set())
                                   setRateError(null)
                                 }}
                                 className="mr-2 mt-3 rounded-md border border-border px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -1169,6 +1213,19 @@ export default function AdvancedApp() {
                                     </button>
                                   ))}
                                 </div>
+                                {can('feedback.tag') && (
+                                  <TagPicker
+                                    selected={rateTags}
+                                    onToggle={(t) =>
+                                      setRateTags((prev) => {
+                                        const n = new Set(prev)
+                                        if (n.has(t)) n.delete(t)
+                                        else n.add(t)
+                                        return n
+                                      })
+                                    }
+                                  />
+                                )}
                                 {can('feedback.comment') && (
                                   <textarea
                                     value={rateComment}
@@ -1401,6 +1458,19 @@ export default function AdvancedApp() {
                               </button>
                             ))}
                           </div>
+                          {can('feedback.tag') && (
+                            <TagPicker
+                              selected={fbTags}
+                              onToggle={(t) =>
+                                setFbTags((prev) => {
+                                  const n = new Set(prev)
+                                  if (n.has(t)) n.delete(t)
+                                  else n.add(t)
+                                  return n
+                                })
+                              }
+                            />
+                          )}
                           {can('feedback.comment') && (
                             <textarea
                               value={fbComment}
