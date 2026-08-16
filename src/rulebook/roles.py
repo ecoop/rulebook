@@ -81,13 +81,15 @@ CAP_FEEDBACK_VIEW = "feedback.view"           # Feedback tab — your own rows
 CAP_FEEDBACK_VIEW_ALL = "feedback.view.all"   # …everyone's rows  (self/all slice)
 CAP_GOLDS_VIEW = "golds.view"                 # Golds tab — your own rows
 CAP_GOLDS_VIEW_ALL = "golds.view.all"         # …everyone's rows  (self/all slice)
+CAP_QUESTIONS_VIEW_ALL = "questions.view.all" # Questions tab — everyone's, with author
 CAP_GOLDS_EDIT_OWN = "golds.edit.own"         # edit a gold you authored
 CAP_GOLDS_CLONE = "golds.clone"               # clone another's gold → yours  (clone slice)
 CAP_GOLDS_CURATE = "golds.curate"             # toggle a gold's Incl.
 CAP_SOURCES_VIEW = "sources.view"             # Sources tab (the corpus)
 CAP_SOURCES_CURATE = "sources.curate"         # toggle a source's inclusion
 CAP_INDEX_REBUILD = "index.rebuild"           # the Rebuild index button
-CAP_ATTRIBUTION_VIEW = "attribution.view"     # author identity on rows  (attribution slice)
+CAP_ATTRIBUTION_VIEW = "attribution.view"     # the Audit tab (actor of shared-state changes);
+#                                               row authors ride with the *.view.all tier (L5)
 CAP_USERS_VIEW = "users.view"                 # Users tab — see rows
 CAP_USERS_CHANGE_ROLE = "users.change_role"   # change a user's role
 CAP_USERS_ADD = "users.add"                   # add an invitee
@@ -100,7 +102,8 @@ CAPABILITIES: frozenset[str] = frozenset({
     CAP_ASK, CAP_RATE, CAP_FEEDBACK_TAG, CAP_FEEDBACK_COMMENT, CAP_GOLD_AUTHOR,
     CAP_ACTIVITY_VIEW,
     CAP_PASSAGES_VIEW, CAP_ADVANCED_VIEW, CAP_FEEDBACK_VIEW, CAP_FEEDBACK_VIEW_ALL,
-    CAP_GOLDS_VIEW, CAP_GOLDS_VIEW_ALL, CAP_GOLDS_EDIT_OWN, CAP_GOLDS_CLONE,
+    CAP_GOLDS_VIEW, CAP_GOLDS_VIEW_ALL, CAP_QUESTIONS_VIEW_ALL,
+    CAP_GOLDS_EDIT_OWN, CAP_GOLDS_CLONE,
     CAP_GOLDS_CURATE, CAP_SOURCES_VIEW, CAP_SOURCES_CURATE, CAP_INDEX_REBUILD,
     CAP_ATTRIBUTION_VIEW, CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE, CAP_USERS_ADD,
     CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE,
@@ -120,7 +123,9 @@ _R3 = _R2 | {                                                    # + suggest & r
 _R4 = _R3 | {                                                    # + the retrieval machinery (self)
     CAP_ADVANCED_VIEW, CAP_PASSAGES_VIEW, CAP_SOURCES_VIEW,
 }
-_R5 = _R4 | {CAP_FEEDBACK_VIEW_ALL, CAP_GOLDS_VIEW_ALL}          # read all, write own
+_R5 = _R4 | {                                                    # read all (with authors), write own
+    CAP_FEEDBACK_VIEW_ALL, CAP_GOLDS_VIEW_ALL, CAP_QUESTIONS_VIEW_ALL,
+}
 _R6 = _R5 | {                                                    # operator
     CAP_GOLDS_CURATE, CAP_GOLDS_CLONE, CAP_SOURCES_CURATE,
     CAP_INDEX_REBUILD, CAP_ATTRIBUTION_VIEW,

@@ -165,6 +165,14 @@ def test_questions_history_self_scoped(client, monkeypatch):
     _as(client, "tok_nov")
     assert client.get("/advanced/questions").json()["questions"] == []
 
+    # level8 holds questions.view.all → sees everyone's, each stamped with its
+    # asker, and is_own flags only the caller's own (boss authored q2).
+    _as(client, "tok_super")
+    qs = {q["qa_id"]: q for q in client.get("/advanced/questions").json()["questions"]}
+    assert set(qs) == {"q1", "q2"}
+    assert qs["q1"]["author"] == "gina" and qs["q1"]["is_own"] is False
+    assert qs["q2"]["author"] == "boss" and qs["q2"]["is_own"] is True
+
 
 def test_clone_gold_creates_owned_copy(client, monkeypatch):
     import api.main as main

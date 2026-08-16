@@ -96,7 +96,7 @@ Representative gates (full matrix in [`rbac-capabilities.md`](rbac-capabilities.
 | comment on an answer | `feedback.comment` | level2 |
 | suggest & revisit your own golds | `gold.author`, `golds.view`, `golds.edit.own` | level3 |
 | passages + Sources tab, own items | `advanced.view`, `passages.view`, `sources.view` | level4 |
-| review everyone's items | `golds.view.all`, `feedback.view.all` | level5 |
+| review everyone's items (with authors) | `feedback.view.all`, `golds.view.all`, `questions.view.all` | level5 |
 | curate / clone / rebuild / audit | `golds.curate`, `golds.clone`, `index.rebuild`, `attribution.view` | level6 |
 | Users tab, change role, add invitee | `users.view`, `users.change_role`, `users.add` | level7 |
 | remove / rename user, RBAC config | `users.remove`, `users.rename`, `roles.manage` | level8 |
@@ -107,10 +107,13 @@ features.
 
 ## Self vs all — scoping
 
-Golds and feedback lists are scoped to the caller's own rows unless they hold the
-matching `*.view.all` capability (level5+). Curation and cloning key on
-`gold_id`; a user with `golds.clone` (level6) forks another's gold into a new one
-they own rather than editing it in place — there is no `golds.edit.any`.
+Questions, golds, and feedback lists are scoped to the caller's own rows unless
+they hold the matching `*.view.all` capability (level5+), which also reveals **who**
+wrote/asked each row — authorship rides with the all-view tier, not a separate wall
+(we don't do blind review). `attribution.view` (level6) is now just the Audit tab.
+Curation and cloning key on `gold_id`; a user with `golds.clone` (level6) forks
+another's gold into a new one they own rather than editing it in place — there is no
+`golds.edit.any`.
 
 ## Audit trail
 
