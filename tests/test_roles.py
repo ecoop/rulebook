@@ -133,9 +133,12 @@ def test_rung_boundaries():
     assert has("level4", roles.CAP_GOLDS_EDIT_OWN)
     for cap in (roles.CAP_GOLDS_VIEW_ALL, roles.CAP_GOLDS_CURATE, roles.CAP_ATTRIBUTION_VIEW):
         assert not has("level4", cap)
-    # level5: self → all (read), still no curate/clone/attribution.
+    # level5: self → all (read) across questions/feedback/golds — with authorship;
+    # still no curate/clone, and the Audit tab (attribution.view) stays at level6.
     assert has("level5", roles.CAP_GOLDS_VIEW_ALL)
     assert has("level5", roles.CAP_FEEDBACK_VIEW_ALL)
+    assert has("level5", roles.CAP_QUESTIONS_VIEW_ALL)
+    assert not has("level4", roles.CAP_QUESTIONS_VIEW_ALL)
     assert not has("level5", roles.CAP_GOLDS_CURATE)
     assert not has("level5", roles.CAP_ATTRIBUTION_VIEW)
     # level6: curate/clone/rebuild + the attribution wall — but no Users.

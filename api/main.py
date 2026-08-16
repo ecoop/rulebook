@@ -85,6 +85,7 @@ from rulebook.roles import (  # noqa: E402
     CAP_GOLDS_VIEW,
     CAP_GOLDS_VIEW_ALL,
     CAP_INDEX_REBUILD,
+    CAP_QUESTIONS_VIEW_ALL,
     CAP_RATE,
     CAP_SOURCES_CURATE,
     CAP_SOURCES_VIEW,
@@ -247,6 +248,7 @@ class AdminFeedbackRow(BaseModel):
     question: str = Field(..., description="From qa_log; may be empty for orphan feedback rows.")
     has_gold: bool = Field(..., description="True if the user has authored a gold answer for this qa_id.")
     is_own: bool = Field(..., description="Whether the current caller authored it — gates inline Edit.")
+    author: str | None = Field(default=None, description="Who left this feedback; shown to view-all readers (L5+).")
 
 
 class AdminFeedbackListResponse(BaseModel):
@@ -261,6 +263,8 @@ class AdminQuestionRow(BaseModel):
     timestamp: str
     rating: int | None = Field(default=None, description="Your rating for this Q&A, if you gave one.")
     has_gold: bool = Field(..., description="True if you've authored a gold for this qa_id.")
+    is_own: bool = Field(..., description="Whether the current caller asked it — gates the inline Add-gold action.")
+    author: str | None = Field(default=None, description="Who asked; shown to view-all readers (L5+).")
 
 
 class AdminQuestionListResponse(BaseModel):
@@ -1099,6 +1103,7 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
                 question=questions.get(r["qa_id"], ""),
                 has_gold=r["qa_id"] in gold_qa_ids,
                 is_own=r.get("author") == me_author,
+                author=r.get("author"),
             )
         )
     return AdminFeedbackListResponse(feedback=rows)
@@ -1106,14 +1111,18 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
 
 @app.get("/advanced/questions", response_model=AdminQuestionListResponse, dependencies=[Depends(require_capability(CAP_ACTIVITY_VIEW))])
 def admin_list_questions() -> AdminQuestionListResponse:
-    """The caller's own asked questions, newest-first — the "my questions"
-    history (#51).
+    """Asked questions, newest-first — the "my questions" history (#51).
 
-    Always self-scoped: even a view-all reader sees only the questions they
-    asked. Joins the caller's own ratings and golds so the UI can flag which
-    past questions they haven't acted on yet (e.g. add a gold after a
-    promotion). `activity.view` (level 1+) gates it — the personal surface.
+    Self-scoped by default (`activity.view`, level 1+): you see only the
+    questions you asked. With `questions.view.all` (Reviewer, level 5+) you
+    see everyone's, each stamped with its author — the same self→all slice the
+    feedback/gold lists use, and the tier where row authorship becomes visible.
+
+    The rating / has_gold flags are the *caller's own* action status (have I
+    rated / golded this), so `is_own` also gates the inline Add-gold action to
+    your own questions.
     """
+    see_all, _ = _view_scope(CAP_QUESTIONS_VIEW_ALL)
     guest = get_current_guest()
     me_author = guest.recipient if guest else None
     my_ratings = {
@@ -1131,9 +1140,11 @@ def admin_list_questions() -> AdminQuestionListResponse:
             timestamp=r["timestamp"],
             rating=my_ratings.get(r["qa_id"]),
             has_gold=r["qa_id"] in my_golds,
+            is_own=r.get("author") == me_author,
+            author=r.get("author"),
         )
         for r in read_qa_entries()
-        if r.get("author") == me_author
+        if see_all or r.get("author") == me_author
     ]
     return AdminQuestionListResponse(questions=rows)
 

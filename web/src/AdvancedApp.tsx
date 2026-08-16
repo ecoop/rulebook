@@ -60,6 +60,7 @@ interface AdminFeedbackRow {
   question: string
   has_gold: boolean
   is_own: boolean
+  author: string | null
 }
 
 interface AdminQuestionRow {
@@ -70,6 +71,8 @@ interface AdminQuestionRow {
   timestamp: string
   rating: number | null
   has_gold: boolean
+  is_own: boolean
+  author: string | null
 }
 
 interface AdminQuestionListResponse {
@@ -1021,6 +1024,9 @@ export default function AdvancedApp() {
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
                   <th className="px-3 py-2 font-medium">Question</th>
+                  {can('questions.view.all') && (
+                    <th className="px-3 py-2 font-medium">Asked by</th>
+                  )}
                   <th className="px-3 py-2 text-center font-medium">Rating</th>
                   <th className="px-3 py-2 text-center font-medium">Gold</th>
                   <th className="px-3 py-2 font-medium">When</th>
@@ -1051,6 +1057,11 @@ export default function AdvancedApp() {
                             {q.sport ? ` · ${q.sport}` : ''}
                           </div>
                         </td>
+                        {can('questions.view.all') && (
+                          <td className="px-3 py-2 text-sm text-muted-foreground">
+                            {q.author ?? '—'}
+                          </td>
+                        )}
                         <td className="px-3 py-2 text-center">
                           {q.rating != null ? (
                             <span
@@ -1082,13 +1093,13 @@ export default function AdvancedApp() {
                       </tr>
                       {open && (
                         <tr className="bg-muted/30">
-                          <td colSpan={4} className="px-3 py-3">
+                          <td colSpan={can('questions.view.all') ? 5 : 4} className="px-3 py-3">
                             <div className="whitespace-pre-wrap text-sm text-foreground">
                               {q.answer || (
                                 <span className="italic text-muted-foreground">(no stored answer)</span>
                               )}
                             </div>
-                            {can('gold.author') && !q.has_gold && !adding && (
+                            {q.is_own && can('gold.author') && !q.has_gold && !adding && (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1235,6 +1246,7 @@ export default function AdvancedApp() {
                         )}
                         <div className="mt-1 font-mono text-[10px] text-muted-foreground">
                           {f.qa_id.slice(0, 8)}
+                          {!f.is_own && <span> · by {f.author ?? 'unknown'}</span>}
                         </div>
                       </td>
                       <td className="px-3 py-2">
