@@ -276,6 +276,18 @@ def read_qa_questions() -> dict[str, str]:
     return {qa_id: row.get("question", "") for qa_id, row in latest.items()}
 
 
+def read_qa_entries() -> list[dict[str, Any]]:
+    """Latest qa_log row per qa_id, newest-first — for the "my questions" history.
+
+    Each row carries question, answer, sport, timestamp, and author; the
+    caller self-scopes by author. Empty list if the log doesn't exist yet.
+    """
+    latest = read_latest(_log_dir() / "qa_log.jsonl", "qa_id")
+    rows = list(latest.values())
+    rows.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
+    return rows
+
+
 def count_questions_by_author() -> dict[str, int]:
     """Lifetime question counts keyed by author (guest-auth recipient label).
 
