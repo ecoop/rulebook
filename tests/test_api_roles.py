@@ -140,6 +140,32 @@ def test_golds_and_feedback_self_scoped(client, monkeypatch):
     assert fb["q2"]["is_own"] is True and fb["q1"]["is_own"] is False
 
 
+def test_questions_history_self_scoped(client, monkeypatch):
+    import api.main as main
+
+    qa = [
+        {"qa_id": "q1", "question": "a?", "answer": "A", "sport": "ultimate", "timestamp": "t2", "author": "gina"},
+        {"qa_id": "q2", "question": "b?", "answer": "B", "sport": None, "timestamp": "t1", "author": "boss"},
+    ]
+    feedback = [{"qa_id": "q1", "timestamp": "t", "rating": 4, "author": "gina"}]
+    golds = [{"gold_id": "g1", "qa_id": "q1", "question": "a?", "gold_answer": "A", "timestamp": "t", "author": "gina"}]
+    monkeypatch.setattr(main, "read_qa_entries", lambda: qa)
+    monkeypatch.setattr(main, "read_latest_feedback", lambda: feedback)
+    monkeypatch.setattr(main, "read_latest_golds", lambda: golds)
+
+    # "My questions" is always self-scoped: gina sees only q1, with her rating
+    # and gold joined in — never boss's q2.
+    _as(client, "tok_l4")
+    qs = client.get("/advanced/questions").json()["questions"]
+    assert [q["qa_id"] for q in qs] == ["q1"]
+    assert qs[0]["rating"] == 4 and qs[0]["has_gold"] is True and qs[0]["answer"] == "A"
+
+    # activity.view is level1+, so a novice reaches it — and sees only their own
+    # (none here → empty), never everyone's.
+    _as(client, "tok_nov")
+    assert client.get("/advanced/questions").json()["questions"] == []
+
+
 def test_clone_gold_creates_owned_copy(client, monkeypatch):
     import api.main as main
 
