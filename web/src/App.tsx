@@ -413,7 +413,7 @@ export default function App() {
                 </button>
                 {showActivityLink && (
                   <a
-                    href="#/advanced"
+                    href="#/activity"
                     className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
                   >
                     Your activity
