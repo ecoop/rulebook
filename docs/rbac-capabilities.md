@@ -106,7 +106,9 @@ curate / users caps are the operator extras layered on top.
 | `roles.manage` | edit the RBAC config itself (the future data-driven editor, §8) |
 
 Note there is no `golds.edit.any`: nobody edits another person's gold **in place** —
-you **clone** it (§5). Feedback is **never editable** at any rung; it's read-only data.
+you **clone** it (§5). You **may** edit **your own** feedback (re-rate, edit the comment)
+from *Your activity* — a re-POST to `/feedback`, last-write-wins per `qa_id`, gated by the
+same per-field caps (`rate`, `feedback.comment`); nobody edits another person's feedback.
 
 ## 4. The eight rungs (levels)
 
