@@ -90,6 +90,7 @@ curate / users caps are the operator extras layered on top.
 | `feedback.view.all` | Feedback tab shows **everyone's** rows |
 | `golds.view` | Golds tab — **your own** rows |
 | `golds.view.all` | Golds tab shows **everyone's** rows |
+| `questions.view.all` | Questions tab shows **everyone's** rows, stamped with the asker |
 | `golds.edit.own` | Edit a gold you authored |
 | `golds.clone` | Clone another's gold into your own, then edit as your own |
 | `golds.curate` | toggle a gold's *Incl.* |
@@ -97,7 +98,7 @@ curate / users caps are the operator extras layered on top.
 | `sources.curate` | toggle a source's inclusion |
 | `sources.add` | upload a new source — **future** (see [`sources-upload.md`](sources-upload.md)) |
 | `index.rebuild` | the *Rebuild index* button |
-| `attribution.view` | see the author identity on feedback / gold rows |
+| `attribution.view` | the **Audit** tab (who changed shared state). Row authors on feedback/gold/question lists ride with the `*.view.all` tier (L5), not this |
 | `users.view` | Users tab — see rows |
 | `users.change_role` | change a user's role |
 | `users.add` | add an invitee |
@@ -126,7 +127,7 @@ table lists only **what each level adds**.
 | **2** | + explain a rating | `feedback.comment` |
 | **3** | + suggest & revisit your own golds | `gold.author`, `golds.view`, `golds.edit.own` |
 | **4** | + the retrieval machinery — self, read-mostly | `advanced.view`, `passages.view`, `sources.view` |
-| **5** | read all, write own | `feedback.view.all`, `golds.view.all` |
+| **5** | read all (with authors), write own | `feedback.view.all`, `golds.view.all`, `questions.view.all` |
 | **6** | operator | `golds.curate`, `golds.clone`, `sources.curate`, `index.rebuild`, `attribution.view` *(+ audit — §5)* |
 | **7** | admin | `users.view`, `users.change_role`, `users.add` |
 | **8** | superuser | `users.remove`, `users.rename`, `roles.manage` |
@@ -143,7 +144,7 @@ Reference matrix (✓ = has it; columns are cumulative left→right, by level):
 | `feedback.comment` | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `gold.author` · `golds.view` · `golds.edit.own` (own) | | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `advanced.view` · `passages.view` · `sources.view` | | | | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `feedback.view.all` · `golds.view.all` | | | | | ✓ | ✓ | ✓ | ✓ |
+| `feedback.view.all` · `golds.view.all` · `questions.view.all` | | | | | ✓ | ✓ | ✓ | ✓ |
 | `golds.curate` · `golds.clone` | | | | | | ✓ | ✓ | ✓ |
 | `sources.curate` · `index.rebuild` | | | | | | ✓ | ✓ | ✓ |
 | `attribution.view` | | | | | | ✓ | ✓ | ✓ |
@@ -156,10 +157,14 @@ What each boundary means, in one line:
   revisiting their own golds. The page is never empty — it grows tab-by-tab as you climb.
 - **3→4** is the *retrieval machinery* appearing — passages and the Sources tab. Still
   self-scoped (you see only your own feedback/gold rows), just "behind the curtain."
-- **4→5** is scope: self → all (read). Level 4 sees only its own feedback/golds; level 5
-  sees everyone's. Tab counts read "your X" at 4, the global total at 5.
-- **5→6** is two things at once: **write on others' assets** (curate, clone, rebuild) *and*
-  the **attribution wall** (§5). The boundary to be most deliberate about.
+- **4→5** is scope: self → all (read), **with authorship**. Level 4 sees only its own
+  feedback/golds/questions; level 5 sees everyone's, each stamped with who wrote/asked it.
+  (We deliberately *don't* do blind review — in a small community, hiding authorship from a
+  reviewer is more confusing than useful.) Tab counts read "your X" at 4, the global total at 5.
+- **5→6** is **write on others' assets** (curate, clone, rebuild) plus the **Audit** tab —
+  the log of who changed shared state (`attribution.view`). Row authorship is already visible
+  at 5; what 6 adds is the *mutation* powers and the audit trail. The boundary to be most
+  deliberate about.
 - **6→7** is people: the Users tab, role changes, and inviting users.
 - **7→8** is the **destructive** roster ops (remove, rename) plus editing the RBAC config
   itself. Level 7 adds *and* adjusts users; level 8 is the only one that can *delete or
