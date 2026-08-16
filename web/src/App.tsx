@@ -148,13 +148,6 @@ export default function App() {
   const headerRef = useRef<HTMLElement>(null)
   const stackRef = useRef<FloatingWidgetStackHandle>(null)
 
-  // Superusers are developers — surface build + model info by default rather
-  // than making them click. Everyone else starts collapsed behind "Version".
-  const isSuperuser = !!me?.demo_mode && me.level >= 8
-  useEffect(() => {
-    if (isSuperuser) setShowVersion(true)
-  }, [isSuperuser])
-
   useEffect(() => {
     fetch('/meta')
       .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
