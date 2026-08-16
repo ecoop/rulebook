@@ -37,9 +37,9 @@ function TagPicker({
   )
 }
 
-// Advanced surface — capability-gated tabs (feedback / golds / sources / users
-// / audit) for reviewers, operators, and admins. Reached via URL hash
-// `#/advanced` — see main.tsx.
+// "Your activity" surface — capability-gated tabs (questions / feedback / golds
+// / sources / users / audit) that grow from a personal, self-scoped view into
+// the operator toolset. Reached via URL hash `#/activity` — see main.tsx.
 
 interface AdminGoldRow {
   gold_id: string
@@ -284,7 +284,7 @@ function formatWhen(iso: string): string {
   })
 }
 
-export default function AdvancedApp() {
+export default function ActivityApp() {
   const [rows, setRows] = useState<AdminGoldRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
