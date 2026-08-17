@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type RefObject, useEffect, useMemo, useRef, useState } from 'react'
 import { Eye, EyeOff, Info, PanelRightOpen } from 'lucide-react'
 import {
   FloatingWidgetStack,
   LayoutProvider,
   StackOriginReporter,
+  useDock,
   type FloatingWidgetStackHandle,
   type WidgetDef,
 } from '@nobadeer/floating-widgets'
@@ -145,23 +146,8 @@ export default function App() {
   const [showHowItWorks, setShowHowItWorks] = useState(false)
   const [showVersion, setShowVersion] = useState(false)
   const [showRoles, setShowRoles] = useState(false)
-  // Floating widgets need a side gutter to live in — the layout only reserves
-  // one at desktop width (lg). Below that they'd float over the content, so
-  // default them hidden and let the header toggle summon them (#mobile).
-  const [showWidgets, setShowWidgets] = useState(
-    () => window.matchMedia('(min-width: 1024px)').matches,
-  )
   const headerRef = useRef<HTMLElement>(null)
   const stackRef = useRef<FloatingWidgetStackHandle>(null)
-
-  // Re-apply the breakpoint default when the viewport crosses it (a manual
-  // toggle sticks until the next crossing — and a phone never crosses).
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)')
-    const apply = () => setShowWidgets(mq.matches)
-    mq.addEventListener('change', apply)
-    return () => mq.removeEventListener('change', apply)
-  }, [])
 
   useEffect(() => {
     fetch('/meta')
@@ -368,7 +354,7 @@ export default function App() {
   }
 
   return (
-    <LayoutProvider>
+    <LayoutProvider dockBelow={1024}>
       <StackOriginReporter headerRef={headerRef} />
       <div className="min-h-screen bg-background text-foreground">
         <header ref={headerRef} className="border-b border-border bg-card">
@@ -454,29 +440,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            <div className="flex shrink-0 items-center">
-              {showWidgets && (
-                <button
-                  type="button"
-                  onClick={() => stackRef.current?.snapAll()}
-                  title="Snap widgets back to the corner"
-                  aria-label="Snap widgets back to the corner"
-                  className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                  <PanelRightOpen className="h-4 w-4" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setShowWidgets((v) => !v)}
-                title={showWidgets ? 'Hide widgets' : 'Show widgets'}
-                aria-label={showWidgets ? 'Hide widgets' : 'Show widgets'}
-                aria-pressed={showWidgets}
-                className="-mr-1.5 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                {showWidgets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
+            <WidgetControls stackRef={stackRef} />
           </div>
         </header>
 
@@ -486,7 +450,7 @@ export default function App() {
         <HowRolesWork currentLevel={me.level} onClose={() => setShowRoles(false)} />
       )}
 
-      <main className={'space-y-6 px-6 py-8' + (showWidgets ? ' lg:pr-[19rem]' : '')}>
+      <main className="space-y-6 px-6 py-8 lg:pr-[19rem]">
         <form onSubmit={submit} className="space-y-3">
           <textarea
             value={question}
@@ -733,15 +697,49 @@ export default function App() {
         )}
       </main>
 
-      {showWidgets && (
-        <FloatingWidgetStack<WidgetCtx>
-          ref={stackRef}
-          widgets={widgets}
-          ctx={widgetCtx}
-        />
-      )}
+      <FloatingWidgetStack<WidgetCtx>
+        ref={stackRef}
+        widgets={widgets}
+        ctx={widgetCtx}
+        dockLabel="Usage & diagnostics"
+        classNames={{ dockPanel: 'rounded-t-2xl' }}
+        renderDockTrigger={() => null}
+      />
       </div>
     </LayoutProvider>
+  )
+}
+
+// The widget controls in the header. Rendered inside <LayoutProvider>, so it can
+// read the dock state via useDock() — holding NO state of its own (two owners of
+// "is the HUD open" is how they drift). On a phone (dock presentation) it toggles
+// the docked sheet; on desktop (floating) it snaps the widgets back to the corner.
+function WidgetControls({ stackRef }: { stackRef: RefObject<FloatingWidgetStackHandle | null> }) {
+  const { isDock, open, toggle } = useDock()
+  if (isDock) {
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        aria-pressed={open}
+        title={open ? 'Hide widgets' : 'Show widgets'}
+        aria-label={open ? 'Hide widgets' : 'Show widgets'}
+        className="-mr-1.5 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        {open ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => stackRef.current?.snapAll()}
+      title="Snap widgets back to the corner"
+      aria-label="Snap widgets back to the corner"
+      className="-mr-1.5 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+    >
+      <PanelRightOpen className="h-4 w-4" />
+    </button>
   )
 }
 
