@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { LevelBadge, levelInfo, levelNumber } from './levels'
 import { type IssueTag, TAG_LABELS, TAGS } from './tags'
+import { WidgetControls } from './WidgetControls'
 
 // Multi-select issue-tag chips, shared by the rate and feedback-edit editors.
 // Only rendered where the caller holds `feedback.tag` (the callers gate it).
@@ -986,7 +987,7 @@ export default function ActivityApp() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border bg-card">
-        <div className="px-6 py-4 md:pr-[19rem]">
+        <div className="px-6 py-4 lg:pr-[19rem]">
           <div className="flex items-baseline justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold tracking-tight">
@@ -999,12 +1000,15 @@ export default function ActivityApp() {
               </p>
             </div>
             <div className="flex flex-col items-end gap-1">
-              {me?.recipient && (
-                <span className="flex items-center gap-1.5 text-sm">
-                  <span className="font-medium text-foreground">{me.recipient}</span>
-                  {me.demo_mode && <LevelBadge level={me.level} />}
-                </span>
-              )}
+              <div className="flex items-center gap-1.5">
+                {me?.recipient && (
+                  <span className="flex items-center gap-1.5 text-sm">
+                    <span className="font-medium text-foreground">{me.recipient}</span>
+                    {me.demo_mode && <LevelBadge level={me.level} />}
+                  </span>
+                )}
+                <WidgetControls />
+              </div>
               <a href="#/" className="text-sm text-muted-foreground hover:text-foreground hover:underline">
                 ← back to Q&amp;A
               </a>
@@ -1016,7 +1020,7 @@ export default function ActivityApp() {
       {/* Left-aligned, full-width, with a right gutter reserving space for the
           floating widgets (they portal to <body> and show over this view too).
           Mirrors the main page's layout — content shifts left, widgets stay. */}
-      <main className="space-y-4 px-6 py-6 md:pr-[19rem]">
+      <main className="space-y-4 px-6 py-6 lg:pr-[19rem]">
         {error && (
           <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
             <div className="font-medium">Request failed</div>
