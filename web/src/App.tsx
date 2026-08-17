@@ -1,13 +1,12 @@
-import { type RefObject, useEffect, useMemo, useRef, useState } from 'react'
-import { Eye, EyeOff, Info, PanelRightOpen } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Info } from 'lucide-react'
 import {
   FloatingWidgetStack,
-  LayoutProvider,
   StackOriginReporter,
-  useDock,
   type FloatingWidgetStackHandle,
   type WidgetDef,
 } from '@nobadeer/floating-widgets'
+import { WidgetControls } from './WidgetControls'
 
 import { UsageBody, UsageSummaryLine, type UsageSnapshot } from './widgets/Usage'
 import {
@@ -354,7 +353,7 @@ export default function App() {
   }
 
   return (
-    <LayoutProvider dockBelow={1024}>
+    <>
       <StackOriginReporter headerRef={headerRef} />
       <div className="min-h-screen bg-background text-foreground">
         <header ref={headerRef} className="border-b border-border bg-card">
@@ -706,40 +705,7 @@ export default function App() {
         renderDockTrigger={() => null}
       />
       </div>
-    </LayoutProvider>
-  )
-}
-
-// The widget controls in the header. Rendered inside <LayoutProvider>, so it can
-// read the dock state via useDock() — holding NO state of its own (two owners of
-// "is the HUD open" is how they drift). On a phone (dock presentation) it toggles
-// the docked sheet; on desktop (floating) it snaps the widgets back to the corner.
-function WidgetControls({ stackRef }: { stackRef: RefObject<FloatingWidgetStackHandle | null> }) {
-  const { isDock, open, toggle } = useDock()
-  if (isDock) {
-    return (
-      <button
-        type="button"
-        onClick={toggle}
-        aria-pressed={open}
-        title={open ? 'Hide widgets' : 'Show widgets'}
-        aria-label={open ? 'Hide widgets' : 'Show widgets'}
-        className="-mr-1.5 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-      >
-        {open ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      </button>
-    )
-  }
-  return (
-    <button
-      type="button"
-      onClick={() => stackRef.current?.snapAll()}
-      title="Snap widgets back to the corner"
-      aria-label="Snap widgets back to the corner"
-      className="-mr-1.5 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-    >
-      <PanelRightOpen className="h-4 w-4" />
-    </button>
+    </>
   )
 }
 

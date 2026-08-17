@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
+import { LayoutProvider } from '@nobadeer/floating-widgets'
 import ActivityApp from './ActivityApp'
 import App from './App'
 import './index.css'
@@ -26,13 +27,16 @@ function Root() {
     if (LEGACY_HASHES.has(hash)) window.location.hash = '#/activity' // legacy redirect
   }, [hash])
   const showActivity = hash === '#/activity' || LEGACY_HASHES.has(hash)
+  // One LayoutProvider around BOTH views so the dock (and its toggle) is shared:
+  // the widget stack lives in App, but ActivityApp needs the same useDock() so
+  // its header can show the show/hide control too.
   return (
-    <>
+    <LayoutProvider dockBelow={1024}>
       <div style={{ display: showActivity ? 'none' : undefined }}>
         <App />
       </div>
       {showActivity && <ActivityApp />}
-    </>
+    </LayoutProvider>
   )
 }
 
