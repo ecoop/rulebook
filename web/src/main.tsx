@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { LayoutProvider } from '@nobadeer/floating-widgets'
 import ActivityApp from './ActivityApp'
 import App from './App'
+import { WidgetVisibilityProvider } from './widgetVisibility'
 import './index.css'
 
 // Hash-based routing to avoid pulling in react-router for a two-view app.
@@ -32,10 +33,12 @@ function Root() {
   // its header can show the show/hide control too.
   return (
     <LayoutProvider dockBelow={1024}>
-      <div style={{ display: showActivity ? 'none' : undefined }}>
-        <App />
-      </div>
-      {showActivity && <ActivityApp />}
+      <WidgetVisibilityProvider>
+        <div style={{ display: showActivity ? 'none' : undefined }}>
+          <App />
+        </div>
+        {showActivity && <ActivityApp />}
+      </WidgetVisibilityProvider>
     </LayoutProvider>
   )
 }
