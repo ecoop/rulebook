@@ -11,7 +11,7 @@
 // moved), cleared when they show the HUD again. It tints the eye so a hidden
 // HUD can still signal fresh info.
 
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 
 interface WidgetVisibility {
   hidden: boolean
@@ -25,13 +25,22 @@ const Ctx = createContext<WidgetVisibility | null>(null)
 export function WidgetVisibilityProvider({ children }: { children: ReactNode }) {
   const [hidden, setHidden] = useState(false)
   const [hasNew, setHasNew] = useState(false)
-  const toggle = () =>
-    setHidden((h) => {
-      if (h) setHasNew(false) // showing the HUD clears the "new" flag
-      return !h
-    })
-  const markNew = () => setHasNew(true)
-  return <Ctx value={{ hidden, hasNew, toggle, markNew }}>{children}</Ctx>
+  // Stable identities so consumer effects that depend on markNew don't re-run
+  // on every provider render.
+  const toggle = useCallback(
+    () =>
+      setHidden((h) => {
+        if (h) setHasNew(false) // showing the HUD clears the "new" flag
+        return !h
+      }),
+    [],
+  )
+  const markNew = useCallback(() => setHasNew(true), [])
+  const value = useMemo(
+    () => ({ hidden, hasNew, toggle, markNew }),
+    [hidden, hasNew, toggle, markNew],
+  )
+  return <Ctx value={value}>{children}</Ctx>
 }
 
 export function useWidgetVisibility(): WidgetVisibility {
