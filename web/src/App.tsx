@@ -696,13 +696,16 @@ export default function App() {
         )}
       </main>
 
+      {/* No renderDockTrigger override: the closed dock shows the library's
+          built-in peek (the first widget's summary line) so the widgets stay
+          glanceable when collapsed rather than vanishing. The header eye toggle
+          still opens/closes it too. */}
       <FloatingWidgetStack<WidgetCtx>
         ref={stackRef}
         widgets={widgets}
         ctx={widgetCtx}
         dockLabel="Usage & diagnostics"
         classNames={{ dockPanel: 'rounded-t-2xl' }}
-        renderDockTrigger={() => null}
       />
       </div>
     </>
