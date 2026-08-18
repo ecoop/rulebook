@@ -92,6 +92,21 @@ interface Me {
 // Gating is by capability, not rank (docs/rbac-capabilities.md §6): /me returns
 // the caller's `capabilities`; the UI shows a control iff the bundle grants it.
 
+// A signature of the spend-relevant Usage fields, so the hidden HUD can tell
+// when the numbers actually moved (from your ask OR any background source —
+// other guests, telemetry) vs. an identical re-fetch. Caps/flags are static, so
+// they're excluded.
+function usageSig(u: UsageSnapshot | null): string {
+  if (!u) return ''
+  return JSON.stringify([
+    u.hourly_usd,
+    u.daily_usd,
+    u.weekly_usd,
+    u.caller_weekly_usd,
+    u.per_provider_usd,
+  ])
+}
+
 // Format the ISO server-start timestamp for the footer. Uses the viewer's
 // locale so a bug reporter sees a time they can reason about.
 function formatStartedAt(iso: string): string {
@@ -149,6 +164,23 @@ export default function App() {
   const headerRef = useRef<HTMLElement>(null)
   const stackRef = useRef<FloatingWidgetStackHandle>(null)
   const { hidden: widgetsHidden, markNew: markWidgetsNew } = useWidgetVisibility()
+
+  // "New info behind the hidden HUD": snapshot usage when it's hidden, poll on a
+  // timer so we notice changes from ANY source (your ask, other guests,
+  // telemetry) even while idle, and green the eye when the numbers differ.
+  const usageRef = useRef<UsageSnapshot | null>(null)
+  usageRef.current = usage
+  const hideUsageSigRef = useRef('')
+  useEffect(() => {
+    if (!widgetsHidden) return
+    hideUsageSigRef.current = usageSig(usageRef.current)
+    const id = setInterval(() => void refreshWidgetData(), 30_000)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [widgetsHidden])
+  useEffect(() => {
+    if (widgetsHidden && usageSig(usage) !== hideUsageSigRef.current) markWidgetsNew()
+  }, [usage, widgetsHidden, markWidgetsNew])
 
   useEffect(() => {
     fetch('/meta')
@@ -298,9 +330,9 @@ export default function App() {
       setGold(data.answer)
       setSavedGold('')
       // The ask just moved the cost counter — refresh Usage widget. If the HUD
-      // is hidden, flag that there's fresh info behind it (tints the eye green).
+      // is hidden, the usage-watch effect below notices the change and greens
+      // the eye; no need to flag it from here.
       void refreshWidgetData()
-      if (widgetsHidden) markWidgetsNew()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
