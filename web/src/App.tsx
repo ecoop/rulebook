@@ -7,6 +7,7 @@ import {
   type WidgetDef,
 } from '@nobadeer/floating-widgets'
 import { WidgetControls } from './WidgetControls'
+import { useWidgetVisibility } from './widgetVisibility'
 
 import { UsageBody, UsageSummaryLine, type UsageSnapshot } from './widgets/Usage'
 import {
@@ -147,6 +148,7 @@ export default function App() {
   const [showRoles, setShowRoles] = useState(false)
   const headerRef = useRef<HTMLElement>(null)
   const stackRef = useRef<FloatingWidgetStackHandle>(null)
+  const { hidden: widgetsHidden, markNew: markWidgetsNew } = useWidgetVisibility()
 
   useEffect(() => {
     fetch('/meta')
@@ -295,8 +297,10 @@ export default function App() {
       // history for gold-answer feature.
       setGold(data.answer)
       setSavedGold('')
-      // The ask just moved the cost counter — refresh Usage widget.
+      // The ask just moved the cost counter — refresh Usage widget. If the HUD
+      // is hidden, flag that there's fresh info behind it (tints the eye green).
       void refreshWidgetData()
+      if (widgetsHidden) markWidgetsNew()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -696,17 +700,19 @@ export default function App() {
         )}
       </main>
 
-      {/* No renderDockTrigger override: the closed dock shows the library's
-          built-in peek (the first widget's summary line) so the widgets stay
-          glanceable when collapsed rather than vanishing. The header eye toggle
-          still opens/closes it too. */}
-      <FloatingWidgetStack<WidgetCtx>
-        ref={stackRef}
-        widgets={widgets}
-        ctx={widgetCtx}
-        dockLabel="Usage & diagnostics"
-        classNames={{ dockPanel: 'rounded-t-2xl' }}
-      />
+      {/* The eye in the header hides the whole HUD (widgetsHidden). When shown,
+          the library floats it on desktop / docks it on mobile; no
+          renderDockTrigger override, so the closed dock shows its built-in peek
+          (the first widget's summary) rather than vanishing. */}
+      {!widgetsHidden && (
+        <FloatingWidgetStack<WidgetCtx>
+          ref={stackRef}
+          widgets={widgets}
+          ctx={widgetCtx}
+          dockLabel="Usage & diagnostics"
+          classNames={{ dockPanel: 'rounded-t-2xl' }}
+        />
+      )}
       </div>
     </>
   )
