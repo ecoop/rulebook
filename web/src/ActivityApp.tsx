@@ -174,8 +174,8 @@ interface AllowedDomainsOut {
 
 interface AdminAllowedDomainsResponse {
   grants: AllowedDomainsOut[]
-  all_sports: string[]
-  default_sports: string[]
+  all_domains: string[]
+  default_domains: string[]
 }
 
 // One row per invite token, joined with its effective role + engagement.
@@ -378,15 +378,15 @@ export default function ActivityApp() {
   const [ladder, setLadder] = useState<string[]>([])
   // Per-user domain access (#112): the grant rows + the full domain menu.
   const [allowedDomains, setAllowedDomains] = useState<AllowedDomainsOut[] | null>(null)
-  const [allDomains, setAllSports] = useState<string[]>([])
+  const [allDomains, setAllDomains] = useState<string[]>([])
   // The default grant a new user gets, and the add-invite form's working set
   // (pre-checked to the default until the creator touches it).
-  const [defaultDomains, setDefaultSports] = useState<string[]>([])
-  const [addDomains, setAddSports] = useState<Set<string>>(() => new Set())
-  const [addDomainsTouched, setAddSportsTouched] = useState(false)
+  const [defaultDomains, setDefaultDomains] = useState<string[]>([])
+  const [addDomains, setAddDomains] = useState<Set<string>>(() => new Set())
+  const [addDomainsTouched, setAddDomainsTouched] = useState(false)
   // Inline domain editor — one row at a time; `editDomains` is the working set.
-  const [editingDomainsToken, setEditingSportsToken] = useState<string | null>(null)
-  const [editDomains, setEditSports] = useState<Set<string>>(() => new Set())
+  const [editingDomainsToken, setEditingDomainsToken] = useState<string | null>(null)
+  const [editDomains, setEditDomains] = useState<Set<string>>(() => new Set())
   const [addLabel, setAddLabel] = useState('')
   const [addPending, setAddPending] = useState(false)
   const [newInvite, setNewInvite] = useState<InviteTokenOut | null>(null)
@@ -413,7 +413,7 @@ export default function ActivityApp() {
   // Pre-check the add-invite domain selector to the default, until the creator
   // touches it (re-seeds after each successful add, when touched resets).
   useEffect(() => {
-    if (!addDomainsTouched) setAddSports(new Set(defaultDomains))
+    if (!addDomainsTouched) setAddDomains(new Set(defaultDomains))
   }, [defaultDomains, addDomainsTouched])
 
   // Fetch each dataset only if the caller's capabilities grant that tab —
@@ -549,8 +549,8 @@ export default function ActivityApp() {
       setRoles(r.roles)
       setLadder(r.ladder)
       setAllowedDomains(a.grants)
-      setAllSports(a.all_sports)
-      setDefaultSports(a.default_sports)
+      setAllDomains(a.all_domains)
+      setDefaultDomains(a.default_domains)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -572,7 +572,7 @@ export default function ActivityApp() {
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       setNewInvite((await resp.json()) as InviteTokenOut)
       setAddLabel('')
-      setAddSportsTouched(false) // re-seed the selector to the default for the next add
+      setAddDomainsTouched(false) // re-seed the selector to the default for the next add
       await refreshUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -611,13 +611,13 @@ export default function ActivityApp() {
   // #112: open the inline domain editor for one row, seeded with its current
   // grant (a null/all grant seeds with every domain selected).
   function beginEditDomains(token: string, current: string[] | null) {
-    setEditingSportsToken(token)
-    setEditSports(new Set(current ?? allDomains))
+    setEditingDomainsToken(token)
+    setEditDomains(new Set(current ?? allDomains))
   }
 
   function cancelEditDomains() {
-    setEditingSportsToken(null)
-    setEditSports(new Set())
+    setEditingDomainsToken(null)
+    setEditDomains(new Set())
   }
 
   async function saveAllowedDomains(token: string) {
@@ -1925,8 +1925,8 @@ export default function ActivityApp() {
                           type="button"
                           aria-pressed={on}
                           onClick={() => {
-                            setAddSportsTouched(true)
-                            setAddSports((prev) => {
+                            setAddDomainsTouched(true)
+                            setAddDomains((prev) => {
                               const next = new Set(prev)
                               if (next.has(s)) next.delete(s)
                               else next.add(s)
@@ -2144,7 +2144,7 @@ export default function ActivityApp() {
                                       disabled={busy}
                                       aria-pressed={on}
                                       onClick={() =>
-                                        setEditSports((prev) => {
+                                        setEditDomains((prev) => {
                                           const next = new Set(prev)
                                           if (next.has(s)) next.delete(s)
                                           else next.add(s)

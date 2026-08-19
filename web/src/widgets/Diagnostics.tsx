@@ -73,7 +73,7 @@ function Row({
 
 export function DiagnosticsBody({ diag }: { diag: DiagnosticsSnapshot | null }) {
   if (!diag) return <div className="p-2 text-xs text-muted-foreground">Loading…</div>
-  const bySport = Object.entries(diag.chunks_by_domain).sort(([a], [b]) => a.localeCompare(b))
+  const byDomain = Object.entries(diag.chunks_by_domain).sort(([a], [b]) => a.localeCompare(b))
   return (
     <div className="space-y-2 p-2 text-[11px]">
       <div className="space-y-1">
@@ -82,7 +82,7 @@ export function DiagnosticsBody({ diag }: { diag: DiagnosticsSnapshot | null }) 
           info="Total embedded rows in the current vector index."
           value={diag.chunk_count.toLocaleString()}
         />
-        {bySport.map(([domain, n]) => (
+        {byDomain.map(([domain, n]) => (
           <Row key={domain} label={domain} value={n.toLocaleString()} indent />
         ))}
         <Row

@@ -111,7 +111,7 @@ def grants_from_rows(rows: Iterable[Mapping[str, object]]) -> dict[str, list[str
 # ── Enforcement helper ─────────────────────────────────────────────────────
 
 
-def constrain_sports(
+def constrain_domains(
     requested: list[str] | None,
     allowed: list[str] | None,
 ) -> list[str] | None:
