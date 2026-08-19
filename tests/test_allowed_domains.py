@@ -60,24 +60,24 @@ def test_resolve_seed_grant(local_backend, monkeypatch):
 
 def test_constrain_unrestricted_passes_through():
     # allowed=None → requested passes through; empty stays None (= global all).
-    assert als.constrain_sports(["ultimate"], None) == ["ultimate"]
-    assert als.constrain_sports(None, None) is None
-    assert als.constrain_sports([], None) is None
+    assert als.constrain_domains(["ultimate"], None) == ["ultimate"]
+    assert als.constrain_domains(None, None) is None
+    assert als.constrain_domains([], None) is None
 
 
 def test_constrain_empty_selection_becomes_full_allowlist():
     # A scoped caller asking for "all" gets their concrete allowlist, never
     # the global all — the leak footgun stays unreached.
-    assert als.constrain_sports(None, ["ultimate", "goaltimate"]) == ["ultimate", "goaltimate"]
-    assert als.constrain_sports([], ["ultimate"]) == ["ultimate"]
+    assert als.constrain_domains(None, ["ultimate", "goaltimate"]) == ["ultimate", "goaltimate"]
+    assert als.constrain_domains([], ["ultimate"]) == ["ultimate"]
 
 
 def test_constrain_intersects_and_preserves_order():
-    assert als.constrain_sports(
+    assert als.constrain_domains(
         ["badminton", "ultimate", "curling"], ["ultimate", "badminton"]
     ) == ["badminton", "ultimate"]
 
 
 def test_constrain_no_overlap_raises():
     with pytest.raises(PermissionError):
-        als.constrain_sports(["badminton"], ["ultimate", "goaltimate"])
+        als.constrain_domains(["badminton"], ["ultimate", "goaltimate"])

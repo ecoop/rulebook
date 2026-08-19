@@ -36,7 +36,7 @@ from rulebook import app_state  # noqa: E402
 from rulebook.allowed_domains import (  # noqa: E402
     ALL_SENTINEL,
     append_allowed_domains_row,
-    constrain_sports,
+    constrain_domains,
     grants_from_rows,
     read_allowed_domains_rows,
     resolve_allowed_domains,
@@ -407,10 +407,10 @@ class AllowedDomainsOut(BaseModel):
 
 class AdminAllowedDomainsResponse(BaseModel):
     grants: list[AllowedDomainsOut]
-    all_sports: list[str] = Field(
+    all_domains: list[str] = Field(
         ..., description="Every domain in the index — the unfiltered grant menu."
     )
-    default_sports: list[str] = Field(
+    default_domains: list[str] = Field(
         ..., description="The grant a new user gets by default (pre-checks the add-invite form)."
     )
 
@@ -650,7 +650,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
     # reach the unmasked global search. allowed=None means unrestricted.
     guest = get_current_guest()
     allowed = resolve_allowed_domains(guest.token if guest else None)
-    call_sport, call_sports = req.domain, req.domains
+    call_domain, call_domains = req.domain, req.domains
     if allowed is not None:
         if req.domain is not None:
             if req.domain not in allowed:
@@ -659,12 +659,12 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
             try:
                 # Empty selection = "all I'm allowed" (a concrete list), never
                 # the global all — so the domain=None search path stays unreached.
-                call_sports = constrain_sports(req.domains, allowed)
+                call_domains = constrain_domains(req.domains, allowed)
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e)) from e
 
     try:
-        result = ask(question=req.question, domain=call_sport, domains=call_sports, k=req.k)
+        result = ask(question=req.question, domain=call_domain, domains=call_domains, k=req.k)
     except RuntimeError as e:
         # e.g. "no index" — build_index.py hasn't been run yet
         raise HTTPException(status_code=503, detail=str(e)) from e
@@ -687,14 +687,14 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
     # for corrections, upvoted ones for a "greatest hits" corpus, etc.
     # The exact domains this query ran against (post-allowlist constraint):
     # the effective subset, else the singular domain, else every domain.
-    effective_sports = call_sports or (
-        [call_sport] if call_sport else list_domains(settings.resolved_index_path)
+    effective_domains = call_domains or (
+        [call_domain] if call_domain else list_domains(settings.resolved_index_path)
     )
     log_qa(
         qa_id,
         question=result.question,
-        domain=call_sport,
-        domains=effective_sports,
+        domain=call_domain,
+        domains=effective_domains,
         k=req.k,
         answer=result.answer,
         chunks=[asdict(c) for c in result.chunks],
@@ -934,11 +934,11 @@ def admin_list_allowed_domains() -> AdminAllowedDomainsResponse:
 
     Effective allowlist = override (allowed_domains.jsonl) ▸ seed (env) ▸
     default. Enumerates every invite token plus any token carrying an explicit
-    grant, so the Users tab has a row to edit for each user. `all_sports` is the
+    grant, so the Users tab has a row to edit for each user. `all_domains` is the
     UNFILTERED menu — an operator grants from the full corpus, not their own
     (possibly scoped) view.
     """
-    all_sports = list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS
+    all_domains = list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS
     known: set[str] = set(settings.invite_tokens) | set(settings.initial_allowed_domains)
     overrides: dict[str, list[str] | str] = {}
     if settings.state_backend_kind == "gcs" and settings.gcs_state_bucket:
@@ -959,8 +959,8 @@ def admin_list_allowed_domains() -> AdminAllowedDomainsResponse:
 
     return AdminAllowedDomainsResponse(
         grants=[_row(tok) for tok in sorted(known)],
-        all_sports=all_sports,
-        default_sports=list(settings.default_allowed_domains),
+        all_domains=all_domains,
+        default_domains=list(settings.default_allowed_domains),
     )
 
 
@@ -977,15 +977,15 @@ def admin_set_allowed_domains(req: AllowedDomainsChangeRequest) -> AllowedDomain
     domain that isn't there).
     """
     bucket, obj = _require_gcs_for_allowed_domains()
-    all_sports = set(list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS)
+    all_domains = set(list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS)
     if req.domains == [ALL_SENTINEL]:
         stored: list[str] | str = ALL_SENTINEL
     else:
-        unknown = [s for s in req.domains if s not in all_sports]
+        unknown = [s for s in req.domains if s not in all_domains]
         if unknown:
             raise HTTPException(
                 status_code=422,
-                detail=f"unknown domain(s) {unknown}; one of {sorted(all_sports)}",
+                detail=f"unknown domain(s) {unknown}; one of {sorted(all_domains)}",
             )
         stored = list(req.domains)
     guest = get_current_guest()
@@ -1119,11 +1119,11 @@ def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse
     # reliance on the resolver's default, so the new user's access is recorded
     # from day one. Default to the configured set; the creator can override.
     domains = req.domains if req.domains is not None else list(settings.default_allowed_domains)
-    all_sports = set(list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS)
-    unknown = [s for s in domains if s not in all_sports]
+    all_domains = set(list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS)
+    unknown = [s for s in domains if s not in all_domains]
     if unknown:
         raise HTTPException(
-            status_code=422, detail=f"unknown domain(s) {unknown}; one of {sorted(all_sports)}"
+            status_code=422, detail=f"unknown domain(s) {unknown}; one of {sorted(all_domains)}"
         )
     tokens[token] = req.label
     write_tokens_object(bucket, obj, tokens)
