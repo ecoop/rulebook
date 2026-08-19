@@ -31,7 +31,7 @@ from dataclasses import dataclass
 
 from .config import settings
 from .embeddings import get_embedder
-from .store import open_store
+from .store import list_sports, open_store
 
 _WHITESPACE_RUN = re.compile(r"\s+")
 
@@ -83,7 +83,7 @@ def retrieve(question: str, *, sport: str | None = None, k: int = 5) -> list[Ret
 
 def retrieve_across_sports(
     question: str,
-    sports: list[str],
+    sports: list[str] | None = None,
     *,
     k_per_sport: int = 4,
 ) -> list[RetrievedChunk]:
@@ -91,7 +91,9 @@ def retrieve_across_sports(
     [q_vec] = embedder.embed([question], input_type="query")
     store = open_store(settings.resolved_index_path)
     combined: list[RetrievedChunk] = []
-    for s in sports:
+    # Default to every sport actually in the index (not a hardcoded list), so a
+    # newly-added ruleset is included in cross-sport comparison automatically.
+    for s in sports or list_sports(settings.resolved_index_path):
         rows = store.search(q_vec, k=k_per_sport, sport=s)
         combined.extend(_row_to_chunk(r) for r in rows)
     return combined
