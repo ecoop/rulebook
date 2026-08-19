@@ -52,7 +52,9 @@ FEEDBACK_SCHEMA_VERSION = 4
 #   v2  v1 + stop_reason from Anthropic ("end_turn", "max_tokens", ...)
 #        so historical truncations are recoverable from the log.
 #   v3  v2 + optional `author` (guest-auth recipient label; null before adoption)
-QA_LOG_SCHEMA_VERSION = 3
+#   v4  v3 + `sports` (the list the query actually ran against). `sport` stays
+#       for back-compat: the singular request field, or null for multi/all.
+QA_LOG_SCHEMA_VERSION = 4
 
 # Gold answers — user-authored canonical answers, indexed as retrievable
 # chunks on the next rebuild so future similar questions surface them.
@@ -123,6 +125,7 @@ def log_qa(
     model: str,
     stop_reason: str,
     author: str | None = None,
+    sports: list[str] | None = None,
 ) -> None:
     """Record one /ask interaction (question in, answer + chunks out)."""
     _append(
@@ -133,6 +136,7 @@ def log_qa(
             "timestamp": utc_now_iso(timespec="auto", z=False),
             "question": question,
             "sport": sport,
+            "sports": sports or [],
             "k": k,
             "answer": answer,
             "chunks": chunks,

@@ -105,6 +105,7 @@ interface AdminQuestionRow {
   question: string
   answer: string
   sport: string | null
+  sports: string[]
   timestamp: string
   rating: number | null
   has_gold: boolean
@@ -1137,7 +1138,12 @@ export default function ActivityApp() {
                           </button>
                           <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                             {q.qa_id.slice(0, 8)}
-                            {q.sport ? ` · ${q.sport}` : ''}
+                            {(() => {
+                              // v4+ rows carry the full ruleset list; older rows
+                              // only the single `sport`.
+                              const rs = q.sports?.length ? q.sports.join(', ') : q.sport
+                              return rs ? ` · ${rs}` : ''
+                            })()}
                           </div>
                         </td>
                         {can('questions.view.all') && (
