@@ -1,0 +1,69 @@
+<!-- Copyright (c) 2026 Eric Cooper. -->
+# Rules sources — point-and-download
+
+_Last updated: 2026-08-19_
+
+The rules text under `rules/<domain>/` is built into the vector index by
+[`scripts/build_index.py`](../scripts/build_index.py) (the directory name is the
+domain slug; discovery is data-driven — no code change to add a domain). Each
+source document is published by its sport's governing body and is **copyrighted**;
+this file records **where to download each one** so a fresh checkout can rebuild
+the index without the binaries living in git.
+
+> **Do not commit copyrighted source PDFs.** Download them into the domain's
+> directory locally, build the index, and publish the built index to GCS. The
+> `.extracted.md` transcriptions and the built index — not the source PDFs — are
+> what the running service needs. (Existing committed PDFs are being migrated to
+> this model; see the go-public cleanup.)
+
+## Domains
+
+### ultimate — Ultimate (USA Ultimate)
+- **Official Rules of Ultimate**, USA Ultimate. → `rules/ultimate/2026-27-Official-Rules-of-Ultimate.pdf`
+  URL: https://usaultimate.org/rules/ ‹confirm exact PDF link for the 2026-27 edition›
+- **10 Simple Rules**, USA Ultimate. → `rules/ultimate/10SimpleRules.pdf`
+  URL: https://usaultimate.org/ ‹confirm exact link›
+
+### goaltimate — Goaltimate (USAG)
+- **Goaltimate field setup / regulations (2017)**. → `rules/goaltimate/goaltimate-field-setupregulation2017.pdf`
+  (+ `…​.extracted.md` transcription) — URL: ‹confirm official USAG source›
+- **USAG rules v2.1.3**. → `rules/goaltimate/usag-rule-v-2-1-3.pdf` — URL: ‹confirm›
+- **USAG field diagram**. → `rules/goaltimate/usag-field-diagram.pdf` (+ `.extracted.md`) — URL: ‹confirm›
+
+### badminton — Badminton (BWF)  _(#114 — pending download)_
+- **Laws of Badminton**, Badminton World Federation (BWF) — in the BWF Statutes /
+  Handbook. → download into `rules/badminton/`.
+  URL: https://bwfbadminton.com/ ‹confirm exact Laws-of-Badminton PDF link›
+
+### curling — Curling (World Curling)  _(#114 — pending download)_
+- **The Rules of Curling**, World Curling. → download into `rules/curling/`.
+  URL: https://worldcurling.org/ ‹confirm exact Rules-of-Curling PDF link›
+
+## Adding a domain (runbook)
+
+1. **Create the dir and download the doc(s)** (do not commit the copyrighted PDF):
+   ```
+   mkdir -p rules/badminton
+   # download the BWF Laws of Badminton PDF into rules/badminton/
+   ```
+2. **(If the PDF is image-only / extracts as one word per line)** transcribe it
+   with vision, producing a `.extracted.md` sibling that ingestion prefers over
+   the PDF:
+   ```
+   uv run python scripts/vision_extract.py rules/badminton/laws-of-badminton.pdf
+   ```
+3. **Add this file's source entry** above (governing body, document, URL, local path).
+4. **Rebuild the index** — discovery picks up the new dir automatically:
+   ```
+   uv run python scripts/build_index.py
+   ```
+5. **Register the domain** (display name, source URL(s); enabled by default):
+   ```
+   uv run python -m scripts.domains set badminton --name "Badminton (BWF)" \
+       --sources https://bwfbadminton.com/...
+   ```
+6. **Publish the built index to GCS** so hosted instances pick it up
+   (`index_sync.publish_index_to_gcs`, or the Rebuild-index admin action from a
+   build that has the docs), then deploy if needed.
+7. **Grant access** — new domains reach no one until granted (the #112 policy):
+   grant via the Users tab or `uv run python -m scripts.allowed_domains set <token> --domains ultimate,goaltimate,badminton`.

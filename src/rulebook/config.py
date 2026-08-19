@@ -157,11 +157,19 @@ class Settings(BaseSettings):
         validation_alias="RULEBOOK_DOMAINS_OBJECT",
     )
     # Registry entries baked in at deploy ({slug: {display_name?, sources?,
-    # numbering?, enabled?}}), overridden live by the GCS object. Empty = every
-    # indexed domain defaults to enabled with a title-cased name.
+    # numbering?, enabled?}}), overridden live by the GCS object. The default
+    # names the known domains "<Sport> (<governing body>)"; an *unindexed* entry
+    # (badminton/curling until #114 ingests them) is inert — visible_domains only
+    # shows domains that are in the index. Anything not listed here still falls
+    # back to enabled with a title-cased name.
     #   RULEBOOK_INITIAL_DOMAINS='{"ultimate": {"display_name": "Ultimate (USAU)"}}'
     initial_domains: dict[str, dict] = Field(
-        default_factory=dict,
+        default_factory=lambda: {
+            "ultimate": {"display_name": "Ultimate (USAU)"},
+            "goaltimate": {"display_name": "Goaltimate (USAG)"},
+            "badminton": {"display_name": "Badminton (BWF)"},
+            "curling": {"display_name": "Curling (WCF)"},
+        },
         validation_alias="RULEBOOK_INITIAL_DOMAINS",
     )
 

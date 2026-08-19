@@ -68,6 +68,16 @@ def test_visible_domains_filters_disabled(local_seed, monkeypatch):
     ]
 
 
+def test_config_default_names_known_domains(monkeypatch):
+    # The shipped initial_domains default names the known domains
+    # "<Sport> (<governing body>)" — read the REAL default (no seed override).
+    monkeypatch.setattr(registry.settings, "state_backend_kind", "local")
+    monkeypatch.setattr(registry.settings, "gcs_state_bucket", None)
+    assert registry.domain_info("ultimate").display_name == "Ultimate (USAU)"
+    assert registry.domain_info("goaltimate").display_name == "Goaltimate (USAG)"
+    assert registry.domain_info("badminton").display_name == "Badminton (BWF)"
+
+
 def test_display_labels(local_seed, monkeypatch):
     monkeypatch.setattr(
         registry.settings, "initial_domains", {"ultimate": {"display_name": "Ultimate (USAU)"}}
