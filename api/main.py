@@ -80,6 +80,7 @@ from rulebook.interaction_log import (  # noqa: E402
     read_qa_questions,
 )
 from rulebook.pipeline import DEFAULT_DOMAINS, ask  # noqa: E402
+from rulebook.registry import display_labels, visible_domains  # noqa: E402
 from rulebook.roles import (  # noqa: E402
     CAP_ACTIVITY_VIEW,
     CAP_ASK,
@@ -478,6 +479,10 @@ class RenameInviteTokenRequest(BaseModel):
 
 class MetaResponse(BaseModel):
     domains: list[str]
+    domain_labels: dict[str, str] = Field(
+        default_factory=dict,
+        description="Registry display names {slug: label} for the domains above (#113).",
+    )
     embedding_provider: str
     embedding_model: str
     claude_model: str
@@ -535,6 +540,9 @@ class UsageResponse(BaseModel):
 def meta() -> MetaResponse:
     """Small metadata endpoint the frontend hits on load — domains + models in use."""
     domains = list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS
+    # Registry is authoritative for identity + enabled (#113): drop domains the
+    # registry disables before anything else sees them.
+    domains = visible_domains(domains)
     # Scope the domain list to what the caller may ask against (#112), so a
     # restricted user's picker only offers their domains and they don't even
     # learn the others exist. None = unrestricted (public deploy / no identity).
@@ -544,6 +552,7 @@ def meta() -> MetaResponse:
         domains = [s for s in domains if s in allowed]
     return MetaResponse(
         domains=domains,
+        domain_labels=display_labels(domains),
         embedding_provider=settings.embedding_provider,
         embedding_model=settings.embedding_model,
         claude_model=settings.claude_model,
