@@ -1,22 +1,22 @@
 # Copyright (c) 2026 Eric Cooper.
-"""Per-user ruleset access — a token→rulesets allowlist (#112).
+"""Per-user domain access — a token→domains allowlist (#112).
 
 A **data-scope** axis, deliberately separate from the role/capability ladder
-(docs/design/rulesets-and-access.md, Area 3): the role says *how privileged*,
-this says *which rulesets you may see*. It never grants a capability — it only
+(docs/design/domains-and-access.md, Area 3): the role says *how privileged*,
+this says *which domains you may see*. It never grants a capability — it only
 restricts, ANDed after the capability check.
 
 Resolution mirrors roles.py exactly:
 
-    seed       RULEBOOK_INITIAL_ALLOWED_SPORTS, {token: [rulesets]}. Baseline.
-    overrides  an append-only `allowed_sports.jsonl` object in the state
+    seed       RULEBOOK_INITIAL_ALLOWED_DOMAINS, {token: [domains]}. Baseline.
+    overrides  an append-only `allowed_domains.jsonl` object in the state
                bucket, written by the Users-tab API. Latest row per token
                wins; a `reset` row falls back to the seed/default.
 
 Effective allowlist = override(token) ▸ seed(token) ▸ default. The default
-(``settings.default_allowed_sports``) is a CONCRETE set — today's two sports —
-NOT "all": a newly-added ruleset is in no one's allowlist until explicitly
-granted (#112's chosen policy). A `*` grant row means *all rulesets, including
+(``settings.default_allowed_domains``) is a CONCRETE set — today's two domains —
+NOT "all": a newly-added domain is in no one's allowlist until explicitly
+granted (#112's chosen policy). A `*` grant row means *all domains, including
 any added later*; it resolves to ``None`` = unrestricted. A token with no
 identity (demo_mode off / public deploy) is also unrestricted — scoping is a
 no-op there, matching how role gating no-ops without identities.
@@ -34,32 +34,32 @@ from .config import settings
 log = logging.getLogger(__name__)
 
 DEFAULT_TTL_SECONDS = 30.0
-ALL_SENTINEL = "*"        # a grant row meaning "every ruleset, now and future"
+ALL_SENTINEL = "*"        # a grant row meaning "every domain, now and future"
 RESET_SENTINEL = "reset"  # a row that clears an override back to seed/default
 
-# (bucket, obj) -> (expiry_monotonic, {token: [rulesets] | "*"})
+# (bucket, obj) -> (expiry_monotonic, {token: [domains] | "*"})
 _grants_cache: dict[tuple[str, str], tuple[float, dict[str, list[str] | str]]] = {}
 
 
 # ── Resolution ────────────────────────────────────────────────────────────
 
 
-def resolve_allowed_sports(token: str | None) -> list[str] | None:
-    """Effective ruleset allowlist for a token, or ``None`` = unrestricted.
+def resolve_allowed_domains(token: str | None) -> list[str] | None:
+    """Effective domain allowlist for a token, or ``None`` = unrestricted.
 
-    override ▸ seed ▸ default. ``None`` means "all rulesets" — returned for a
+    override ▸ seed ▸ default. ``None`` means "all domains" — returned for a
     ``*`` grant and for a missing identity (``token is None``). A concrete list
-    is returned otherwise; the default is ``settings.default_allowed_sports``.
+    is returned otherwise; the default is ``settings.default_allowed_domains``.
     """
     if token is None:
         return None
     grants = _effective_grants()
     if token in grants:
         grant = grants[token]
-    elif token in settings.initial_allowed_sports:
-        grant = settings.initial_allowed_sports[token]
+    elif token in settings.initial_allowed_domains:
+        grant = settings.initial_allowed_domains[token]
     else:
-        grant = list(settings.default_allowed_sports)
+        grant = list(settings.default_allowed_domains)
     if grant == ALL_SENTINEL:
         return None
     return list(grant)
@@ -69,7 +69,7 @@ def _effective_grants() -> dict[str, list[str] | str]:
     """TTL-cached {token: allowlist} from the GCS log; {} unless gcs."""
     if settings.state_backend_kind != "gcs" or not settings.gcs_state_bucket:
         return {}
-    bucket, obj = settings.gcs_state_bucket, settings.allowed_sports_object
+    bucket, obj = settings.gcs_state_bucket, settings.allowed_domains_object
     key = (bucket, obj)
     now = time.monotonic()
     cached = _grants_cache.get(key)
@@ -84,9 +84,9 @@ def _effective_grants() -> dict[str, list[str] | str]:
 
 def _read_grants(bucket: str, obj: str) -> dict[str, list[str] | str] | None:
     try:
-        return grants_from_rows(read_allowed_sports_rows(bucket, obj))
+        return grants_from_rows(read_allowed_domains_rows(bucket, obj))
     except Exception:  # noqa: BLE001 — authz must survive a bad bucket read
-        log.exception("allowed_sports: failed reading gs://%s/%s; reusing last-good", bucket, obj)
+        log.exception("allowed_domains: failed reading gs://%s/%s; reusing last-good", bucket, obj)
         return None
 
 
@@ -95,15 +95,15 @@ def grants_from_rows(rows: Iterable[Mapping[str, object]]) -> dict[str, list[str
     out: dict[str, list[str] | str] = {}
     for row in rows:
         token = str(row.get("token", ""))
-        sports = row.get("sports")
+        domains = row.get("domains")
         if not token:
             continue
-        if sports == RESET_SENTINEL:
+        if domains == RESET_SENTINEL:
             out.pop(token, None)
-        elif sports == ALL_SENTINEL:
+        elif domains == ALL_SENTINEL:
             out[token] = ALL_SENTINEL
-        elif isinstance(sports, list):
-            out[token] = [str(s) for s in sports]
+        elif isinstance(domains, list):
+            out[token] = [str(s) for s in domains]
         # else: malformed row — skip, don't corrupt the map
     return out
 
@@ -115,7 +115,7 @@ def constrain_sports(
     requested: list[str] | None,
     allowed: list[str] | None,
 ) -> list[str] | None:
-    """Intersect a cross-ruleset selection with the caller's allowlist.
+    """Intersect a cross-domain selection with the caller's allowlist.
 
     Returns the concrete list to retrieve against, or ``None`` = "all" (only
     when unrestricted and nothing specific was asked for — the one path that
@@ -135,15 +135,15 @@ def constrain_sports(
         return list(allowed)
     eff = [s for s in requested if s in allowed]
     if not eff:
-        raise PermissionError("none of the requested rulesets are permitted")
+        raise PermissionError("none of the requested domains are permitted")
     return eff
 
 
 # ── GCS storage (append-only jsonl object) ─────────────────────────────────
 
 
-def read_allowed_sports_rows(bucket: str, obj: str) -> list[dict]:
-    """All rows from the allowed_sports.jsonl object; [] if absent."""
+def read_allowed_domains_rows(bucket: str, obj: str) -> list[dict]:
+    """All rows from the allowed_domains.jsonl object; [] if absent."""
     from google.cloud import storage
 
     blob = storage.Client().bucket(bucket).blob(obj)
@@ -153,8 +153,8 @@ def read_allowed_sports_rows(bucket: str, obj: str) -> list[dict]:
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
-def append_allowed_sports_row(bucket: str, obj: str, row: Mapping[str, object]) -> None:
-    """Append one row to the allowed_sports.jsonl object (read-modify-write).
+def append_allowed_domains_row(bucket: str, obj: str, row: Mapping[str, object]) -> None:
+    """Append one row to the allowed_domains.jsonl object (read-modify-write).
 
     Full rewrite per change — fine at this volume, and keeps the object a
     plain append-only log for audit, exactly like roles.jsonl.

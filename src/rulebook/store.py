@@ -12,7 +12,7 @@ PERSISTENCE
 
         vectors.npy    float32 [N, D] array, one row per chunk
         chunks.jsonl   one JSON object per row, SAME ORDER as vectors
-        manifest.json  provider, model, count, dimension, sports — for
+        manifest.json  provider, model, count, dimension, domains — for
                        sanity checks and human inspection
 
     Nice properties of this layout:
@@ -31,9 +31,9 @@ SEARCH
 
     For queries we normalize the query vector, take the dot product
     against the stored matrix (one big matmul), argsort descending, and
-    return the top-k rows. The sport filter is applied by masking the
+    return the top-k rows. The domain filter is applied by masking the
     metadata list BEFORE the matmul, so a filtered search doesn't waste
-    work on other sports.
+    work on other domains.
 
     We report `_distance` on returned rows as L2 distance on unit
     vectors (which equals 2 - 2·cos_sim). The field name matches the
@@ -80,6 +80,14 @@ class Store:
         with (self.path / CHUNKS_FILE).open() as f:
             self.metadata = [json.loads(line) for line in f]
 
+        # Back-compat read-alias (#113): a pre-rename index keys rows on "sport".
+        # Normalize to "domain" here — the ONE row-read seam — so masking and
+        # _row_to_chunk see "domain" regardless of index age. Removed once the
+        # index is rebuilt with the new key (the follow-up to this rename).
+        for m in self.metadata:
+            if "domain" not in m and "sport" in m:
+                m["domain"] = m["sport"]
+
         with (self.path / MANIFEST_FILE).open() as f:
             self.manifest = json.load(f)
 
@@ -94,7 +102,7 @@ class Store:
         query_vector: list[float] | np.ndarray,
         *,
         k: int = 5,
-        sport: str | None = None,
+        domain: str | None = None,
     ) -> list[dict]:
         if self.vectors is None:
             raise RuntimeError(
@@ -105,9 +113,9 @@ class Store:
         q = np.asarray(query_vector, dtype=np.float32)
         q = q / max(float(np.linalg.norm(q)), 1e-12)
 
-        if sport is not None:
+        if domain is not None:
             mask_ix = np.array(
-                [i for i, m in enumerate(self.metadata) if m["sport"] == sport],
+                [i for i, m in enumerate(self.metadata) if m["domain"] == domain],
                 dtype=np.int64,
             )
             if mask_ix.size == 0:
@@ -175,7 +183,7 @@ def write_store(
         "model": model,
         "count": len(chunk_list),
         "dimension": int(arr.shape[1]) if arr.size else 0,
-        "sports": sorted({c.sport for c in chunk_list}),
+        "domains": sorted({c.domain for c in chunk_list}),
     }
     if manifest_extra:
         manifest.update(manifest_extra)
@@ -192,8 +200,10 @@ def count_rows(path: Path) -> int:
         return sum(1 for _ in f)
 
 
-def list_sports(path: Path) -> list[str]:
+def list_domains(path: Path) -> list[str]:
     if not (path / MANIFEST_FILE).exists():
         return []
     with (path / MANIFEST_FILE).open() as f:
-        return json.load(f).get("sports", [])
+        d = json.load(f)
+    # Back-compat (#113): a pre-rename manifest lists "sports".
+    return d.get("domains") or d.get("sports", [])

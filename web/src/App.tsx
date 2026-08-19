@@ -28,7 +28,7 @@ import { type IssueTag, TAG_LABELS, TAGS } from './tags'
 interface Chunk {
   text: string
   source: string
-  sport: string
+  domain: string
   rule_id: string
   page_start: number
   page_end: number
@@ -67,7 +67,7 @@ interface WidgetCtx {
 }
 
 interface Meta {
-  sports: string[]
+  domains: string[]
   embedding_provider: string
   embedding_model: string
   claude_model: string
@@ -122,16 +122,16 @@ function formatStartedAt(iso: string): string {
 }
 
 // -----------------------------------------------------------------------------
-// The whole UI is a single page: question box + sport picker on top, the
+// The whole UI is a single page: question box + domain picker on top, the
 // answer in the middle, retrieved chunks below. Making the chunks visible is
 // the whole point — the user can see WHY the model answered what it did.
 // -----------------------------------------------------------------------------
 
 export default function App() {
   const [question, setQuestion] = useState('')
-  // Empty set = "All" (compare across every ruleset). Any non-empty subset
-  // restricts retrieval to exactly those rulesets.
-  const [selectedSports, setSelectedSports] = useState<Set<string>>(() => new Set())
+  // Empty set = "All" (compare across every domain). Any non-empty subset
+  // restricts retrieval to exactly those domains.
+  const [selectedDomains, setSelectedSports] = useState<Set<string>>(() => new Set())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AskResponse | null>(null)
@@ -190,7 +190,7 @@ export default function App() {
       .then(setMeta)
       .catch(() => {
         // Non-fatal — the app is still usable, we just won't populate the
-        // sport dropdown from the server's view.
+        // domain dropdown from the server's view.
       })
     void refreshMe()
     void refreshWidgetData()
@@ -316,8 +316,8 @@ export default function App() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           question,
-          // Empty = every ruleset (the backend treats [] as "all").
-          sports: Array.from(selectedSports),
+          // Empty = every domain (the backend treats [] as "all").
+          domains: Array.from(selectedDomains),
           k: 5,
         }),
       })
@@ -504,22 +504,22 @@ export default function App() {
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Rulesets:</span>
+              <span className="text-muted-foreground">Domains:</span>
               <button
                 type="button"
                 onClick={() => setSelectedSports(new Set())}
-                aria-pressed={selectedSports.size === 0}
+                aria-pressed={selectedDomains.size === 0}
                 className={
                   'rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ' +
-                  (selectedSports.size === 0
+                  (selectedDomains.size === 0
                     ? 'border-foreground bg-foreground text-background'
                     : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
                 }
               >
                 All
               </button>
-              {(meta?.sports ?? []).map((s) => {
-                const on = selectedSports.has(s)
+              {(meta?.domains ?? []).map((s) => {
+                const on = selectedDomains.has(s)
                 return (
                   <button
                     key={s}
@@ -694,7 +694,7 @@ export default function App() {
                     — edit the answer above into what a knowledgeable human would give.
                     Use <span className="font-mono">## Ultimate</span> /{' '}
                     <span className="font-mono">## Goaltimate</span> headings so each
-                    section retrieves under its sport. Included in the index on the
+                    section retrieves under its domain. Included in the index on the
                     next rebuild.
                   </span>
                 </label>
@@ -790,7 +790,7 @@ function ChunkRow({ chunk }: { chunk: Chunk }) {
     <div className="p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
         <span className="rounded bg-secondary px-2 py-0.5 font-mono text-secondary-foreground">
-          {chunk.sport}
+          {chunk.domain}
         </span>
         <span className="font-mono text-foreground">{chunk.rule_id}</span>
         <span className="text-muted-foreground">{pages}</span>
