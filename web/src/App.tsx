@@ -129,7 +129,9 @@ function formatStartedAt(iso: string): string {
 
 export default function App() {
   const [question, setQuestion] = useState('')
-  const [sport, setSport] = useState<string>('')
+  // Empty set = "All" (compare across every ruleset). Any non-empty subset
+  // restricts retrieval to exactly those rulesets.
+  const [selectedSports, setSelectedSports] = useState<Set<string>>(() => new Set())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AskResponse | null>(null)
@@ -314,7 +316,8 @@ export default function App() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           question,
-          sport: sport || null,
+          // Empty = every ruleset (the backend treats [] as "all").
+          sports: Array.from(selectedSports),
           k: 5,
         }),
       })
@@ -500,23 +503,47 @@ export default function App() {
             }}
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm">
-              <label htmlFor="sport" className="text-muted-foreground">
-                Sport:
-              </label>
-              <select
-                id="sport"
-                value={sport}
-                onChange={(e) => setSport(e.target.value)}
-                className="rounded-md border border-input bg-card px-2 py-1 text-sm shadow-sm"
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Rulesets:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedSports(new Set())}
+                aria-pressed={selectedSports.size === 0}
+                className={
+                  'rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ' +
+                  (selectedSports.size === 0
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
+                }
               >
-                <option value="">All (compare across sports)</option>
-                {(meta?.sports ?? []).map((s) => (
-                  <option key={s} value={s}>
+                All
+              </button>
+              {(meta?.sports ?? []).map((s) => {
+                const on = selectedSports.has(s)
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      setSelectedSports((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(s)) next.delete(s)
+                        else next.add(s)
+                        return next
+                      })
+                    }
+                    className={
+                      'rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ' +
+                      (on
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
+                    }
+                  >
                     {s}
-                  </option>
-                ))}
-              </select>
+                  </button>
+                )
+              })}
               <span className="text-xs text-muted-foreground">
                 ⌘/Ctrl+Enter to submit
               </span>

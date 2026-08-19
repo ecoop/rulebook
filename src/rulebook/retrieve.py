@@ -81,19 +81,38 @@ def retrieve(question: str, *, sport: str | None = None, k: int = 5) -> list[Ret
     return [_row_to_chunk(r) for r in rows]
 
 
+# Cap on total passages returned across a cross-sport query, so N selected
+# rulesets don't scale the model's context (and cost) by N. 1-2 sports at the
+# default k_per_sport stay under it; larger unions get trimmed by breadth.
+CROSS_SPORT_MAX_TOTAL = 12
+
+
 def retrieve_across_sports(
     question: str,
     sports: list[str] | None = None,
     *,
     k_per_sport: int = 4,
+    max_total: int = CROSS_SPORT_MAX_TOTAL,
 ) -> list[RetrievedChunk]:
     embedder = get_embedder()
     [q_vec] = embedder.embed([question], input_type="query")
     store = open_store(settings.resolved_index_path)
-    combined: list[RetrievedChunk] = []
     # Default to every sport actually in the index (not a hardcoded list), so a
-    # newly-added ruleset is included in cross-sport comparison automatically.
-    for s in sports or list_sports(settings.resolved_index_path):
-        rows = store.search(q_vec, k=k_per_sport, sport=s)
-        combined.extend(_row_to_chunk(r) for r in rows)
+    # newly-added ruleset joins cross-sport comparison automatically.
+    sports = list(sports or list_sports(settings.resolved_index_path))
+    per_sport = [
+        [_row_to_chunk(r) for r in store.search(q_vec, k=k_per_sport, sport=s)]
+        for s in sports
+    ]
+    # Interleave by rank so every selected ruleset is represented, then cap the
+    # total (round-robin: each sport's closest, then each sport's next, …). This
+    # keeps 1-2 sports at the full per-sport k while stopping many rulesets from
+    # blowing up the context — a global budget, weighted for breadth.
+    combined: list[RetrievedChunk] = []
+    for rank in range(k_per_sport):
+        for chunks in per_sport:
+            if rank < len(chunks):
+                combined.append(chunks[rank])
+                if len(combined) >= max_total:
+                    return combined
     return combined
