@@ -142,8 +142,13 @@ class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, description="Natural-language question about the rules.")
     sport: str | None = Field(
         default=None,
-        description="Restrict retrieval to this sport (e.g. 'ultimate'). "
-                    "Leave null to retrieve from every known sport and let the model compare.",
+        description="Single-ruleset mode (e.g. 'ultimate'). Back-compat alias; "
+                    "prefer `sports`. Takes precedence if set.",
+    )
+    sports: list[str] | None = Field(
+        default=None,
+        description="Cross-ruleset mode: retrieve from exactly this subset and let the "
+                    "model compare. Empty/null (and no `sport`) = every ruleset in the index.",
     )
     k: int = Field(default=5, ge=1, le=20, description="Top-k retrieval (per sport in cross-sport mode).")
 
@@ -260,6 +265,11 @@ class AdminQuestionRow(BaseModel):
     question: str
     answer: str = Field(..., description="The stored answer, so you can revisit it.")
     sport: str | None = None
+    sports: list[str] = Field(
+        default_factory=list,
+        description="Rulesets the query ran against (v4+ rows). Empty for older rows; "
+                    "fall back to `sport` there.",
+    )
     timestamp: str
     rating: int | None = Field(default=None, description="Your rating for this Q&A, if you gave one.")
     has_gold: bool = Field(..., description="True if you've authored a gold for this qa_id.")
@@ -571,7 +581,7 @@ def usage_endpoint() -> UsageResponse:
 )
 def ask_endpoint(req: AskRequest) -> AskResponse:
     try:
-        result = ask(question=req.question, sport=req.sport, k=req.k)
+        result = ask(question=req.question, sport=req.sport, sports=req.sports, k=req.k)
     except RuntimeError as e:
         # e.g. "no index" — build_index.py hasn't been run yet
         raise HTTPException(status_code=503, detail=str(e)) from e
@@ -593,10 +603,17 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
     # Persist the full interaction so we can later mine downvoted answers
     # for corrections, upvoted ones for a "greatest hits" corpus, etc.
     guest = get_current_guest()
+    # The exact rulesets this query ran against (for the Questions history and
+    # future per-user filtering): the chosen subset, else the singular sport,
+    # else every ruleset in the index.
+    effective_sports = req.sports or (
+        [req.sport] if req.sport else list_sports(settings.resolved_index_path)
+    )
     log_qa(
         qa_id,
         question=result.question,
         sport=req.sport,
+        sports=effective_sports,
         k=req.k,
         answer=result.answer,
         chunks=[asdict(c) for c in result.chunks],
@@ -1137,6 +1154,7 @@ def admin_list_questions() -> AdminQuestionListResponse:
             question=r.get("question", ""),
             answer=r.get("answer", ""),
             sport=r.get("sport"),
+            sports=r.get("sports") or [],
             timestamp=r["timestamp"],
             rating=my_ratings.get(r["qa_id"]),
             has_gold=r["qa_id"] in my_golds,
