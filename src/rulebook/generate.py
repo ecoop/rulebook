@@ -28,6 +28,7 @@ from llm_cost_governor.wrapper import guarded_call
 
 from . import app_state
 from .config import settings
+from .registry import display_labels
 from .retrieve import RetrievedChunk
 
 SYSTEM_PROMPT_TEMPLATE = """You are an assistant that answers questions about the rules of {domains_phrase} using ONLY the excerpts provided in the <context> block.
@@ -111,9 +112,12 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
     """
     client = Anthropic(api_key=settings.anthropic_api_key)
     context = format_context(chunks)
-    # Distinct domains present in the retrieved context, in first-seen order.
+    # Distinct domains present in the retrieved context, in first-seen order,
+    # named by their registry display name (#113) — "Ultimate (USAU)", not the
+    # bare slug. Citations still key on the slug shown in each context header.
     domains = list(dict.fromkeys(c.domain for c in chunks))
-    system_prompt = build_system_prompt(domains)
+    labels = display_labels(domains)
+    system_prompt = build_system_prompt([labels[d] for d in domains])
     hooks = [
         WindowedCapHook(app_state.cost_counter, identity_provider=app_state.current_guest_token),
         app_state.provider_totals_hook,

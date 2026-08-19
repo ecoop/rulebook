@@ -68,6 +68,7 @@ interface WidgetCtx {
 
 interface Meta {
   domains: string[]
+  domain_labels?: Record<string, string>
   embedding_provider: string
   embedding_model: string
   claude_model: string
@@ -540,7 +541,7 @@ export default function App() {
                         : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
                     }
                   >
-                    {s}
+                    {meta?.domain_labels?.[s] ?? s}
                   </button>
                 )
               })}
