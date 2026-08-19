@@ -6,6 +6,10 @@
 # Local invite-token workspace (names, minted tokens, invite links)
 secrets/
 
+# Internal notes — private working docs (e.g. legal/copyright self-assessments)
+# that must never ship in a public repo.
+notes/
+
 # Python
 __pycache__/
 *.py[cod]
