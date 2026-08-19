@@ -27,7 +27,7 @@ def test_row_to_chunk_normalizes_text():
     row = {
         "text": "one\n\ntwo\n\nthree",
         "source": "goaltimate",
-        "sport": "goaltimate",
+        "domain": "goaltimate",
         "rule_id": "III.L",
         "page_start": "8",
         "page_end": "8",

@@ -10,7 +10,7 @@ import { Info } from 'lucide-react'
 export interface DiagnosticsSnapshot {
   chunk_count: number
   dimension: number
-  chunks_by_sport: Record<string, number>
+  chunks_by_domain: Record<string, number>
   index_built_at: string | null
   gold_count: number
   feedback_count: number
@@ -73,7 +73,7 @@ function Row({
 
 export function DiagnosticsBody({ diag }: { diag: DiagnosticsSnapshot | null }) {
   if (!diag) return <div className="p-2 text-xs text-muted-foreground">Loading…</div>
-  const bySport = Object.entries(diag.chunks_by_sport).sort(([a], [b]) => a.localeCompare(b))
+  const bySport = Object.entries(diag.chunks_by_domain).sort(([a], [b]) => a.localeCompare(b))
   return (
     <div className="space-y-2 p-2 text-[11px]">
       <div className="space-y-1">
@@ -82,8 +82,8 @@ export function DiagnosticsBody({ diag }: { diag: DiagnosticsSnapshot | null }) 
           info="Total embedded rows in the current vector index."
           value={diag.chunk_count.toLocaleString()}
         />
-        {bySport.map(([sport, n]) => (
-          <Row key={sport} label={sport} value={n.toLocaleString()} indent />
+        {bySport.map(([domain, n]) => (
+          <Row key={domain} label={domain} value={n.toLocaleString()} indent />
         ))}
         <Row
           label="dim"
@@ -99,7 +99,7 @@ export function DiagnosticsBody({ diag }: { diag: DiagnosticsSnapshot | null }) 
       <div className="space-y-1 border-t border-border pt-2">
         <Row
           label="sources"
-          info="Ingestable files under rules/<sport>/ (PDF, .md, .txt). Skips PDFs that have a .extracted.md sibling."
+          info="Ingestable files under rules/<domain>/ (PDF, .md, .txt). Skips PDFs that have a .extracted.md sibling."
           value={diag.source_file_count}
         />
         <Row

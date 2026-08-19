@@ -85,7 +85,7 @@ def test_source_curation_last_wins(log_dir):
 
 def test_qa_questions(log_dir):
     il.log_qa(
-        "q9", question="What is a stall?", sport="ultimate", k=5,
+        "q9", question="What is a stall?", domain="ultimate", k=5,
         answer="A", chunks=[], input_tokens=1, output_tokens=1,
         model="m", stop_reason="end_turn",
     )

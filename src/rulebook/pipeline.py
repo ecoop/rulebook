@@ -1,7 +1,7 @@
 """End-to-end: question -> answer + citations + raw retrieved chunks.
 
 The module the API and the notebook both import. It hides the "is this a
-single-sport or cross-sport question?" dispatch behind a single function
+single-domain or cross-domain question?" dispatch behind a single function
 so callers don't have to make that decision themselves.
 """
 
@@ -11,12 +11,12 @@ from typing import Any
 from .generate import generate_answer
 from .retrieve import RetrievedChunk, retrieve, retrieve_across_sports
 
-# Cold-start bootstrap ONLY. The ruleset set is otherwise derived from DATA:
-# from the index (store.list_sports) at serve time, and from the discovered
-# rules/<sport>/ dirs at build time. This fallback is used solely by /meta
+# Cold-start bootstrap ONLY. The domain set is otherwise derived from DATA:
+# from the index (store.list_domains) at serve time, and from the discovered
+# rules/<domain>/ dirs at build time. This fallback is used solely by /meta
 # before any index exists, so a fresh dev env still shows something in the
 # picker. Do NOT reintroduce it as the source of truth (see #110).
-DEFAULT_SPORTS = ["ultimate", "goaltimate"]
+DEFAULT_DOMAINS = ["ultimate", "goaltimate"]
 
 
 @dataclass
@@ -42,24 +42,24 @@ class AskResult:
 def ask(
     question: str,
     *,
-    sport: str | None = None,
-    sports: list[str] | None = None,
+    domain: str | None = None,
+    domains: list[str] | None = None,
     k: int = 5,
 ) -> AskResult:
-    """Answer a question about disc-sport rules.
+    """Answer a question about disc-domain rules.
 
     Args:
         question: Natural-language question.
-        sport: If set, retrieve ONLY from this sport (single-sport mode).
-        sports: If set (and `sport` is None), retrieve k results from
-            EACH of these sports and let the model compare. Defaults to
-            all known sports.
-        k: top-k retrieval size. Per-sport when in cross-sport mode.
+        domain: If set, retrieve ONLY from this domain (single-domain mode).
+        domains: If set (and `domain` is None), retrieve k results from
+            EACH of these domains and let the model compare. Defaults to
+            all known domains.
+        k: top-k retrieval size. Per-domain when in cross-domain mode.
     """
-    if sport is not None:
-        chunks = retrieve(question, sport=sport, k=k)
+    if domain is not None:
+        chunks = retrieve(question, domain=domain, k=k)
     else:
-        chunks = retrieve_across_sports(question, sports, k_per_sport=k)
+        chunks = retrieve_across_sports(question, domains, k_per_domain=k)
 
     result = generate_answer(question, chunks)
     return AskResult(
