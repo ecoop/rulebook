@@ -30,13 +30,28 @@ from . import app_state
 from .config import settings
 from .retrieve import RetrievedChunk
 
-SYSTEM_PROMPT = """You are an assistant that answers questions about the rules of disc sports (ultimate, goaltimate) using ONLY the excerpts provided in the <context> block.
+SYSTEM_PROMPT_TEMPLATE = """You are an assistant that answers questions about the rules of {domains_phrase} using ONLY the excerpts provided in the <context> block.
 
 Rules for your answer:
-- Cite the source of every specific claim inline, in the form [sport rule_id], using the sport and rule id from the context block that supports it. Example: [ultimate II.B.1].
+- Cite the source of every specific claim inline, in the form [domain rule_id], using the domain and rule id from the context block that supports it. Example: [ultimate II.B.1].
 - If the context does not contain the answer, say so plainly. Do NOT fill in from general knowledge.
-- For questions that compare two sports, structure your answer by sport so the differences are obvious. If one sport's context doesn't address the topic, say that too.
+- For questions that compare two domains, structure your answer by domain so the differences are obvious. If one domain's context doesn't address the topic, say that too.
 - Be concise. One or two short paragraphs is usually enough."""
+
+
+def build_system_prompt(domains: list[str]) -> str:
+    """De-hardcoded system prompt (#113): name the actual domains in play.
+
+    The domain set is DATA — derived from the retrieved chunks — not a baked-in
+    "disc sports (ultimate, goaltimate)" line, so Rulebook serves any
+    cited-answer-over-a-ruleset domain (a legal code, an RPG, policy docs)
+    without a prompt edit. Falls back to a generic phrase when we have none.
+    """
+    if domains:
+        phrase = "the following: " + ", ".join(domains)
+    else:
+        phrase = "the provided rules"
+    return SYSTEM_PROMPT_TEMPLATE.format(domains_phrase=phrase)
 
 USER_TEMPLATE = """<context>
 {context}
@@ -44,7 +59,7 @@ USER_TEMPLATE = """<context>
 
 <question>{question}</question>
 
-Answer using only the context above. Cite inline with [sport rule_id]."""
+Answer using only the context above. Cite inline with [domain rule_id]."""
 
 
 @dataclass
@@ -74,14 +89,14 @@ def format_context(chunks: list[RetrievedChunk]) -> str:
     blocks = []
     for c in chunks:
         if c.page_start == 0 and c.page_end == 0:
-            header = f"[{c.sport} {c.rule_id}]"
+            header = f"[{c.domain} {c.rule_id}]"
         else:
             pages = (
                 f"p.{c.page_start}"
                 if c.page_start == c.page_end
                 else f"pp.{c.page_start}-{c.page_end}"
             )
-            header = f"[{c.sport} {c.rule_id} — {pages}]"
+            header = f"[{c.domain} {c.rule_id} — {pages}]"
         blocks.append(f"{header}\n{c.text}")
     return "\n\n---\n\n".join(blocks)
 
@@ -96,6 +111,9 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
     """
     client = Anthropic(api_key=settings.anthropic_api_key)
     context = format_context(chunks)
+    # Distinct domains present in the retrieved context, in first-seen order.
+    domains = list(dict.fromkeys(c.domain for c in chunks))
+    system_prompt = build_system_prompt(domains)
     hooks = [
         WindowedCapHook(app_state.cost_counter, identity_provider=app_state.current_guest_token),
         app_state.provider_totals_hook,
@@ -109,7 +127,7 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
         raise_on_truncation=False,
         model=settings.claude_model,
         max_tokens=2048,
-        system=SYSTEM_PROMPT,
+        system=system_prompt,
         messages=[
             {
                 "role": "user",

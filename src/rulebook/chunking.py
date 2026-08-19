@@ -14,7 +14,7 @@ STRATEGY
        "1.A.1.", "II.B.", "Rule 5.2"). Those are the CHUNK BOUNDARIES.
 
     3. Split the text at those boundaries. Each resulting chunk carries
-       its rule id, page range, sport, and source PDF.
+       its rule id, page range, domain, and source PDF.
 
     4. If a section is longer than MAX_CHARS, split it further at
        paragraph breaks with a small overlap so context bleeds across the
@@ -39,12 +39,12 @@ from .ingest import PageText
 @dataclass
 class Chunk:
     source: str        # PDF filename
-    sport: str         # "ultimate" | "goaltimate" | ...
+    domain: str         # "ultimate" | "goaltimate" | ...
     rule_id: str       # e.g. "II.B.1"; "preamble" for pre-first-rule text
     page_start: int    # 1-indexed page numbers
     page_end: int
     text: str
-    ordinal: int = 0   # index within the sport, assigned after chunking
+    ordinal: int = 0   # index within the domain, assigned after chunking
 
 
 # FLAT patterns — the rule id and its full hierarchy live on one line.
@@ -115,7 +115,7 @@ def _normalize_ws(text: str) -> str:
     return _WHITESPACE_RUN.sub(" ", text).strip()
 
 
-def chunk_pages(pages: list[PageText], *, source: str, sport: str) -> list[Chunk]:
+def chunk_pages(pages: list[PageText], *, source: str, domain: str) -> list[Chunk]:
     """Chunk a list of PageText into a list of Chunk records."""
     if not pages:
         return []
@@ -125,7 +125,7 @@ def chunk_pages(pages: list[PageText], *, source: str, sport: str) -> list[Chunk
 
     if not anchors:
         # No rule-numbering detected — degrade gracefully to per-page chunks.
-        return _fallback_per_page(pages, source=source, sport=sport)
+        return _fallback_per_page(pages, source=source, domain=domain)
 
     chunks: list[Chunk] = []
 
@@ -138,7 +138,7 @@ def chunk_pages(pages: list[PageText], *, source: str, sport: str) -> list[Chunk
                 chunks.append(
                     Chunk(
                         source=source,
-                        sport=sport,
+                        domain=domain,
                         rule_id="preamble",
                         page_start=1,
                         page_end=page_end,
@@ -156,7 +156,7 @@ def chunk_pages(pages: list[PageText], *, source: str, sport: str) -> list[Chunk
             chunks.append(
                 Chunk(
                     source=source,
-                    sport=sport,
+                    domain=domain,
                     rule_id=rule_id,
                     page_start=page_start,
                     page_end=page_end,
@@ -378,11 +378,11 @@ def _hard_cut(text: str) -> list[str]:
     return out
 
 
-def _fallback_per_page(pages: list[PageText], *, source: str, sport: str) -> list[Chunk]:
+def _fallback_per_page(pages: list[PageText], *, source: str, domain: str) -> list[Chunk]:
     return [
         Chunk(
             source=source,
-            sport=sport,
+            domain=domain,
             rule_id=f"page-{p.page_number}",
             page_start=p.page_number,
             page_end=p.page_number,

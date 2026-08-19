@@ -144,8 +144,8 @@ def test_questions_history_self_scoped(client, monkeypatch):
     import api.main as main
 
     qa = [
-        {"qa_id": "q1", "question": "a?", "answer": "A", "sport": "ultimate", "timestamp": "t2", "author": "gina"},
-        {"qa_id": "q2", "question": "b?", "answer": "B", "sport": None, "timestamp": "t1", "author": "boss"},
+        {"qa_id": "q1", "question": "a?", "answer": "A", "domain": "ultimate", "timestamp": "t2", "author": "gina"},
+        {"qa_id": "q2", "question": "b?", "answer": "B", "domain": None, "timestamp": "t1", "author": "boss"},
     ]
     feedback = [{"qa_id": "q1", "timestamp": "t", "rating": 4, "author": "gina"}]
     golds = [{"gold_id": "g1", "qa_id": "q1", "question": "a?", "gold_answer": "A", "timestamp": "t", "author": "gina"}]

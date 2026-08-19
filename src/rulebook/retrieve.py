@@ -2,16 +2,16 @@
 
 Two flavors:
 
-    retrieve(question, sport=None, k=5)
-        Single-sport (or all-sports) top-k. Use for questions that are
-        clearly about one sport: "what's the stall count in ultimate?".
+    retrieve(question, domain=None, k=5)
+        Single-domain (or all-domains) top-k. Use for questions that are
+        clearly about one domain: "what's the stall count in ultimate?".
 
-    retrieve_across_sports(question, sports, k_per_sport=4)
-        Retrieve k_per_sport results from EACH named sport, then combine.
-        Use for comparison questions: "does either sport allow
-        double-teaming?". The generator gets rules from every sport in
+    retrieve_across_sports(question, domains, k_per_domain=4)
+        Retrieve k_per_domain results from EACH named domain, then combine.
+        Use for comparison questions: "does either domain allow
+        double-teaming?". The generator gets rules from every domain in
         context so it can genuinely compare rather than answering from
-        whichever sport happened to dominate a single top-k.
+        whichever domain happened to dominate a single top-k.
 
 We keep this layer deliberately thin. The "clever" happens either in
 chunking (before) or in the prompt (after). Retrieval itself is dumb —
@@ -31,7 +31,7 @@ from dataclasses import dataclass
 
 from .config import settings
 from .embeddings import get_embedder
-from .store import list_sports, open_store
+from .store import list_domains, open_store
 
 _WHITESPACE_RUN = re.compile(r"\s+")
 
@@ -54,7 +54,7 @@ def _normalize_ws(text: str) -> str:
 class RetrievedChunk:
     text: str
     source: str
-    sport: str
+    domain: str
     rule_id: str
     page_start: int
     page_end: int
@@ -65,7 +65,7 @@ def _row_to_chunk(row: dict) -> RetrievedChunk:
     return RetrievedChunk(
         text=_normalize_ws(row["text"]),
         source=row["source"],
-        sport=row["sport"],
+        domain=row["domain"],
         rule_id=row["rule_id"],
         page_start=int(row["page_start"]),
         page_end=int(row["page_end"]),
@@ -73,44 +73,44 @@ def _row_to_chunk(row: dict) -> RetrievedChunk:
     )
 
 
-def retrieve(question: str, *, sport: str | None = None, k: int = 5) -> list[RetrievedChunk]:
+def retrieve(question: str, *, domain: str | None = None, k: int = 5) -> list[RetrievedChunk]:
     embedder = get_embedder()
     [q_vec] = embedder.embed([question], input_type="query")
     store = open_store(settings.resolved_index_path)
-    rows = store.search(q_vec, k=k, sport=sport)
+    rows = store.search(q_vec, k=k, domain=domain)
     return [_row_to_chunk(r) for r in rows]
 
 
-# Cap on total passages returned across a cross-sport query, so N selected
-# rulesets don't scale the model's context (and cost) by N. 1-2 sports at the
-# default k_per_sport stay under it; larger unions get trimmed by breadth.
-CROSS_SPORT_MAX_TOTAL = 12
+# Cap on total passages returned across a cross-domain query, so N selected
+# domains don't scale the model's context (and cost) by N. 1-2 domains at the
+# default k_per_domain stay under it; larger unions get trimmed by breadth.
+CROSS_DOMAIN_MAX_TOTAL = 12
 
 
 def retrieve_across_sports(
     question: str,
-    sports: list[str] | None = None,
+    domains: list[str] | None = None,
     *,
-    k_per_sport: int = 4,
-    max_total: int = CROSS_SPORT_MAX_TOTAL,
+    k_per_domain: int = 4,
+    max_total: int = CROSS_DOMAIN_MAX_TOTAL,
 ) -> list[RetrievedChunk]:
     embedder = get_embedder()
     [q_vec] = embedder.embed([question], input_type="query")
     store = open_store(settings.resolved_index_path)
-    # Default to every sport actually in the index (not a hardcoded list), so a
-    # newly-added ruleset joins cross-sport comparison automatically.
-    sports = list(sports or list_sports(settings.resolved_index_path))
-    per_sport = [
-        [_row_to_chunk(r) for r in store.search(q_vec, k=k_per_sport, sport=s)]
-        for s in sports
+    # Default to every domain actually in the index (not a hardcoded list), so a
+    # newly-added domain joins cross-domain comparison automatically.
+    domains = list(domains or list_domains(settings.resolved_index_path))
+    per_domain = [
+        [_row_to_chunk(r) for r in store.search(q_vec, k=k_per_domain, domain=s)]
+        for s in domains
     ]
-    # Interleave by rank so every selected ruleset is represented, then cap the
-    # total (round-robin: each sport's closest, then each sport's next, …). This
-    # keeps 1-2 sports at the full per-sport k while stopping many rulesets from
+    # Interleave by rank so every selected domain is represented, then cap the
+    # total (round-robin: each domain's closest, then each domain's next, …). This
+    # keeps 1-2 domains at the full per-domain k while stopping many domains from
     # blowing up the context — a global budget, weighted for breadth.
     combined: list[RetrievedChunk] = []
-    for rank in range(k_per_sport):
-        for chunks in per_sport:
+    for rank in range(k_per_domain):
+        for chunks in per_domain:
             if rank < len(chunks):
                 combined.append(chunks[rank])
                 if len(combined) >= max_total:

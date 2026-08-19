@@ -1,22 +1,22 @@
 # Copyright (c) 2026 Eric Cooper.
-"""Manage the GCS-backed per-user ruleset allowlist (#112).
+"""Manage the GCS-backed per-user domain allowlist (#112).
 
-The hosted deploy resolves ``token → allowed rulesets`` from an append-only
-``allowed_sports.jsonl`` object (see rulebook.allowed_sports). This CLI is the
+The hosted deploy resolves ``token → allowed domains`` from an append-only
+``allowed_domains.jsonl`` object (see rulebook.allowed_domains). This CLI is the
 write side, and the home of the one-time **backfill** that makes existing
 users' access EXPLICIT rather than relying on the resolver's default.
 
 Needs STATE_BACKEND_KIND=gcs, GCS_STATE_BUCKET, and Application Default
 Credentials (locally ``gcloud auth application-default login``):
 
-    uv run python -m scripts.allowed_sports list
-    uv run python -m scripts.allowed_sports set tok_abc123 --sports ultimate,goaltimate
-    uv run python -m scripts.allowed_sports set tok_abc123 --all
-    uv run python -m scripts.allowed_sports backfill --dry-run
-    uv run python -m scripts.allowed_sports backfill            # writes explicit rows
+    uv run python -m scripts.allowed_domains list
+    uv run python -m scripts.allowed_domains set tok_abc123 --domains ultimate,goaltimate
+    uv run python -m scripts.allowed_domains set tok_abc123 --all
+    uv run python -m scripts.allowed_domains backfill --dry-run
+    uv run python -m scripts.allowed_domains backfill            # writes explicit rows
 
 `backfill` writes an explicit grant (default ``ultimate,goaltimate``, or
-``--sports``) for every invite token that has NO grant row yet. It is
+``--domains``) for every invite token that has NO grant row yet. It is
 idempotent and ADD-ONLY: a token that already carries an explicit grant is left
 untouched, so re-running is safe.
 """
@@ -28,25 +28,25 @@ import os
 import sys
 from datetime import UTC, datetime
 
-from rulebook.allowed_sports import (
+from rulebook.allowed_domains import (
     ALL_SENTINEL,
-    append_allowed_sports_row,
+    append_allowed_domains_row,
     grants_from_rows,
-    read_allowed_sports_rows,
+    read_allowed_domains_rows,
 )
 from rulebook.tokens import read_tokens_object
 
-DEFAULT_SPORTS = ["ultimate", "goaltimate"]
+DEFAULT_DOMAINS = ["ultimate", "goaltimate"]
 
 
 def _require_gcs() -> str:
     if os.getenv("STATE_BACKEND_KIND", "local") != "gcs" or not os.getenv("GCS_STATE_BUCKET"):
-        sys.exit("allowed_sports: needs STATE_BACKEND_KIND=gcs and GCS_STATE_BUCKET set.")
+        sys.exit("allowed_domains: needs STATE_BACKEND_KIND=gcs and GCS_STATE_BUCKET set.")
     return os.environ["GCS_STATE_BUCKET"]
 
 
 def _sports_object() -> str:
-    return os.getenv("RULEBOOK_ALLOWED_SPORTS_OBJECT", "allowed_sports.jsonl")
+    return os.getenv("RULEBOOK_ALLOWED_DOMAINS_OBJECT", "allowed_domains.jsonl")
 
 
 def _invite_object() -> str:
@@ -56,25 +56,25 @@ def _invite_object() -> str:
 def _parse_sports(args: argparse.Namespace) -> list[str] | str:
     if getattr(args, "all", False):
         return ALL_SENTINEL
-    if args.sports:
-        return [s.strip() for s in args.sports.split(",") if s.strip()]
-    return list(DEFAULT_SPORTS)
+    if args.domains:
+        return [s.strip() for s in args.domains.split(",") if s.strip()]
+    return list(DEFAULT_DOMAINS)
 
 
-def _row(token: str, sports: list[str] | str, note: str) -> dict:
+def _row(token: str, domains: list[str] | str, note: str) -> dict:
     return {
         "v": 1,
         "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
         "token": token,
-        "sports": sports,
-        "changed_by": "ops:allowed_sports",
+        "domains": domains,
+        "changed_by": "ops:allowed_domains",
         "note": note,
     }
 
 
 def cmd_list(_args: argparse.Namespace) -> None:
     bucket = _require_gcs()
-    grants = grants_from_rows(read_allowed_sports_rows(bucket, _sports_object()))
+    grants = grants_from_rows(read_allowed_domains_rows(bucket, _sports_object()))
     tokens = read_tokens_object(bucket, _invite_object())
     if not tokens:
         print(f"(no invite tokens) gs://{bucket}/{_invite_object()}")
@@ -88,20 +88,20 @@ def cmd_list(_args: argparse.Namespace) -> None:
 
 def cmd_set(args: argparse.Namespace) -> None:
     bucket = _require_gcs()
-    sports = _parse_sports(args)
-    append_allowed_sports_row(bucket, _sports_object(), _row(args.token, sports, "set via CLI"))
-    shown = "all (*)" if sports == ALL_SENTINEL else ", ".join(sports) or "(none)"
+    domains = _parse_sports(args)
+    append_allowed_domains_row(bucket, _sports_object(), _row(args.token, domains, "set via CLI"))
+    shown = "all (*)" if domains == ALL_SENTINEL else ", ".join(domains) or "(none)"
     print(f"set: {args.token} → {shown}")
 
 
 def cmd_backfill(args: argparse.Namespace) -> None:
     bucket = _require_gcs()
-    sports = _parse_sports(args)
-    grants = grants_from_rows(read_allowed_sports_rows(bucket, _sports_object()))
+    domains = _parse_sports(args)
+    grants = grants_from_rows(read_allowed_domains_rows(bucket, _sports_object()))
     tokens = read_tokens_object(bucket, _invite_object())
     missing = [(t, label) for t, label in sorted(tokens.items(), key=lambda kv: kv[1])
                if t not in grants]
-    shown = "all (*)" if sports == ALL_SENTINEL else ", ".join(sports)
+    shown = "all (*)" if domains == ALL_SENTINEL else ", ".join(domains)
     if not missing:
         print(f"backfill: nothing to do — all {len(tokens)} user(s) already have an explicit grant.")
         return
@@ -112,7 +112,7 @@ def cmd_backfill(args: argparse.Namespace) -> None:
             print(f"    {t}  ({label})")
         return
     for t, _label in missing:
-        append_allowed_sports_row(bucket, _sports_object(), _row(t, sports, "backfill: made explicit"))
+        append_allowed_domains_row(bucket, _sports_object(), _row(t, domains, "backfill: made explicit"))
     print(f"backfill: wrote explicit [{shown}] grants for {len(missing)} user(s).")
 
 
@@ -122,15 +122,15 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("list", help="show each user's effective grant").set_defaults(func=cmd_list)
 
-    p_set = sub.add_parser("set", help="grant one user an explicit ruleset allowlist")
+    p_set = sub.add_parser("set", help="grant one user an explicit domain allowlist")
     p_set.add_argument("token")
-    p_set.add_argument("--sports", help="comma-separated rulesets, e.g. ultimate,goaltimate")
-    p_set.add_argument("--all", action="store_true", help="grant all rulesets (incl. future)")
+    p_set.add_argument("--domains", help="comma-separated domains, e.g. ultimate,goaltimate")
+    p_set.add_argument("--all", action="store_true", help="grant all domains (incl. future)")
     p_set.set_defaults(func=cmd_set)
 
     p_bf = sub.add_parser("backfill", help="write explicit default grants for ungranted users")
-    p_bf.add_argument("--sports", help=f"comma-separated rulesets (default {','.join(DEFAULT_SPORTS)})")
-    p_bf.add_argument("--all", action="store_true", help="grant all rulesets instead of the default")
+    p_bf.add_argument("--domains", help=f"comma-separated domains (default {','.join(DEFAULT_DOMAINS)})")
+    p_bf.add_argument("--all", action="store_true", help="grant all domains instead of the default")
     p_bf.add_argument("--dry-run", action="store_true", help="show what would change without writing")
     p_bf.set_defaults(func=cmd_backfill)
 

@@ -33,15 +33,15 @@ from pydantic import BaseModel, Field
 # Rulebook has a single-file API so ordering inside this module is
 # sufficient — see rulebook/app_state.py for the multi-file case.
 from rulebook import app_state  # noqa: E402
-from rulebook.allowed_sports import (  # noqa: E402
+from rulebook.allowed_domains import (  # noqa: E402
     ALL_SENTINEL,
-    append_allowed_sports_row,
+    append_allowed_domains_row,
     constrain_sports,
     grants_from_rows,
-    read_allowed_sports_rows,
-    resolve_allowed_sports,
+    read_allowed_domains_rows,
+    resolve_allowed_domains,
 )
-from rulebook.allowed_sports import RESET_SENTINEL as SPORTS_RESET_SENTINEL  # noqa: E402
+from rulebook.allowed_domains import RESET_SENTINEL as DOMAINS_RESET_SENTINEL  # noqa: E402
 from rulebook.build_info import BUILD_INFO
 from rulebook.config import settings
 from rulebook.index_sync import sync_index_from_gcs
@@ -79,7 +79,7 @@ from rulebook.interaction_log import (  # noqa: E402
     read_qa_entries,
     read_qa_questions,
 )
-from rulebook.pipeline import DEFAULT_SPORTS, ask  # noqa: E402
+from rulebook.pipeline import DEFAULT_DOMAINS, ask  # noqa: E402
 from rulebook.roles import (  # noqa: E402
     CAP_ACTIVITY_VIEW,
     CAP_ASK,
@@ -117,14 +117,14 @@ from rulebook.roles import (  # noqa: E402
     resolve_role,
     role_fingerprint,
 )
-from rulebook.store import list_sports  # noqa: E402
+from rulebook.store import list_domains  # noqa: E402
 from rulebook.tokens import (  # noqa: E402
     mint_token,
     read_tokens_object,
     write_tokens_object,
 )
 
-app = FastAPI(title="rulebook", description="RAG over disc-sport rules.")
+app = FastAPI(title="rulebook", description="RAG over disc-domain rules.")
 
 # CORS — the Vite dev server runs on 5173 by default. In production you'd
 # lock this down; for a local demo `*` is fine.
@@ -149,23 +149,23 @@ app.add_middleware(InviteAuthMiddleware, config=settings)
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, description="Natural-language question about the rules.")
-    sport: str | None = Field(
+    domain: str | None = Field(
         default=None,
-        description="Single-ruleset mode (e.g. 'ultimate'). Back-compat alias; "
-                    "prefer `sports`. Takes precedence if set.",
+        description="Single-domain mode (e.g. 'ultimate'). Back-compat alias; "
+                    "prefer `domains`. Takes precedence if set.",
     )
-    sports: list[str] | None = Field(
+    domains: list[str] | None = Field(
         default=None,
-        description="Cross-ruleset mode: retrieve from exactly this subset and let the "
-                    "model compare. Empty/null (and no `sport`) = every ruleset in the index.",
+        description="Cross-domain mode: retrieve from exactly this subset and let the "
+                    "model compare. Empty/null (and no `domain`) = every domain in the index.",
     )
-    k: int = Field(default=5, ge=1, le=20, description="Top-k retrieval (per sport in cross-sport mode).")
+    k: int = Field(default=5, ge=1, le=20, description="Top-k retrieval (per domain in cross-domain mode).")
 
 
 class RetrievedChunkOut(BaseModel):
     text: str
     source: str
-    sport: str
+    domain: str
     rule_id: str
     page_start: int
     page_end: int
@@ -273,11 +273,11 @@ class AdminQuestionRow(BaseModel):
     qa_id: str
     question: str
     answer: str = Field(..., description="The stored answer, so you can revisit it.")
-    sport: str | None = None
-    sports: list[str] = Field(
+    domain: str | None = None
+    domains: list[str] = Field(
         default_factory=list,
-        description="Rulesets the query ran against (v4+ rows). Empty for older rows; "
-                    "fall back to `sport` there.",
+        description="Domains the query ran against (v4+ rows). Empty for older rows; "
+                    "fall back to `domain` there.",
     )
     timestamp: str
     rating: int | None = Field(default=None, description="Your rating for this Q&A, if you gave one.")
@@ -292,7 +292,7 @@ class AdminQuestionListResponse(BaseModel):
 
 class AdminSourceRow(BaseModel):
     path: str = Field(..., description="Repo-relative posix path, e.g. 'rules/ultimate/strategy.md'.")
-    sport: str
+    domain: str
     size_bytes: int
     modified_at: str = Field(..., description="ISO 8601 UTC of the file's last mtime.")
     included: bool = Field(..., description="Whether this file is included in the next index rebuild.")
@@ -327,12 +327,12 @@ class IndexInfoResponse(BaseModel):
     build_num: str | None = None
     count: int = 0
     dimension: int = 0
-    sports: list[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
     gold_answers: int = 0
     gold_chunks: int = 0
     sources: list[dict] = Field(default_factory=list)
     golds: list[dict] = Field(default_factory=list)
-    chunks_by_sport: dict[str, int] = Field(default_factory=dict)
+    chunks_by_domain: dict[str, int] = Field(default_factory=dict)
 
 
 class IndexBuildRow(BaseModel):
@@ -364,9 +364,9 @@ class MeResponse(BaseModel):
         default_factory=list,
         description="Sorted capability strings the effective role grants. The UI renders tabs/columns/buttons off these; the backend enforces them per-endpoint.",
     )
-    allowed_sports: list[str] | None = Field(
+    allowed_domains: list[str] | None = Field(
         default=None,
-        description="Rulesets this caller may ask against (#112); null = unrestricted (all, "
+        description="Domains this caller may ask against (#112); null = unrestricted (all, "
                     "including any added later). The picker filters to this set.",
     )
     demo_mode: bool = Field(..., description="Whether the invite gate is active.")
@@ -396,38 +396,38 @@ class RoleChangeResponse(BaseModel):
     role: str = Field(..., description="Effective role after the change.")
 
 
-class AllowedSportsOut(BaseModel):
+class AllowedDomainsOut(BaseModel):
     token: str
-    sports: list[str] | None = Field(
+    domains: list[str] | None = Field(
         default=None,
-        description="Rulesets granted to this token; null = all (the '*' grant).",
+        description="Domains granted to this token; null = all (the '*' grant).",
     )
     source: str = Field(..., description='"override" (log) | "seed" (env) | "default".')
 
 
-class AdminAllowedSportsResponse(BaseModel):
-    grants: list[AllowedSportsOut]
+class AdminAllowedDomainsResponse(BaseModel):
+    grants: list[AllowedDomainsOut]
     all_sports: list[str] = Field(
-        ..., description="Every ruleset in the index — the unfiltered grant menu."
+        ..., description="Every domain in the index — the unfiltered grant menu."
     )
     default_sports: list[str] = Field(
         ..., description="The grant a new user gets by default (pre-checks the add-invite form)."
     )
 
 
-class AllowedSportsChangeRequest(BaseModel):
+class AllowedDomainsChangeRequest(BaseModel):
     token: str = Field(..., min_length=1, description="The guest token whose access is being set.")
-    sports: list[str] = Field(
+    domains: list[str] = Field(
         ...,
-        description="Exact rulesets to grant. [] revokes all; ['*'] grants all (incl. future).",
+        description="Exact domains to grant. [] revokes all; ['*'] grants all (incl. future).",
     )
     note: str | None = Field(default=None, max_length=2000, description="Optional audit note.")
 
 
-class AllowedSportsChangeResponse(BaseModel):
+class AllowedDomainsChangeResponse(BaseModel):
     ok: bool = True
     token: str
-    sports: list[str] | None = Field(..., description="Effective allowlist after the change; null = all.")
+    domains: list[str] | None = Field(..., description="Effective allowlist after the change; null = all.")
 
 
 class InviteTokenOut(BaseModel):
@@ -451,18 +451,18 @@ class InviteTokensResponse(BaseModel):
 class AddInviteTokenRequest(BaseModel):
     label: str = Field(..., min_length=1, description="Recipient label, e.g. 'alice'.")
     token: str | None = Field(default=None, description="Optional explicit token; minted if omitted.")
-    sports: list[str] | None = Field(
+    domains: list[str] | None = Field(
         default=None,
-        description="Rulesets to grant the new user (#112), written as an explicit grant. "
-                    "Omit to use the configured default (settings.default_allowed_sports).",
+        description="Domains to grant the new user (#112), written as an explicit grant. "
+                    "Omit to use the configured default (settings.default_allowed_domains).",
     )
 
 
 class AddInviteTokenResponse(BaseModel):
     token: str
     label: str
-    sports: list[str] = Field(
-        default_factory=list, description="The explicit ruleset grant written for the new user."
+    domains: list[str] = Field(
+        default_factory=list, description="The explicit domain grant written for the new user."
     )
 
 
@@ -477,7 +477,7 @@ class RenameInviteTokenRequest(BaseModel):
 
 
 class MetaResponse(BaseModel):
-    sports: list[str]
+    domains: list[str]
     embedding_provider: str
     embedding_model: str
     claude_model: str
@@ -491,14 +491,14 @@ class DiagnosticsResponse(BaseModel):
     """Live runtime stats for the Diagnostics widget."""
     chunk_count: int
     dimension: int
-    chunks_by_sport: dict[str, int]
+    chunks_by_domain: dict[str, int]
     index_built_at: str | None = Field(
         default=None,
         description="ISO 8601 UTC mtime of the manifest.json; None if no index yet.",
     )
     gold_count: int = Field(..., description="Distinct qa_ids with a gold answer.")
     feedback_count: int = Field(..., description="Distinct qa_ids with any feedback.")
-    source_file_count: int = Field(..., description="Files under rules/<sport>/ eligible for ingest.")
+    source_file_count: int = Field(..., description="Files under rules/<domain>/ eligible for ingest.")
 
 
 class UsageCaps(BaseModel):
@@ -533,17 +533,17 @@ class UsageResponse(BaseModel):
 
 @app.get("/meta", response_model=MetaResponse)
 def meta() -> MetaResponse:
-    """Small metadata endpoint the frontend hits on load — sports + models in use."""
-    sports = list_sports(settings.resolved_index_path) or DEFAULT_SPORTS
-    # Scope the ruleset list to what the caller may ask against (#112), so a
-    # restricted user's picker only offers their rulesets and they don't even
+    """Small metadata endpoint the frontend hits on load — domains + models in use."""
+    domains = list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS
+    # Scope the domain list to what the caller may ask against (#112), so a
+    # restricted user's picker only offers their domains and they don't even
     # learn the others exist. None = unrestricted (public deploy / no identity).
     guest = get_current_guest()
-    allowed = resolve_allowed_sports(guest.token if guest else None)
+    allowed = resolve_allowed_domains(guest.token if guest else None)
     if allowed is not None:
-        sports = [s for s in sports if s in allowed]
+        domains = [s for s in domains if s in allowed]
     return MetaResponse(
-        sports=sports,
+        domains=domains,
         embedding_provider=settings.embedding_provider,
         embedding_model=settings.embedding_model,
         claude_model=settings.claude_model,
@@ -573,7 +573,7 @@ def diagnostics_endpoint() -> DiagnosticsResponse:
 
     chunk_count = 0
     dimension = 0
-    chunks_by_sport: dict[str, int] = {}
+    chunks_by_domain: dict[str, int] = {}
     index_built_at: str | None = None
     if manifest_path.exists():
         manifest = _json.loads(manifest_path.read_text())
@@ -585,12 +585,13 @@ def diagnostics_endpoint() -> DiagnosticsResponse:
 
         chunks_path = index_path / "chunks.jsonl"
         if chunks_path.exists():
-            sports = Counter()
+            domains = Counter()
             with chunks_path.open() as f:
                 for line in f:
                     row = _json.loads(line)
-                    sports[row["sport"]] += 1
-            chunks_by_sport = dict(sports)
+                    # Back-compat (#113): a pre-rename chunk row keys on "sport".
+                    domains[row.get("domain") or row.get("sport")] += 1
+            chunks_by_domain = dict(domains)
 
     gold_count = len(read_latest_golds())
     feedback_count = len(read_latest_feedback())
@@ -601,7 +602,7 @@ def diagnostics_endpoint() -> DiagnosticsResponse:
     return DiagnosticsResponse(
         chunk_count=chunk_count,
         dimension=dimension,
-        chunks_by_sport=chunks_by_sport,
+        chunks_by_domain=chunks_by_domain,
         index_built_at=index_built_at,
         gold_count=gold_count,
         feedback_count=feedback_count,
@@ -643,27 +644,27 @@ def usage_endpoint() -> UsageResponse:
     ],
 )
 def ask_endpoint(req: AskRequest) -> AskResponse:
-    # Per-user ruleset access (#112): constrain the request to the caller's
+    # Per-user domain access (#112): constrain the request to the caller's
     # allowlist BEFORE retrieval. The frontend already filters the picker, but
     # the boundary is enforced here regardless — a scoped caller must never
     # reach the unmasked global search. allowed=None means unrestricted.
     guest = get_current_guest()
-    allowed = resolve_allowed_sports(guest.token if guest else None)
-    call_sport, call_sports = req.sport, req.sports
+    allowed = resolve_allowed_domains(guest.token if guest else None)
+    call_sport, call_sports = req.domain, req.domains
     if allowed is not None:
-        if req.sport is not None:
-            if req.sport not in allowed:
-                raise HTTPException(status_code=403, detail=f"ruleset '{req.sport}' not permitted")
+        if req.domain is not None:
+            if req.domain not in allowed:
+                raise HTTPException(status_code=403, detail=f"domain '{req.domain}' not permitted")
         else:
             try:
                 # Empty selection = "all I'm allowed" (a concrete list), never
-                # the global all — so the sport=None search path stays unreached.
-                call_sports = constrain_sports(req.sports, allowed)
+                # the global all — so the domain=None search path stays unreached.
+                call_sports = constrain_sports(req.domains, allowed)
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e)) from e
 
     try:
-        result = ask(question=req.question, sport=call_sport, sports=call_sports, k=req.k)
+        result = ask(question=req.question, domain=call_sport, domains=call_sports, k=req.k)
     except RuntimeError as e:
         # e.g. "no index" — build_index.py hasn't been run yet
         raise HTTPException(status_code=503, detail=str(e)) from e
@@ -673,7 +674,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
         RetrievedChunkOut(
             text=c.text,
             source=c.source,
-            sport=c.sport,
+            domain=c.domain,
             rule_id=c.rule_id,
             page_start=c.page_start,
             page_end=c.page_end,
@@ -684,16 +685,16 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
 
     # Persist the full interaction so we can later mine downvoted answers
     # for corrections, upvoted ones for a "greatest hits" corpus, etc.
-    # The exact rulesets this query ran against (post-allowlist constraint):
-    # the effective subset, else the singular sport, else every ruleset.
+    # The exact domains this query ran against (post-allowlist constraint):
+    # the effective subset, else the singular domain, else every domain.
     effective_sports = call_sports or (
-        [call_sport] if call_sport else list_sports(settings.resolved_index_path)
+        [call_sport] if call_sport else list_domains(settings.resolved_index_path)
     )
     log_qa(
         qa_id,
         question=result.question,
-        sport=call_sport,
-        sports=effective_sports,
+        domain=call_sport,
+        domains=effective_sports,
         k=req.k,
         answer=result.answer,
         chunks=[asdict(c) for c in result.chunks],
@@ -822,7 +823,7 @@ def me_endpoint() -> MeResponse:
         level=level_number(role),
         fingerprint=role_fingerprint(role),
         capabilities=sorted(capabilities_for(role)),
-        allowed_sports=resolve_allowed_sports(guest.token if guest else None),
+        allowed_domains=resolve_allowed_domains(guest.token if guest else None),
         demo_mode=settings.demo_mode,
     )
 
@@ -914,121 +915,121 @@ def admin_reset_role(token: str) -> RoleChangeResponse:
     return RoleChangeResponse(token=token, role=resolve_role(token))
 
 
-def _require_gcs_for_allowed_sports() -> tuple[str, str]:
+def _require_gcs_for_allowed_domains() -> tuple[str, str]:
     if settings.state_backend_kind != "gcs" or not settings.gcs_state_bucket:
         raise HTTPException(
             status_code=400,
-            detail="ruleset-access changes require the gcs state backend (RULEBOOK_STATE_BACKEND=gcs).",
+            detail="domain-access changes require the gcs state backend (RULEBOOK_STATE_BACKEND=gcs).",
         )
-    return settings.gcs_state_bucket, settings.allowed_sports_object
+    return settings.gcs_state_bucket, settings.allowed_domains_object
 
 
 @app.get(
-    "/advanced/allowed-sports",
-    response_model=AdminAllowedSportsResponse,
+    "/advanced/allowed-domains",
+    response_model=AdminAllowedDomainsResponse,
     dependencies=[Depends(require_capability(CAP_USERS_VIEW))],
 )
-def admin_list_allowed_sports() -> AdminAllowedSportsResponse:
-    """Per-user ruleset allowlists (#112), one row per known user.
+def admin_list_allowed_domains() -> AdminAllowedDomainsResponse:
+    """Per-user domain allowlists (#112), one row per known user.
 
-    Effective allowlist = override (allowed_sports.jsonl) ▸ seed (env) ▸
+    Effective allowlist = override (allowed_domains.jsonl) ▸ seed (env) ▸
     default. Enumerates every invite token plus any token carrying an explicit
     grant, so the Users tab has a row to edit for each user. `all_sports` is the
     UNFILTERED menu — an operator grants from the full corpus, not their own
     (possibly scoped) view.
     """
-    all_sports = list_sports(settings.resolved_index_path) or DEFAULT_SPORTS
-    known: set[str] = set(settings.invite_tokens) | set(settings.initial_allowed_sports)
+    all_sports = list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS
+    known: set[str] = set(settings.invite_tokens) | set(settings.initial_allowed_domains)
     overrides: dict[str, list[str] | str] = {}
     if settings.state_backend_kind == "gcs" and settings.gcs_state_bucket:
         overrides = grants_from_rows(
-            read_allowed_sports_rows(settings.gcs_state_bucket, settings.allowed_sports_object)
+            read_allowed_domains_rows(settings.gcs_state_bucket, settings.allowed_domains_object)
         )
         known |= set(overrides)
 
-    def _row(tok: str) -> AllowedSportsOut:
+    def _row(tok: str) -> AllowedDomainsOut:
         if tok in overrides:
             grant, source = overrides[tok], "override"
-        elif tok in settings.initial_allowed_sports:
-            grant, source = settings.initial_allowed_sports[tok], "seed"
+        elif tok in settings.initial_allowed_domains:
+            grant, source = settings.initial_allowed_domains[tok], "seed"
         else:
-            grant, source = list(settings.default_allowed_sports), "default"
-        sports = None if grant == ALL_SENTINEL else list(grant)
-        return AllowedSportsOut(token=tok, sports=sports, source=source)
+            grant, source = list(settings.default_allowed_domains), "default"
+        domains = None if grant == ALL_SENTINEL else list(grant)
+        return AllowedDomainsOut(token=tok, domains=domains, source=source)
 
-    return AdminAllowedSportsResponse(
+    return AdminAllowedDomainsResponse(
         grants=[_row(tok) for tok in sorted(known)],
         all_sports=all_sports,
-        default_sports=list(settings.default_allowed_sports),
+        default_sports=list(settings.default_allowed_domains),
     )
 
 
 @app.post(
-    "/advanced/allowed-sports",
-    response_model=AllowedSportsChangeResponse,
+    "/advanced/allowed-domains",
+    response_model=AllowedDomainsChangeResponse,
     dependencies=[Depends(require_capability(CAP_USERS_CHANGE_ROLE))],
 )
-def admin_set_allowed_sports(req: AllowedSportsChangeRequest) -> AllowedSportsChangeResponse:
-    """Grant a token an exact ruleset allowlist. Takes effect within the TTL.
+def admin_set_allowed_domains(req: AllowedDomainsChangeRequest) -> AllowedDomainsChangeResponse:
+    """Grant a token an exact domain allowlist. Takes effect within the TTL.
 
     Same capability as role assignment (#112). `['*']` stores the all-grant;
-    otherwise every named ruleset must exist in the corpus (no granting a
-    ruleset that isn't there).
+    otherwise every named domain must exist in the corpus (no granting a
+    domain that isn't there).
     """
-    bucket, obj = _require_gcs_for_allowed_sports()
-    all_sports = set(list_sports(settings.resolved_index_path) or DEFAULT_SPORTS)
-    if req.sports == [ALL_SENTINEL]:
+    bucket, obj = _require_gcs_for_allowed_domains()
+    all_sports = set(list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS)
+    if req.domains == [ALL_SENTINEL]:
         stored: list[str] | str = ALL_SENTINEL
     else:
-        unknown = [s for s in req.sports if s not in all_sports]
+        unknown = [s for s in req.domains if s not in all_sports]
         if unknown:
             raise HTTPException(
                 status_code=422,
-                detail=f"unknown ruleset(s) {unknown}; one of {sorted(all_sports)}",
+                detail=f"unknown domain(s) {unknown}; one of {sorted(all_sports)}",
             )
-        stored = list(req.sports)
+        stored = list(req.domains)
     guest = get_current_guest()
-    append_allowed_sports_row(
+    append_allowed_domains_row(
         bucket,
         obj,
         {
             "v": 1,
             "timestamp": utc_now_iso(),
             "token": req.token,
-            "sports": stored,
+            "domains": stored,
             "changed_by": (guest.recipient if guest else None),
             "note": req.note,
         },
     )
-    _audit(CAP_USERS_CHANGE_ROLE, target=req.token, detail={"sports": stored})
-    return AllowedSportsChangeResponse(
-        token=req.token, sports=None if stored == ALL_SENTINEL else stored
+    _audit(CAP_USERS_CHANGE_ROLE, target=req.token, detail={"domains": stored})
+    return AllowedDomainsChangeResponse(
+        token=req.token, domains=None if stored == ALL_SENTINEL else stored
     )
 
 
 @app.post(
-    "/advanced/allowed-sports/{token}/reset",
-    response_model=AllowedSportsChangeResponse,
+    "/advanced/allowed-domains/{token}/reset",
+    response_model=AllowedDomainsChangeResponse,
     dependencies=[Depends(require_capability(CAP_USERS_CHANGE_ROLE))],
 )
-def admin_reset_allowed_sports(token: str) -> AllowedSportsChangeResponse:
+def admin_reset_allowed_domains(token: str) -> AllowedDomainsChangeResponse:
     """Clear a token's grant; allowlist falls back to the seed (or default)."""
-    bucket, obj = _require_gcs_for_allowed_sports()
+    bucket, obj = _require_gcs_for_allowed_domains()
     guest = get_current_guest()
-    append_allowed_sports_row(
+    append_allowed_domains_row(
         bucket,
         obj,
         {
             "v": 1,
             "timestamp": utc_now_iso(),
             "token": token,
-            "sports": SPORTS_RESET_SENTINEL,
+            "domains": DOMAINS_RESET_SENTINEL,
             "changed_by": (guest.recipient if guest else None),
             "note": None,
         },
     )
-    _audit(CAP_USERS_CHANGE_ROLE, target=token, detail={"sports": "reset"})
-    return AllowedSportsChangeResponse(token=token, sports=resolve_allowed_sports(token))
+    _audit(CAP_USERS_CHANGE_ROLE, target=token, detail={"domains": "reset"})
+    return AllowedDomainsChangeResponse(token=token, domains=resolve_allowed_domains(token))
 
 
 def _require_gcs_for_invite_tokens() -> tuple[str, str]:
@@ -1114,33 +1115,33 @@ def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse
     token = req.token or mint_token()
     if token in tokens:
         raise HTTPException(status_code=409, detail=f"token already exists ({tokens[token]!r}).")
-    # Assign ruleset access at creation (#112) — an EXPLICIT grant, not a
+    # Assign domain access at creation (#112) — an EXPLICIT grant, not a
     # reliance on the resolver's default, so the new user's access is recorded
     # from day one. Default to the configured set; the creator can override.
-    sports = req.sports if req.sports is not None else list(settings.default_allowed_sports)
-    all_sports = set(list_sports(settings.resolved_index_path) or DEFAULT_SPORTS)
-    unknown = [s for s in sports if s not in all_sports]
+    domains = req.domains if req.domains is not None else list(settings.default_allowed_domains)
+    all_sports = set(list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS)
+    unknown = [s for s in domains if s not in all_sports]
     if unknown:
         raise HTTPException(
-            status_code=422, detail=f"unknown ruleset(s) {unknown}; one of {sorted(all_sports)}"
+            status_code=422, detail=f"unknown domain(s) {unknown}; one of {sorted(all_sports)}"
         )
     tokens[token] = req.label
     write_tokens_object(bucket, obj, tokens)
     guest = get_current_guest()
-    append_allowed_sports_row(
+    append_allowed_domains_row(
         bucket,
-        settings.allowed_sports_object,
+        settings.allowed_domains_object,
         {
             "v": 1,
             "timestamp": utc_now_iso(),
             "token": token,
-            "sports": sports,
+            "domains": domains,
             "changed_by": (guest.recipient if guest else None),
             "note": "assigned at user creation",
         },
     )
-    _audit(CAP_USERS_ADD, target=token, detail={"label": req.label, "sports": sports})
-    return AddInviteTokenResponse(token=token, label=req.label, sports=sports)
+    _audit(CAP_USERS_ADD, target=token, detail={"label": req.label, "domains": domains})
+    return AddInviteTokenResponse(token=token, label=req.label, domains=domains)
 
 
 @app.delete(
@@ -1374,8 +1375,9 @@ def admin_list_questions() -> AdminQuestionListResponse:
             qa_id=r["qa_id"],
             question=r.get("question", ""),
             answer=r.get("answer", ""),
-            sport=r.get("sport"),
-            sports=r.get("sports") or [],
+            # Back-compat (#113): pre-rename qa_log rows key on "sport"/"sports".
+            domain=r.get("domain") or r.get("sport"),
+            domains=r.get("domains") or r.get("sports") or [],
             timestamp=r["timestamp"],
             rating=my_ratings.get(r["qa_id"]),
             has_gold=r["qa_id"] in my_golds,
@@ -1390,7 +1392,7 @@ def admin_list_questions() -> AdminQuestionListResponse:
 
 @app.get("/advanced/sources", response_model=AdminSourceListResponse, dependencies=[Depends(require_capability(CAP_SOURCES_VIEW))])
 def admin_list_sources() -> AdminSourceListResponse:
-    """List every source file under rules/<sport>/ with its inclusion state.
+    """List every source file under rules/<domain>/ with its inclusion state.
 
     Passes apply_curation=False to discover_sources so both included AND
     excluded files show up in the admin table — the exclusion is
@@ -1405,14 +1407,14 @@ def admin_list_sources() -> AdminSourceListResponse:
 
     rows: list[AdminSourceRow] = []
     for src in discover_sources(rules_root, apply_curation=False):
-        # Identity is "rules/<sport>/<file>" — kept stable (independent of
+        # Identity is "rules/<domain>/<file>" — kept stable (independent of
         # where rules_dir resolves) so source-curation keys keep matching.
         rel = (Path("rules") / src.path.relative_to(rules_root)).as_posix()
         st = src.path.stat()
         rows.append(
             AdminSourceRow(
                 path=rel,
-                sport=src.sport,
+                domain=src.domain,
                 size_bytes=st.st_size,
                 modified_at=datetime.fromtimestamp(st.st_mtime, tz=UTC).isoformat(timespec="seconds"),
                 included=curation.get(rel, True),
@@ -1498,12 +1500,12 @@ def admin_index_info() -> IndexInfoResponse:
         build_num=d.get("build_num"),
         count=d.get("count", 0),
         dimension=d.get("dimension", 0),
-        sports=d.get("sports", []),
+        domains=d.get("domains") or d.get("sports", []),  # back-compat (#113)
         gold_answers=d.get("gold_answers", 0),
         gold_chunks=d.get("gold_chunks", 0),
         sources=d.get("sources", []),
         golds=d.get("golds", []),
-        chunks_by_sport=d.get("chunks_by_sport", {}),
+        chunks_by_domain=d.get("chunks_by_domain", {}),
     )
 
 
