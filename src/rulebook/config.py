@@ -147,6 +147,23 @@ class Settings(BaseSettings):
         default_factory=dict,
         validation_alias="RULEBOOK_INITIAL_ALLOWED_DOMAINS",
     )
+    # The domain registry (#113 part 2) — content config: which domains exist
+    # and their metadata (display name, source URLs, numbering hint, enabled).
+    # A whole-object json SNAPSHOT (current state, like invite_tokens.json), NOT
+    # an append-only log. Authoritative for identity + enabled.
+    #   RULEBOOK_DOMAINS_OBJECT — the registry object name.
+    domains_object: str = Field(
+        default="domains.json",
+        validation_alias="RULEBOOK_DOMAINS_OBJECT",
+    )
+    # Registry entries baked in at deploy ({slug: {display_name?, sources?,
+    # numbering?, enabled?}}), overridden live by the GCS object. Empty = every
+    # indexed domain defaults to enabled with a title-cased name.
+    #   RULEBOOK_INITIAL_DOMAINS='{"ultimate": {"display_name": "Ultimate (USAU)"}}'
+    initial_domains: dict[str, dict] = Field(
+        default_factory=dict,
+        validation_alias="RULEBOOK_INITIAL_DOMAINS",
+    )
 
     @property
     def repo_root(self) -> Path:
