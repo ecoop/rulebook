@@ -127,6 +127,7 @@ interface MeResponse {
   role: string
   level: number
   capabilities: string[]
+  allowed_sports?: string[] | null
   demo_mode: boolean
 }
 
@@ -164,12 +165,26 @@ interface AdminRolesResponse {
   ladder: string[]
 }
 
+// Per-user ruleset allowlist (#112). sports null = all (the '*' grant).
+interface AllowedSportsOut {
+  token: string
+  sports: string[] | null
+  source: string
+}
+
+interface AdminAllowedSportsResponse {
+  grants: AllowedSportsOut[]
+  all_sports: string[]
+}
+
 // One row per invite token, joined with its effective role + engagement.
 interface UserRow {
   token: string
   label: string
   role: string
   source: string
+  allowedSports: string[] | null
+  allowedSportsSource: string
   lastSeen: string | null
   weeklyUsd: number
   weeklyTokens: number
@@ -360,6 +375,12 @@ export default function ActivityApp() {
   const [inviteTokens, setInviteTokens] = useState<InviteTokenOut[] | null>(null)
   const [roles, setRoles] = useState<RoleAssignmentOut[] | null>(null)
   const [ladder, setLadder] = useState<string[]>([])
+  // Per-user ruleset access (#112): the grant rows + the full ruleset menu.
+  const [allowedSports, setAllowedSports] = useState<AllowedSportsOut[] | null>(null)
+  const [allSports, setAllSports] = useState<string[]>([])
+  // Inline ruleset editor — one row at a time; `editSports` is the working set.
+  const [editingSportsToken, setEditingSportsToken] = useState<string | null>(null)
+  const [editSports, setEditSports] = useState<Set<string>>(() => new Set())
   const [addLabel, setAddLabel] = useState('')
   const [addPending, setAddPending] = useState(false)
   const [newInvite, setNewInvite] = useState<InviteTokenOut | null>(null)
@@ -501,17 +522,22 @@ export default function ActivityApp() {
 
   async function refreshUsers() {
     try {
-      const [tResp, rResp] = await Promise.all([
+      const [tResp, rResp, aResp] = await Promise.all([
         fetch('/advanced/invite-tokens'),
         fetch('/advanced/roles'),
+        fetch('/advanced/allowed-sports'),
       ])
       if (!tResp.ok) throw new Error(`invite-tokens ${tResp.status}: ${await tResp.text()}`)
       if (!rResp.ok) throw new Error(`roles ${rResp.status}: ${await rResp.text()}`)
+      if (!aResp.ok) throw new Error(`allowed-sports ${aResp.status}: ${await aResp.text()}`)
       const t: InviteTokensResponse = await tResp.json()
       const r: AdminRolesResponse = await rResp.json()
+      const a: AdminAllowedSportsResponse = await aResp.json()
       setInviteTokens(t.tokens)
       setRoles(r.roles)
       setLadder(r.ladder)
+      setAllowedSports(a.grants)
+      setAllSports(a.all_sports)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -559,6 +585,56 @@ export default function ActivityApp() {
         body: JSON.stringify({ token, role }),
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      await refreshUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      markPending(token, false)
+    }
+  }
+
+  // #112: open the inline ruleset editor for one row, seeded with its current
+  // grant (a null/all grant seeds with every ruleset selected).
+  function beginEditSports(token: string, current: string[] | null) {
+    setEditingSportsToken(token)
+    setEditSports(new Set(current ?? allSports))
+  }
+
+  function cancelEditSports() {
+    setEditingSportsToken(null)
+    setEditSports(new Set())
+  }
+
+  async function saveAllowedSports(token: string) {
+    markPending(token, true)
+    setError(null)
+    try {
+      // Preserve the corpus order (allSports) rather than Set insertion order.
+      const sports = allSports.filter((s) => editSports.has(s))
+      const resp = await fetch('/advanced/allowed-sports', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token, sports }),
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      cancelEditSports()
+      await refreshUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      markPending(token, false)
+    }
+  }
+
+  async function resetAllowedSports(token: string) {
+    markPending(token, true)
+    setError(null)
+    try {
+      const resp = await fetch(`/advanced/allowed-sports/${encodeURIComponent(token)}/reset`, {
+        method: 'POST',
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      if (editingSportsToken === token) cancelEditSports()
       await refreshUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -943,6 +1019,7 @@ export default function ActivityApp() {
   // keyed by token. Base rows on the allowlist — a role without an invite
   // entry can't sign in, so it isn't a "user" here.
   const roleByToken = new Map((roles ?? []).map((r) => [r.token, r]))
+  const sportsByToken = new Map((allowedSports ?? []).map((a) => [a.token, a]))
   // Rank a role by its position in the logical ladder (low→high) so Role
   // sorts by seniority, not alphabetically. Unknown roles sort last.
   const roleOrder = ladder.length > 0 ? ladder : ROLE_LADDER_FALLBACK
@@ -953,11 +1030,14 @@ export default function ActivityApp() {
   const userRows: UserRow[] = (inviteTokens ?? [])
     .map((t) => {
       const r = roleByToken.get(t.token)
+      const a = sportsByToken.get(t.token)
       return {
         token: t.token,
         label: t.label,
         role: r?.role ?? 'level1',
         source: r?.source ?? '—',
+        allowedSports: a ? a.sports : null,
+        allowedSportsSource: a?.source ?? 'default',
         lastSeen: t.last_seen,
         weeklyUsd: t.weekly_usd,
         weeklyTokens: t.weekly_tokens,
@@ -1874,6 +1954,9 @@ export default function ActivityApp() {
                           role{sortIndicator(userSort.col === 'role', userSort.dir)}
                         </button>
                       </th>
+                      <th className="px-3 py-2 uppercase" title="Rulesets this user may query (#112)">
+                        rulesets
+                      </th>
                       <th className="px-3 py-2">
                         <button
                           type="button"
@@ -1997,6 +2080,99 @@ export default function ActivityApp() {
                                 </option>
                               ))}
                             </select>
+                          </td>
+                          <td className="px-3 py-2 align-top">
+                            {editingSportsToken === u.token ? (
+                              <div className="flex max-w-[24rem] flex-wrap items-center gap-1.5">
+                                {allSports.map((s) => {
+                                  const on = editSports.has(s)
+                                  return (
+                                    <button
+                                      key={s}
+                                      type="button"
+                                      disabled={busy}
+                                      aria-pressed={on}
+                                      onClick={() =>
+                                        setEditSports((prev) => {
+                                          const next = new Set(prev)
+                                          if (next.has(s)) next.delete(s)
+                                          else next.add(s)
+                                          return next
+                                        })
+                                      }
+                                      className={
+                                        'rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ' +
+                                        (on
+                                          ? 'border-foreground bg-foreground text-background'
+                                          : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
+                                      }
+                                    >
+                                      {s}
+                                    </button>
+                                  )
+                                })}
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => void saveAllowedSports(u.token)}
+                                  className="rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={cancelEditSports}
+                                  className="rounded-md border border-input bg-card px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex max-w-[20rem] flex-wrap items-center gap-1">
+                                {u.allowedSports === null ? (
+                                  <span
+                                    className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
+                                    title="All rulesets, including any added later"
+                                  >
+                                    all
+                                  </span>
+                                ) : u.allowedSports.length === 0 ? (
+                                  <span className="text-xs italic text-muted-foreground">none</span>
+                                ) : (
+                                  u.allowedSports.map((s) => (
+                                    <span
+                                      key={s}
+                                      className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
+                                    >
+                                      {s}
+                                    </span>
+                                  ))
+                                )}
+                                {can('users.change_role') && (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => beginEditSports(u.token, u.allowedSports)}
+                                    title="Edit which rulesets this user may query"
+                                    className="rounded px-1 text-xs text-muted-foreground hover:text-foreground hover:underline decoration-dotted underline-offset-4 disabled:opacity-50"
+                                  >
+                                    edit
+                                  </button>
+                                )}
+                                {can('users.change_role') && u.allowedSportsSource === 'override' && (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => void resetAllowedSports(u.token)}
+                                    title="Clear this grant → fall back to the default"
+                                    className="rounded px-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                                  >
+                                    reset
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td
                             className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground"

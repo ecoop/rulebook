@@ -124,6 +124,29 @@ class Settings(BaseSettings):
         default="roles.jsonl",
         validation_alias="RULEBOOK_ROLES_OBJECT",
     )
+    # Per-user ruleset access (#112). A token→rulesets allowlist that constrains
+    # which rulesets a user may ask against, resolved beside the role from an
+    # append-only GCS object with the same TTL pattern as roles.jsonl.
+    #   RULEBOOK_ALLOWED_SPORTS_OBJECT — the log object name.
+    allowed_sports_object: str = Field(
+        default="allowed_sports.jsonl",
+        validation_alias="RULEBOOK_ALLOWED_SPORTS_OBJECT",
+    )
+    # Effective allowlist for a token with no explicit grant row. New rulesets
+    # are deliberately NOT here, so they're visible to no one until granted
+    # (#112). Existing users resolve to exactly these two.
+    #   RULEBOOK_DEFAULT_ALLOWED_SPORTS='["ultimate", "goaltimate"]'
+    default_allowed_sports: list[str] = Field(
+        default_factory=lambda: ["ultimate", "goaltimate"],
+        validation_alias="RULEBOOK_DEFAULT_ALLOWED_SPORTS",
+    )
+    # Seed grants baked in at deploy (token→rulesets), analogous to
+    # initial_roles. Overridden live by rows in allowed_sports_object.
+    #   RULEBOOK_INITIAL_ALLOWED_SPORTS='{"tok_alice": ["ultimate", "badminton"]}'
+    initial_allowed_sports: dict[str, list[str]] = Field(
+        default_factory=dict,
+        validation_alias="RULEBOOK_INITIAL_ALLOWED_SPORTS",
+    )
 
     @property
     def repo_root(self) -> Path:
