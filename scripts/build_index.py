@@ -40,7 +40,6 @@ from rulebook.interaction_log import (
     read_latest_curation,
     read_latest_source_curation,
 )
-from rulebook.pipeline import DEFAULT_SPORTS
 from rulebook.store import write_store
 
 # Guardrails singletons — needed so the embedding calls this script
@@ -134,7 +133,7 @@ EMBED_BATCH_SIZE = 64
 _SPORT_HEADING = re.compile(r"^\s*##\s+([A-Za-z][A-Za-z_ -]*?)\s*$", re.M)
 
 
-def load_gold_chunks(gold_path: Path) -> tuple[list[Chunk], list[dict]]:
+def load_gold_chunks(gold_path: Path, known_sports: set[str]) -> tuple[list[Chunk], list[dict]]:
     """Turn user-authored gold answers into per-sport retrievable chunks.
 
     Gold answers are append-only in gold.jsonl (latest row per qa_id
@@ -171,7 +170,7 @@ def load_gold_chunks(gold_path: Path) -> tuple[list[Chunk], list[dict]]:
         latest = {gid: row for gid, row in latest.items() if gid not in excluded}
         print(f"[curate]  {len(excluded)} gold(s) excluded by admin")
 
-    known = set(DEFAULT_SPORTS)
+    known = set(known_sports)
     chunks: list[Chunk] = []
     records: list[dict] = []  # one per contributing gold, for build provenance
     for row in latest.values():
@@ -273,7 +272,13 @@ def main() -> None:
     # gold.jsonl) — NOT repo_root, which is a site-packages ancestor once
     # installed. Reading the wrong path here would silently drop every
     # user-authored gold from the rebuilt index.
-    gold_chunks, gold_records = load_gold_chunks(settings.data_dir / "logs" / "gold.jsonl")
+    # Known sports come from the discovered sources (the rules/<sport>/ dirs),
+    # NOT a hardcoded list — so a gold with a `## <NewSport>` heading is honored
+    # the moment that sport's rules dir exists, instead of being silently dropped.
+    known_sports = {src.sport for src in sources}
+    gold_chunks, gold_records = load_gold_chunks(
+        settings.data_dir / "logs" / "gold.jsonl", known_sports
+    )
     if gold_chunks:
         by_sport: dict[str, int] = {}
         for c in gold_chunks:

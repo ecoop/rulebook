@@ -11,8 +11,11 @@ from typing import Any
 from .generate import generate_answer
 from .retrieve import RetrievedChunk, retrieve, retrieve_across_sports
 
-# The sports we index. Extend by dropping a new PDF into rules/, adding
-# it to SOURCES in scripts/build_index.py, and rebuilding.
+# Cold-start bootstrap ONLY. The ruleset set is otherwise derived from DATA:
+# from the index (store.list_sports) at serve time, and from the discovered
+# rules/<sport>/ dirs at build time. This fallback is used solely by /meta
+# before any index exists, so a fresh dev env still shows something in the
+# picker. Do NOT reintroduce it as the source of truth (see #110).
 DEFAULT_SPORTS = ["ultimate", "goaltimate"]
 
 
@@ -56,7 +59,7 @@ def ask(
     if sport is not None:
         chunks = retrieve(question, sport=sport, k=k)
     else:
-        chunks = retrieve_across_sports(question, sports or DEFAULT_SPORTS, k_per_sport=k)
+        chunks = retrieve_across_sports(question, sports, k_per_sport=k)
 
     result = generate_answer(question, chunks)
     return AskResult(
