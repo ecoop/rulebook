@@ -54,7 +54,7 @@ export function HowItWorks({ onClose }: { onClose: () => void }) {
 
         <div className="space-y-5">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Rulebook answers questions about disc-sport rules with{' '}
+            Rulebook answers questions about disc-domain rules with{' '}
             <strong className="font-medium text-foreground">retrieval-augmented generation (RAG)</strong>:
             it looks up the passages of rule text most relevant to your question, then has a language
             model answer using <em>only</em> what it found. Here's the pipeline — and where you can
@@ -80,7 +80,7 @@ export function HowItWorks({ onClose }: { onClose: () => void }) {
           <Section n="3" title="Generation">
             <strong className="font-medium text-foreground">Anthropic's Claude</strong> writes the
             answer using only those retrieved passages, and is required to cite each claim inline as{' '}
-            <span className="font-mono text-xs">[sport rule_id]</span> — so you can check it against
+            <span className="font-mono text-xs">[domain rule_id]</span> — so you can check it against
             the actual rule instead of taking its word for it.
           </Section>
 

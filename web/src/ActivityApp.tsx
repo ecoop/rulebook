@@ -70,7 +70,7 @@ interface IndexBuild {
   git_sha: string | null
   build_num: string | null
   count: number
-  sources: { sport: string; file: string }[]
+  sources: { domain: string; file: string }[]
   gold_answers: number
   gold_chunks: number
   golds: { gold_id: string | null; author: string | null; question: string }[]
@@ -78,7 +78,7 @@ interface IndexBuild {
 
 interface AdminSourceRow {
   path: string
-  sport: string
+  domain: string
   size_bytes: number
   modified_at: string
   included: boolean
@@ -104,8 +104,8 @@ interface AdminQuestionRow {
   qa_id: string
   question: string
   answer: string
-  sport: string | null
-  sports: string[]
+  domain: string | null
+  domains: string[]
   timestamp: string
   rating: number | null
   has_gold: boolean
@@ -127,7 +127,7 @@ interface MeResponse {
   role: string
   level: number
   capabilities: string[]
-  allowed_sports?: string[] | null
+  allowed_domains?: string[] | null
   demo_mode: boolean
 }
 
@@ -165,15 +165,15 @@ interface AdminRolesResponse {
   ladder: string[]
 }
 
-// Per-user ruleset allowlist (#112). sports null = all (the '*' grant).
-interface AllowedSportsOut {
+// Per-user domain allowlist (#112). domains null = all (the '*' grant).
+interface AllowedDomainsOut {
   token: string
-  sports: string[] | null
+  domains: string[] | null
   source: string
 }
 
-interface AdminAllowedSportsResponse {
-  grants: AllowedSportsOut[]
+interface AdminAllowedDomainsResponse {
+  grants: AllowedDomainsOut[]
   all_sports: string[]
   default_sports: string[]
 }
@@ -184,8 +184,8 @@ interface UserRow {
   label: string
   role: string
   source: string
-  allowedSports: string[] | null
-  allowedSportsSource: string
+  allowedDomains: string[] | null
+  allowedDomainsSource: string
   lastSeen: string | null
   weeklyUsd: number
   weeklyTokens: number
@@ -198,7 +198,7 @@ type AdminTab = 'questions' | 'feedback' | 'golds' | 'sources' | 'indices' | 'us
 
 type SortDir = 'asc' | 'desc'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
-type SourceSortCol = 'included' | 'sport' | 'path' | 'size_bytes' | 'modified_at'
+type SourceSortCol = 'included' | 'domain' | 'path' | 'size_bytes' | 'modified_at'
 type UserSortCol = 'label' | 'role' | 'lastSeen' | 'questions' | 'golds' | 'weeklyTokens'
 
 const USER_SORT_KEY = 'rulebook.usersSort'
@@ -354,7 +354,7 @@ export default function ActivityApp() {
     dir: 'desc',
   })
   const [sourceSort, setSourceSort] = useState<{ col: SourceSortCol; dir: SortDir }>({
-    col: 'sport',
+    col: 'domain',
     dir: 'asc',
   })
   // Users-tab sort persists across visits (localStorage) — handy in review
@@ -376,17 +376,17 @@ export default function ActivityApp() {
   const [inviteTokens, setInviteTokens] = useState<InviteTokenOut[] | null>(null)
   const [roles, setRoles] = useState<RoleAssignmentOut[] | null>(null)
   const [ladder, setLadder] = useState<string[]>([])
-  // Per-user ruleset access (#112): the grant rows + the full ruleset menu.
-  const [allowedSports, setAllowedSports] = useState<AllowedSportsOut[] | null>(null)
-  const [allSports, setAllSports] = useState<string[]>([])
+  // Per-user domain access (#112): the grant rows + the full domain menu.
+  const [allowedDomains, setAllowedDomains] = useState<AllowedDomainsOut[] | null>(null)
+  const [allDomains, setAllSports] = useState<string[]>([])
   // The default grant a new user gets, and the add-invite form's working set
   // (pre-checked to the default until the creator touches it).
-  const [defaultSports, setDefaultSports] = useState<string[]>([])
-  const [addSports, setAddSports] = useState<Set<string>>(() => new Set())
-  const [addSportsTouched, setAddSportsTouched] = useState(false)
-  // Inline ruleset editor — one row at a time; `editSports` is the working set.
-  const [editingSportsToken, setEditingSportsToken] = useState<string | null>(null)
-  const [editSports, setEditSports] = useState<Set<string>>(() => new Set())
+  const [defaultDomains, setDefaultSports] = useState<string[]>([])
+  const [addDomains, setAddSports] = useState<Set<string>>(() => new Set())
+  const [addDomainsTouched, setAddSportsTouched] = useState(false)
+  // Inline domain editor — one row at a time; `editDomains` is the working set.
+  const [editingDomainsToken, setEditingSportsToken] = useState<string | null>(null)
+  const [editDomains, setEditSports] = useState<Set<string>>(() => new Set())
   const [addLabel, setAddLabel] = useState('')
   const [addPending, setAddPending] = useState(false)
   const [newInvite, setNewInvite] = useState<InviteTokenOut | null>(null)
@@ -410,11 +410,11 @@ export default function ActivityApp() {
     void refreshMe()
   }, [])
 
-  // Pre-check the add-invite ruleset selector to the default, until the creator
+  // Pre-check the add-invite domain selector to the default, until the creator
   // touches it (re-seeds after each successful add, when touched resets).
   useEffect(() => {
-    if (!addSportsTouched) setAddSports(new Set(defaultSports))
-  }, [defaultSports, addSportsTouched])
+    if (!addDomainsTouched) setAddSports(new Set(defaultDomains))
+  }, [defaultDomains, addDomainsTouched])
 
   // Fetch each dataset only if the caller's capabilities grant that tab —
   // avoids 403 banners on tabs the role can't see.
@@ -537,18 +537,18 @@ export default function ActivityApp() {
       const [tResp, rResp, aResp] = await Promise.all([
         fetch('/advanced/invite-tokens'),
         fetch('/advanced/roles'),
-        fetch('/advanced/allowed-sports'),
+        fetch('/advanced/allowed-domains'),
       ])
       if (!tResp.ok) throw new Error(`invite-tokens ${tResp.status}: ${await tResp.text()}`)
       if (!rResp.ok) throw new Error(`roles ${rResp.status}: ${await rResp.text()}`)
-      if (!aResp.ok) throw new Error(`allowed-sports ${aResp.status}: ${await aResp.text()}`)
+      if (!aResp.ok) throw new Error(`allowed-domains ${aResp.status}: ${await aResp.text()}`)
       const t: InviteTokensResponse = await tResp.json()
       const r: AdminRolesResponse = await rResp.json()
-      const a: AdminAllowedSportsResponse = await aResp.json()
+      const a: AdminAllowedDomainsResponse = await aResp.json()
       setInviteTokens(t.tokens)
       setRoles(r.roles)
       setLadder(r.ladder)
-      setAllowedSports(a.grants)
+      setAllowedDomains(a.grants)
       setAllSports(a.all_sports)
       setDefaultSports(a.default_sports)
     } catch (err) {
@@ -566,8 +566,8 @@ export default function ActivityApp() {
       const resp = await fetch('/advanced/invite-tokens', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        // Explicit ruleset grant at creation (#112), corpus order preserved.
-        body: JSON.stringify({ label, sports: allSports.filter((s) => addSports.has(s)) }),
+        // Explicit domain grant at creation (#112), corpus order preserved.
+        body: JSON.stringify({ label, domains: allDomains.filter((s) => addDomains.has(s)) }),
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       setNewInvite((await resp.json()) as InviteTokenOut)
@@ -608,31 +608,31 @@ export default function ActivityApp() {
     }
   }
 
-  // #112: open the inline ruleset editor for one row, seeded with its current
-  // grant (a null/all grant seeds with every ruleset selected).
-  function beginEditSports(token: string, current: string[] | null) {
+  // #112: open the inline domain editor for one row, seeded with its current
+  // grant (a null/all grant seeds with every domain selected).
+  function beginEditDomains(token: string, current: string[] | null) {
     setEditingSportsToken(token)
-    setEditSports(new Set(current ?? allSports))
+    setEditSports(new Set(current ?? allDomains))
   }
 
-  function cancelEditSports() {
+  function cancelEditDomains() {
     setEditingSportsToken(null)
     setEditSports(new Set())
   }
 
-  async function saveAllowedSports(token: string) {
+  async function saveAllowedDomains(token: string) {
     markPending(token, true)
     setError(null)
     try {
-      // Preserve the corpus order (allSports) rather than Set insertion order.
-      const sports = allSports.filter((s) => editSports.has(s))
-      const resp = await fetch('/advanced/allowed-sports', {
+      // Preserve the corpus order (allDomains) rather than Set insertion order.
+      const domains = allDomains.filter((s) => editDomains.has(s))
+      const resp = await fetch('/advanced/allowed-domains', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token, sports }),
+        body: JSON.stringify({ token, domains }),
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
-      cancelEditSports()
+      cancelEditDomains()
       await refreshUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -641,15 +641,15 @@ export default function ActivityApp() {
     }
   }
 
-  async function resetAllowedSports(token: string) {
+  async function resetAllowedDomains(token: string) {
     markPending(token, true)
     setError(null)
     try {
-      const resp = await fetch(`/advanced/allowed-sports/${encodeURIComponent(token)}/reset`, {
+      const resp = await fetch(`/advanced/allowed-domains/${encodeURIComponent(token)}/reset`, {
         method: 'POST',
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
-      if (editingSportsToken === token) cancelEditSports()
+      if (editingDomainsToken === token) cancelEditDomains()
       await refreshUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -1034,7 +1034,7 @@ export default function ActivityApp() {
   // keyed by token. Base rows on the allowlist — a role without an invite
   // entry can't sign in, so it isn't a "user" here.
   const roleByToken = new Map((roles ?? []).map((r) => [r.token, r]))
-  const sportsByToken = new Map((allowedSports ?? []).map((a) => [a.token, a]))
+  const domainsByToken = new Map((allowedDomains ?? []).map((a) => [a.token, a]))
   // Rank a role by its position in the logical ladder (low→high) so Role
   // sorts by seniority, not alphabetically. Unknown roles sort last.
   const roleOrder = ladder.length > 0 ? ladder : ROLE_LADDER_FALLBACK
@@ -1045,14 +1045,14 @@ export default function ActivityApp() {
   const userRows: UserRow[] = (inviteTokens ?? [])
     .map((t) => {
       const r = roleByToken.get(t.token)
-      const a = sportsByToken.get(t.token)
+      const a = domainsByToken.get(t.token)
       return {
         token: t.token,
         label: t.label,
         role: r?.role ?? 'level1',
         source: r?.source ?? '—',
-        allowedSports: a ? a.sports : null,
-        allowedSportsSource: a?.source ?? 'default',
+        allowedDomains: a ? a.domains : null,
+        allowedDomainsSource: a?.source ?? 'default',
         lastSeen: t.last_seen,
         weeklyUsd: t.weekly_usd,
         weeklyTokens: t.weekly_tokens,
@@ -1234,9 +1234,9 @@ export default function ActivityApp() {
                           <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                             {q.qa_id.slice(0, 8)}
                             {(() => {
-                              // v4+ rows carry the full ruleset list; older rows
-                              // only the single `sport`.
-                              const rs = q.sports?.length ? q.sports.join(', ') : q.sport
+                              // v4+ rows carry the full domain list; older rows
+                              // only the single `domain`.
+                              const rs = q.domains?.length ? q.domains.join(', ') : q.domain
                               return rs ? ` · ${rs}` : ''
                             })()}
                           </div>
@@ -1382,7 +1382,7 @@ export default function ActivityApp() {
                                   value={addGoldBuffer}
                                   onChange={(e) => setAddGoldBuffer(e.target.value)}
                                   rows={5}
-                                  placeholder="Write the canonical answer (markdown) — cite rules as [sport rule_id]."
+                                  placeholder="Write the canonical answer (markdown) — cite rules as [domain rule_id]."
                                   className="w-full resize-y rounded-md border border-border bg-background p-2 text-sm"
                                 />
                                 {addGoldError && (
@@ -1770,7 +1770,7 @@ export default function ActivityApp() {
         )}
         {activeTab === 'sources' && sources !== null && sources.length === 0 && (
           <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
-            No source files found under <span className="font-mono">rules/&lt;sport&gt;/</span>.
+            No source files found under <span className="font-mono">rules/&lt;domain&gt;/</span>.
           </div>
         )}
         {activeTab === 'sources' && sources !== null && sources.length > 0 && (
@@ -1790,10 +1790,10 @@ export default function ActivityApp() {
                   <th className="w-28 px-3 py-2">
                     <button
                       type="button"
-                      onClick={() => setSourceSort((s) => nextSort(s, 'sport'))}
+                      onClick={() => setSourceSort((s) => nextSort(s, 'domain'))}
                       className="hover:text-foreground"
                     >
-                      sport{sortIndicator(sourceSort.col === 'sport', sourceSort.dir)}
+                      domain{sortIndicator(sourceSort.col === 'domain', sourceSort.dir)}
                     </button>
                   </th>
                   <th className="px-3 py-2">
@@ -1855,7 +1855,7 @@ export default function ActivityApp() {
                     </td>
                     <td className="px-3 py-2">
                       <span className="rounded bg-secondary px-2 py-0.5 font-mono text-xs text-foreground">
-                        {s.sport}
+                        {s.domain}
                       </span>
                     </td>
                     <td className="px-3 py-2 font-mono text-xs text-foreground">
@@ -1911,14 +1911,14 @@ export default function ActivityApp() {
                   {addPending ? 'Adding…' : 'Add'}
                 </button>
               </div>
-              {allSports.length > 0 && (
+              {allDomains.length > 0 && (
                 <div className="mt-3">
                   <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                    Rulesets (assigned at creation — the new user's explicit access)
+                    Domains (assigned at creation — the new user's explicit access)
                   </span>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {allSports.map((s) => {
-                      const on = addSports.has(s)
+                    {allDomains.map((s) => {
+                      const on = addDomains.has(s)
                       return (
                         <button
                           key={s}
@@ -2005,8 +2005,8 @@ export default function ActivityApp() {
                           role{sortIndicator(userSort.col === 'role', userSort.dir)}
                         </button>
                       </th>
-                      <th className="px-3 py-2 uppercase" title="Rulesets this user may query (#112)">
-                        rulesets
+                      <th className="px-3 py-2 uppercase" title="Domains this user may query (#112)">
+                        domains
                       </th>
                       <th className="px-3 py-2">
                         <button
@@ -2133,10 +2133,10 @@ export default function ActivityApp() {
                             </select>
                           </td>
                           <td className="px-3 py-2 align-top">
-                            {editingSportsToken === u.token ? (
+                            {editingDomainsToken === u.token ? (
                               <div className="flex max-w-[24rem] flex-wrap items-center gap-1.5">
-                                {allSports.map((s) => {
-                                  const on = editSports.has(s)
+                                {allDomains.map((s) => {
+                                  const on = editDomains.has(s)
                                   return (
                                     <button
                                       key={s}
@@ -2165,7 +2165,7 @@ export default function ActivityApp() {
                                 <button
                                   type="button"
                                   disabled={busy}
-                                  onClick={() => void saveAllowedSports(u.token)}
+                                  onClick={() => void saveAllowedDomains(u.token)}
                                   className="rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   Save
@@ -2173,7 +2173,7 @@ export default function ActivityApp() {
                                 <button
                                   type="button"
                                   disabled={busy}
-                                  onClick={cancelEditSports}
+                                  onClick={cancelEditDomains}
                                   className="rounded-md border border-input bg-card px-2 py-0.5 text-xs font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   Cancel
@@ -2181,17 +2181,17 @@ export default function ActivityApp() {
                               </div>
                             ) : (
                               <div className="flex max-w-[20rem] flex-wrap items-center gap-1">
-                                {u.allowedSports === null ? (
+                                {u.allowedDomains === null ? (
                                   <span
                                     className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
-                                    title="All rulesets, including any added later"
+                                    title="All domains, including any added later"
                                   >
                                     all
                                   </span>
-                                ) : u.allowedSports.length === 0 ? (
+                                ) : u.allowedDomains.length === 0 ? (
                                   <span className="text-xs italic text-muted-foreground">none</span>
                                 ) : (
-                                  u.allowedSports.map((s) => (
+                                  u.allowedDomains.map((s) => (
                                     <span
                                       key={s}
                                       className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
@@ -2204,18 +2204,18 @@ export default function ActivityApp() {
                                   <button
                                     type="button"
                                     disabled={busy}
-                                    onClick={() => beginEditSports(u.token, u.allowedSports)}
-                                    title="Edit which rulesets this user may query"
+                                    onClick={() => beginEditDomains(u.token, u.allowedDomains)}
+                                    title="Edit which domains this user may query"
                                     className="rounded px-1 text-xs text-muted-foreground hover:text-foreground hover:underline decoration-dotted underline-offset-4 disabled:opacity-50"
                                   >
                                     edit
                                   </button>
                                 )}
-                                {can('users.change_role') && u.allowedSportsSource === 'override' && (
+                                {can('users.change_role') && u.allowedDomainsSource === 'override' && (
                                   <button
                                     type="button"
                                     disabled={busy}
-                                    onClick={() => void resetAllowedSports(u.token)}
+                                    onClick={() => void resetAllowedDomains(u.token)}
                                     title="Clear this grant → fall back to the default"
                                     className="rounded px-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
                                   >
@@ -2402,7 +2402,7 @@ export default function ActivityApp() {
                                     <ul className="space-y-1">
                                       {b.sources.map((s, j) => (
                                         <li key={j} className="font-mono text-[11px]">
-                                          <span className="mr-1.5 rounded bg-muted px-1 py-0.5 text-muted-foreground">{s.sport}</span>
+                                          <span className="mr-1.5 rounded bg-muted px-1 py-0.5 text-muted-foreground">{s.domain}</span>
                                           <span className="text-foreground">{s.file}</span>
                                         </li>
                                       ))}

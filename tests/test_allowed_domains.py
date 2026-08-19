@@ -1,11 +1,11 @@
 # Copyright (c) 2026 Eric Cooper.
-"""Tests for per-user ruleset access (#112): replay, resolution, constrain."""
+"""Tests for per-user domain access (#112): replay, resolution, constrain."""
 
 from __future__ import annotations
 
 import pytest
 
-import rulebook.allowed_sports as als
+import rulebook.allowed_domains as als
 
 
 @pytest.fixture(autouse=True)
@@ -18,22 +18,22 @@ def _clear_cache():
 @pytest.fixture
 def local_backend(monkeypatch):
     # Local backend (no GCS) so resolution falls to seed/default; grants come
-    # from initial_allowed_sports + the configured default.
+    # from initial_allowed_domains + the configured default.
     monkeypatch.setattr(als.settings, "state_backend_kind", "local")
     monkeypatch.setattr(als.settings, "gcs_state_bucket", None)
-    monkeypatch.setattr(als.settings, "initial_allowed_sports", {})
-    monkeypatch.setattr(als.settings, "default_allowed_sports", ["ultimate", "goaltimate"])
+    monkeypatch.setattr(als.settings, "initial_allowed_domains", {})
+    monkeypatch.setattr(als.settings, "default_allowed_domains", ["ultimate", "goaltimate"])
 
 
 def test_grants_from_rows_replay():
     rows = [
-        {"token": "a", "sports": ["ultimate"]},
-        {"token": "a", "sports": ["ultimate", "badminton"]},  # latest wins
-        {"token": "b", "sports": "*"},                          # grant-all
-        {"token": "c", "sports": ["curling"]},
-        {"token": "c", "sports": "reset"},                      # cleared
-        {"token": "d", "sports": "bogus"},                      # malformed → skip
-        {"token": "", "sports": ["ultimate"]},                  # no token → skip
+        {"token": "a", "domains": ["ultimate"]},
+        {"token": "a", "domains": ["ultimate", "badminton"]},  # latest wins
+        {"token": "b", "domains": "*"},                          # grant-all
+        {"token": "c", "domains": ["curling"]},
+        {"token": "c", "domains": "reset"},                      # cleared
+        {"token": "d", "domains": "bogus"},                      # malformed → skip
+        {"token": "", "domains": ["ultimate"]},                  # no token → skip
     ]
     assert als.grants_from_rows(rows) == {
         "a": ["ultimate", "badminton"],
@@ -43,19 +43,19 @@ def test_grants_from_rows_replay():
 
 def test_resolve_default_for_unknown_token(local_backend):
     # A token with no grant resolves to the CONCRETE default, not "all".
-    assert als.resolve_allowed_sports("nobody") == ["ultimate", "goaltimate"]
+    assert als.resolve_allowed_domains("nobody") == ["ultimate", "goaltimate"]
 
 
 def test_resolve_none_for_missing_identity(local_backend):
     # No identity (demo off / public deploy) = unrestricted.
-    assert als.resolve_allowed_sports(None) is None
+    assert als.resolve_allowed_domains(None) is None
 
 
 def test_resolve_seed_grant(local_backend, monkeypatch):
     monkeypatch.setattr(
-        als.settings, "initial_allowed_sports", {"alice": ["ultimate", "badminton"]}
+        als.settings, "initial_allowed_domains", {"alice": ["ultimate", "badminton"]}
     )
-    assert als.resolve_allowed_sports("alice") == ["ultimate", "badminton"]
+    assert als.resolve_allowed_domains("alice") == ["ultimate", "badminton"]
 
 
 def test_constrain_unrestricted_passes_through():

@@ -47,14 +47,16 @@ from .log_sync import persist_log
 FEEDBACK_SCHEMA_VERSION = 4
 
 # QA log — one row per /ask call.
-#   v1  {qa_id, timestamp, question, sport, k, answer, chunks, input_tokens,
+#   v1  {qa_id, timestamp, question, domain, k, answer, chunks, input_tokens,
 #        output_tokens, model}
 #   v2  v1 + stop_reason from Anthropic ("end_turn", "max_tokens", ...)
 #        so historical truncations are recoverable from the log.
 #   v3  v2 + optional `author` (guest-auth recipient label; null before adoption)
-#   v4  v3 + `sports` (the list the query actually ran against). `sport` stays
+#   v4  v3 + `domains` (the list the query actually ran against). `domain` stays
 #       for back-compat: the singular request field, or null for multi/all.
-QA_LOG_SCHEMA_VERSION = 4
+#   v5  rename the wire keys `sport`→`domain`, `sports`→`domains` (#113). Readers
+#       accept the legacy `sport`/`sports` keys for pre-v5 rows.
+QA_LOG_SCHEMA_VERSION = 5
 
 # Gold answers — user-authored canonical answers, indexed as retrievable
 # chunks on the next rebuild so future similar questions surface them.
@@ -76,7 +78,7 @@ GOLD_SCHEMA_VERSION = 3
 GOLD_CURATION_SCHEMA_VERSION = 2
 
 # Source-file curation — admin decisions about whether a given source file
-# under rules/<sport>/ is picked up by the next index rebuild. Same shape
+# under rules/<domain>/ is picked up by the next index rebuild. Same shape
 # as gold curation but keyed by relative path.
 #   v1  {path, included: bool, timestamp} (current)
 SOURCE_CURATION_SCHEMA_VERSION = 1
@@ -116,7 +118,7 @@ def log_qa(
     qa_id: str,
     *,
     question: str,
-    sport: str | None,
+    domain: str | None,
     k: int,
     answer: str,
     chunks: list[dict[str, Any]],
@@ -125,7 +127,7 @@ def log_qa(
     model: str,
     stop_reason: str,
     author: str | None = None,
-    sports: list[str] | None = None,
+    domains: list[str] | None = None,
 ) -> None:
     """Record one /ask interaction (question in, answer + chunks out)."""
     _append(
@@ -135,8 +137,8 @@ def log_qa(
             "qa_id": qa_id,
             "timestamp": utc_now_iso(timespec="auto", z=False),
             "question": question,
-            "sport": sport,
-            "sports": sports or [],
+            "domain": domain,
+            "domains": domains or [],
             "k": k,
             "answer": answer,
             "chunks": chunks,
@@ -283,7 +285,7 @@ def read_qa_questions() -> dict[str, str]:
 def read_qa_entries() -> list[dict[str, Any]]:
     """Latest qa_log row per qa_id, newest-first — for the "my questions" history.
 
-    Each row carries question, answer, sport, timestamp, and author; the
+    Each row carries question, answer, domain, timestamp, and author; the
     caller self-scopes by author. Empty list if the log doesn't exist yet.
     """
     latest = read_latest(_log_dir() / "qa_log.jsonl", "qa_id")

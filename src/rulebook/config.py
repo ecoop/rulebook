@@ -124,28 +124,28 @@ class Settings(BaseSettings):
         default="roles.jsonl",
         validation_alias="RULEBOOK_ROLES_OBJECT",
     )
-    # Per-user ruleset access (#112). A token→rulesets allowlist that constrains
-    # which rulesets a user may ask against, resolved beside the role from an
+    # Per-user domain access (#112). A token→domains allowlist that constrains
+    # which domains a user may ask against, resolved beside the role from an
     # append-only GCS object with the same TTL pattern as roles.jsonl.
-    #   RULEBOOK_ALLOWED_SPORTS_OBJECT — the log object name.
-    allowed_sports_object: str = Field(
-        default="allowed_sports.jsonl",
-        validation_alias="RULEBOOK_ALLOWED_SPORTS_OBJECT",
+    #   RULEBOOK_ALLOWED_DOMAINS_OBJECT — the log object name.
+    allowed_domains_object: str = Field(
+        default="allowed_domains.jsonl",
+        validation_alias="RULEBOOK_ALLOWED_DOMAINS_OBJECT",
     )
-    # Effective allowlist for a token with no explicit grant row. New rulesets
+    # Effective allowlist for a token with no explicit grant row. New domains
     # are deliberately NOT here, so they're visible to no one until granted
     # (#112). Existing users resolve to exactly these two.
-    #   RULEBOOK_DEFAULT_ALLOWED_SPORTS='["ultimate", "goaltimate"]'
-    default_allowed_sports: list[str] = Field(
+    #   RULEBOOK_DEFAULT_ALLOWED_DOMAINS='["ultimate", "goaltimate"]'
+    default_allowed_domains: list[str] = Field(
         default_factory=lambda: ["ultimate", "goaltimate"],
-        validation_alias="RULEBOOK_DEFAULT_ALLOWED_SPORTS",
+        validation_alias="RULEBOOK_DEFAULT_ALLOWED_DOMAINS",
     )
-    # Seed grants baked in at deploy (token→rulesets), analogous to
-    # initial_roles. Overridden live by rows in allowed_sports_object.
-    #   RULEBOOK_INITIAL_ALLOWED_SPORTS='{"tok_alice": ["ultimate", "badminton"]}'
-    initial_allowed_sports: dict[str, list[str]] = Field(
+    # Seed grants baked in at deploy (token→domains), analogous to
+    # initial_roles. Overridden live by rows in allowed_domains_object.
+    #   RULEBOOK_INITIAL_ALLOWED_DOMAINS='{"tok_alice": ["ultimate", "badminton"]}'
+    initial_allowed_domains: dict[str, list[str]] = Field(
         default_factory=dict,
-        validation_alias="RULEBOOK_INITIAL_ALLOWED_SPORTS",
+        validation_alias="RULEBOOK_INITIAL_ALLOWED_DOMAINS",
     )
 
     @property
@@ -179,7 +179,7 @@ class Settings(BaseSettings):
 
     @property
     def rules_dir(self) -> Path:
-        """Source rulebooks (rules/<sport>/…), read by diagnostics + admin.
+        """Source rulebooks (rules/<domain>/…), read by diagnostics + admin.
 
         ``repo_root/rules`` in local dev. In an installed-package container
         ``repo_root`` points into an unwritable site-packages ancestor with

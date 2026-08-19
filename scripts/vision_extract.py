@@ -45,7 +45,7 @@ app_state.initialize(settings)
 # The prompt is deliberately short and prescriptive. Vision models will
 # happily invent structure if you give them wiggle room — we want a
 # faithful transcription, not a "helpful summary".
-EXTRACTION_PROMPT = """This PDF page is a reference diagram for a sport rulebook. Extract its full information content as clean Markdown so it can be indexed for retrieval.
+EXTRACTION_PROMPT = """This PDF page is a reference diagram for a domain rulebook. Extract its full information content as clean Markdown so it can be indexed for retrieval.
 
 Include:
 - Every prose paragraph, verbatim.

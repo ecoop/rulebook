@@ -1,12 +1,12 @@
-"""Build the RAG index from the source files under ./rules/<sport>/.
+"""Build the RAG index from the source files under ./rules/<domain>/.
 
 Run:
     uv run python scripts/build_index.py
 
-Sources are discovered by walking ``rules/<sport>/`` — the parent
-directory name is the sport tag. Every ``.pdf``, ``.md``, and ``.txt``
-in there is ingested. Add a new sport by creating a new sibling
-directory; add a new resource by dropping a file into the sport's dir.
+Sources are discovered by walking ``rules/<domain>/`` — the parent
+directory name is the domain tag. Every ``.pdf``, ``.md``, and ``.txt``
+in there is ingested. Add a new domain by creating a new sibling
+directory; add a new resource by dropping a file into the domain's dir.
 No code change needed.
 
 Pipeline per source:
@@ -50,14 +50,14 @@ app_state.initialize(settings)
 
 @dataclass
 class Source:
-    sport: str
+    domain: str
     # PDF (born-digital) or a Markdown/text file (e.g. output from
     # scripts/vision_extract.py for image-only PDFs). Both are handled
     # transparently by ingest.extract_pages.
     path: Path
 
 
-# Root of the source tree; each immediate subdirectory is one sport.
+# Root of the source tree; each immediate subdirectory is one domain.
 RULES_ROOT = Path("rules")
 
 # File suffixes we treat as ingestable sources.
@@ -65,12 +65,12 @@ _SOURCE_SUFFIXES = {".pdf", ".md", ".txt"}
 
 
 def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[Source]:
-    """Walk ``rules/<sport>/`` and return one Source per ingestable file.
+    """Walk ``rules/<domain>/`` and return one Source per ingestable file.
 
     Convention:
         rules/
-            ultimate/       -> sport="ultimate", every .pdf/.md/.txt inside
-            goaltimate/     -> sport="goaltimate", ditto
+            ultimate/       -> domain="ultimate", every .pdf/.md/.txt inside
+            goaltimate/     -> domain="goaltimate", ditto
 
     Skip rule: if a ``<stem>.pdf`` and ``<stem>.extracted.md`` are
     siblings, the PDF is skipped in favor of the extracted markdown.
@@ -95,7 +95,7 @@ def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[S
     sources: list[Source] = []
     dropped_by_curation = 0
     for sport_dir in sorted(p for p in rules_root.iterdir() if p.is_dir()):
-        sport = sport_dir.name
+        domain = sport_dir.name
         # Build the set of stems that have an .extracted.md so we can
         # skip their .pdf siblings in this dir.
         extracted_stems = {
@@ -113,7 +113,7 @@ def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[S
             if rel in excluded_paths:
                 dropped_by_curation += 1
                 continue
-            sources.append(Source(sport=sport, path=f))
+            sources.append(Source(domain=domain, path=f))
 
     if dropped_by_curation:
         print(f"[curate]  {dropped_by_curation} source file(s) excluded by admin")
@@ -125,23 +125,23 @@ def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[S
 EMBED_BATCH_SIZE = 64
 
 
-# Section-heading pattern for splitting a gold answer into per-sport
+# Section-heading pattern for splitting a gold answer into per-domain
 # chunks. Matches a line beginning with "## Ultimate" or "## Goaltimate"
 # (case-insensitive). If a gold answer has no such headings, the whole
-# text becomes one chunk tagged with every known sport (so it retrieves
-# for any sport-filtered query).
+# text becomes one chunk tagged with every known domain (so it retrieves
+# for any domain-filtered query).
 _SPORT_HEADING = re.compile(r"^\s*##\s+([A-Za-z][A-Za-z_ -]*?)\s*$", re.M)
 
 
-def load_gold_chunks(gold_path: Path, known_sports: set[str]) -> tuple[list[Chunk], list[dict]]:
-    """Turn user-authored gold answers into per-sport retrievable chunks.
+def load_gold_chunks(gold_path: Path, known_domains: set[str]) -> tuple[list[Chunk], list[dict]]:
+    """Turn user-authored gold answers into per-domain retrievable chunks.
 
     Gold answers are append-only in gold.jsonl (latest row per qa_id
-    wins). Each surviving gold is split on ``## Sport`` headings; each
-    section becomes one Chunk tagged with that sport. Sections whose
-    heading isn't a recognized sport are ignored. A gold answer with no
-    matching headings falls back to one shared chunk per known sport so
-    the content still retrieves under any sport filter.
+    wins). Each surviving gold is split on ``## Domain`` headings; each
+    section becomes one Chunk tagged with that domain. Sections whose
+    heading isn't a recognized domain are ignored. A gold answer with no
+    matching headings falls back to one shared chunk per known domain so
+    the content still retrieves under any domain filter.
 
     Chunk metadata is chosen so citations read clearly downstream:
         rule_id = f"user-gold-{qa_id[:8]}"
@@ -170,7 +170,7 @@ def load_gold_chunks(gold_path: Path, known_sports: set[str]) -> tuple[list[Chun
         latest = {gid: row for gid, row in latest.items() if gid not in excluded}
         print(f"[curate]  {len(excluded)} gold(s) excluded by admin")
 
-    known = set(known_sports)
+    known = set(known_domains)
     chunks: list[Chunk] = []
     records: list[dict] = []  # one per contributing gold, for build provenance
     for row in latest.values():
@@ -183,15 +183,15 @@ def load_gold_chunks(gold_path: Path, known_sports: set[str]) -> tuple[list[Chun
             "author": row.get("author"),
             "question": row.get("question", ""),
         })
-        sections = _split_by_sport_heading(text, known)
+        sections = _split_by_domain_heading(text, known)
         if not sections:
-            # No sport headings — index once per sport so the whole
-            # gold is retrievable under any sport filter.
-            for sport in known:
+            # No domain headings — index once per domain so the whole
+            # gold is retrievable under any domain filter.
+            for domain in known:
                 chunks.append(
                     Chunk(
                         source="gold.jsonl",
-                        sport=sport,
+                        domain=domain,
                         rule_id="correction",
                         page_start=0,
                         page_end=0,
@@ -200,11 +200,11 @@ def load_gold_chunks(gold_path: Path, known_sports: set[str]) -> tuple[list[Chun
                 )
             continue
 
-        for sport, section_text in sections:
+        for domain, section_text in sections:
             chunks.append(
                 Chunk(
                     source="gold.jsonl",
-                    sport=sport,
+                    domain=domain,
                     rule_id="correction",
                     page_start=0,
                     page_end=0,
@@ -214,13 +214,13 @@ def load_gold_chunks(gold_path: Path, known_sports: set[str]) -> tuple[list[Chun
     return chunks, records
 
 
-def _split_by_sport_heading(text: str, known_sports: set[str]) -> list[tuple[str, str]]:
-    """Return [(sport, section_text)] for each ``## Sport`` section.
+def _split_by_domain_heading(text: str, known_domains: set[str]) -> list[tuple[str, str]]:
+    """Return [(domain, section_text)] for each ``## Domain`` section.
 
-    Sports whose heading isn't in known_sports are dropped (protects
+    Domains whose heading isn't in known_domains are dropped (protects
     against noise headings like ``## Shared`` — that content is
-    currently discarded; if we later want a "both sports" bucket we'd
-    duplicate its text into every known sport here).
+    currently discarded; if we later want a "both domains" bucket we'd
+    duplicate its text into every known domain here).
     """
     matches = list(_SPORT_HEADING.finditer(text))
     if not matches:
@@ -228,14 +228,14 @@ def _split_by_sport_heading(text: str, known_sports: set[str]) -> list[tuple[str
 
     sections: list[tuple[str, str]] = []
     for i, m in enumerate(matches):
-        sport = m.group(1).strip().lower()
-        if sport not in known_sports:
+        domain = m.group(1).strip().lower()
+        if domain not in known_domains:
             continue
         start = m.end()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         section_text = text[start:end].strip()
         if section_text:
-            sections.append((sport, section_text))
+            sections.append((domain, section_text))
     return sections
 
 
@@ -252,18 +252,18 @@ def main() -> None:
     if not sources:
         raise RuntimeError(
             f"No source files found under {rules_root}. Add PDFs or .md files"
-            " to rules/<sport>/ and re-run."
+            " to rules/<domain>/ and re-run."
         )
-    print(f"[found ]  {len(sources)} source files across {len({s.sport for s in sources})} sport(s)")
+    print(f"[found ]  {len(sources)} source files across {len({s.domain for s in sources})} domain(s)")
 
     all_chunks: list[Chunk] = []
     for src in sources:
-        print(f"[ingest]  {src.sport}: reading {src.path.name}")
+        print(f"[ingest]  {src.domain}: reading {src.path.name}")
         pages = extract_pages(src.path)
         print(f"          -> {len(pages)} pages of text")
 
-        chunks = chunk_pages(pages, source=src.path.name, sport=src.sport)
-        print(f"[chunk ]  {src.sport}: {len(chunks)} chunks "
+        chunks = chunk_pages(pages, source=src.path.name, domain=src.domain)
+        print(f"[chunk ]  {src.domain}: {len(chunks)} chunks "
               f"(avg {sum(len(c.text) for c in chunks) // max(len(chunks), 1)} chars)")
 
         all_chunks.extend(chunks)
@@ -272,17 +272,17 @@ def main() -> None:
     # gold.jsonl) — NOT repo_root, which is a site-packages ancestor once
     # installed. Reading the wrong path here would silently drop every
     # user-authored gold from the rebuilt index.
-    # Known sports come from the discovered sources (the rules/<sport>/ dirs),
-    # NOT a hardcoded list — so a gold with a `## <NewSport>` heading is honored
-    # the moment that sport's rules dir exists, instead of being silently dropped.
-    known_sports = {src.sport for src in sources}
+    # Known domains come from the discovered sources (the rules/<domain>/ dirs),
+    # NOT a hardcoded list — so a gold with a `## <NewDomain>` heading is honored
+    # the moment that domain's rules dir exists, instead of being silently dropped.
+    known_domains = {src.domain for src in sources}
     gold_chunks, gold_records = load_gold_chunks(
-        settings.data_dir / "logs" / "gold.jsonl", known_sports
+        settings.data_dir / "logs" / "gold.jsonl", known_domains
     )
     if gold_chunks:
         by_sport: dict[str, int] = {}
         for c in gold_chunks:
-            by_sport[c.sport] = by_sport.get(c.sport, 0) + 1
+            by_sport[c.domain] = by_sport.get(c.domain, 0) + 1
         print(f"[gold  ]  {len(gold_chunks)} chunks from user-authored gold answers "
               f"({', '.join(f'{s}={n}' for s, n in sorted(by_sport.items()))})")
         all_chunks.extend(gold_chunks)
@@ -309,19 +309,19 @@ def main() -> None:
     from rulebook.build_info import BUILD_INFO
 
     now = datetime.now(UTC)
-    chunks_by_sport: dict[str, int] = {}
+    chunks_by_domain: dict[str, int] = {}
     for c in all_chunks:
-        chunks_by_sport[c.sport] = chunks_by_sport.get(c.sport, 0) + 1
+        chunks_by_domain[c.domain] = chunks_by_domain.get(c.domain, 0) + 1
     provenance = {
         "build_id": now.strftime("%Y%m%dT%H%M%SZ"),
         "built_at": now.isoformat(timespec="seconds"),
         "git_sha": BUILD_INFO.sha,
         "build_num": BUILD_INFO.build_num,
-        "sources": [{"sport": s.sport, "file": s.path.name} for s in sources],
+        "sources": [{"domain": s.domain, "file": s.path.name} for s in sources],
         "gold_answers": len(gold_records),  # distinct gold answers that went in
-        "gold_chunks": len(gold_chunks),    # …expanded to this many chunks (per-sport)
+        "gold_chunks": len(gold_chunks),    # …expanded to this many chunks (per-domain)
         "golds": gold_records,              # {gold_id, author, question} for the drill-down
-        "chunks_by_sport": dict(sorted(chunks_by_sport.items())),
+        "chunks_by_domain": dict(sorted(chunks_by_domain.items())),
     }
 
     written = write_store(
@@ -344,7 +344,7 @@ def main() -> None:
         "model": settings.embedding_model,
         "count": written,
         "dimension": len(vectors[0]) if vectors else 0,
-        "sports": sorted(chunks_by_sport.keys()),
+        "domains": sorted(chunks_by_domain.keys()),
     })
 
     print(f"[done  ]  index dimension = {len(vectors[0])}")
