@@ -175,6 +175,7 @@ interface AllowedSportsOut {
 interface AdminAllowedSportsResponse {
   grants: AllowedSportsOut[]
   all_sports: string[]
+  default_sports: string[]
 }
 
 // One row per invite token, joined with its effective role + engagement.
@@ -378,6 +379,11 @@ export default function ActivityApp() {
   // Per-user ruleset access (#112): the grant rows + the full ruleset menu.
   const [allowedSports, setAllowedSports] = useState<AllowedSportsOut[] | null>(null)
   const [allSports, setAllSports] = useState<string[]>([])
+  // The default grant a new user gets, and the add-invite form's working set
+  // (pre-checked to the default until the creator touches it).
+  const [defaultSports, setDefaultSports] = useState<string[]>([])
+  const [addSports, setAddSports] = useState<Set<string>>(() => new Set())
+  const [addSportsTouched, setAddSportsTouched] = useState(false)
   // Inline ruleset editor — one row at a time; `editSports` is the working set.
   const [editingSportsToken, setEditingSportsToken] = useState<string | null>(null)
   const [editSports, setEditSports] = useState<Set<string>>(() => new Set())
@@ -403,6 +409,12 @@ export default function ActivityApp() {
   useEffect(() => {
     void refreshMe()
   }, [])
+
+  // Pre-check the add-invite ruleset selector to the default, until the creator
+  // touches it (re-seeds after each successful add, when touched resets).
+  useEffect(() => {
+    if (!addSportsTouched) setAddSports(new Set(defaultSports))
+  }, [defaultSports, addSportsTouched])
 
   // Fetch each dataset only if the caller's capabilities grant that tab —
   // avoids 403 banners on tabs the role can't see.
@@ -538,6 +550,7 @@ export default function ActivityApp() {
       setLadder(r.ladder)
       setAllowedSports(a.grants)
       setAllSports(a.all_sports)
+      setDefaultSports(a.default_sports)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -553,11 +566,13 @@ export default function ActivityApp() {
       const resp = await fetch('/advanced/invite-tokens', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ label }),
+        // Explicit ruleset grant at creation (#112), corpus order preserved.
+        body: JSON.stringify({ label, sports: allSports.filter((s) => addSports.has(s)) }),
       })
       if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
       setNewInvite((await resp.json()) as InviteTokenOut)
       setAddLabel('')
+      setAddSportsTouched(false) // re-seed the selector to the default for the next add
       await refreshUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -1896,6 +1911,42 @@ export default function ActivityApp() {
                   {addPending ? 'Adding…' : 'Add'}
                 </button>
               </div>
+              {allSports.length > 0 && (
+                <div className="mt-3">
+                  <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                    Rulesets (assigned at creation — the new user's explicit access)
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {allSports.map((s) => {
+                      const on = addSports.has(s)
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => {
+                            setAddSportsTouched(true)
+                            setAddSports((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(s)) next.delete(s)
+                              else next.add(s)
+                              return next
+                            })
+                          }}
+                          className={
+                            'rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ' +
+                            (on
+                              ? 'border-foreground bg-foreground text-background'
+                              : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
+                          }
+                        >
+                          {s}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               {newInvite &&
                 (() => {
                   const link = inviteLinkFor(newInvite.token, newInvite.label)
