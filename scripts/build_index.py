@@ -94,16 +94,16 @@ def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[S
 
     sources: list[Source] = []
     dropped_by_curation = 0
-    for sport_dir in sorted(p for p in rules_root.iterdir() if p.is_dir()):
-        domain = sport_dir.name
+    for domain_dir in sorted(p for p in rules_root.iterdir() if p.is_dir()):
+        domain = domain_dir.name
         # Build the set of stems that have an .extracted.md so we can
         # skip their .pdf siblings in this dir.
         extracted_stems = {
             p.name.removesuffix(".extracted.md")
-            for p in sport_dir.iterdir()
+            for p in domain_dir.iterdir()
             if p.name.endswith(".extracted.md")
         }
-        for f in sorted(sport_dir.iterdir()):
+        for f in sorted(domain_dir.iterdir()):
             if not f.is_file() or f.suffix.lower() not in _SOURCE_SUFFIXES:
                 continue
             if f.suffix.lower() == ".pdf" and f.stem in extracted_stems:
@@ -130,7 +130,7 @@ EMBED_BATCH_SIZE = 64
 # (case-insensitive). If a gold answer has no such headings, the whole
 # text becomes one chunk tagged with every known domain (so it retrieves
 # for any domain-filtered query).
-_SPORT_HEADING = re.compile(r"^\s*##\s+([A-Za-z][A-Za-z_ -]*?)\s*$", re.M)
+_DOMAIN_HEADING = re.compile(r"^\s*##\s+([A-Za-z][A-Za-z_ -]*?)\s*$", re.M)
 
 
 def load_gold_chunks(gold_path: Path, known_domains: set[str]) -> tuple[list[Chunk], list[dict]]:
@@ -222,7 +222,7 @@ def _split_by_domain_heading(text: str, known_domains: set[str]) -> list[tuple[s
     currently discarded; if we later want a "both domains" bucket we'd
     duplicate its text into every known domain here).
     """
-    matches = list(_SPORT_HEADING.finditer(text))
+    matches = list(_DOMAIN_HEADING.finditer(text))
     if not matches:
         return []
 
@@ -280,11 +280,11 @@ def main() -> None:
         settings.data_dir / "logs" / "gold.jsonl", known_domains
     )
     if gold_chunks:
-        by_sport: dict[str, int] = {}
+        by_domain: dict[str, int] = {}
         for c in gold_chunks:
-            by_sport[c.domain] = by_sport.get(c.domain, 0) + 1
+            by_domain[c.domain] = by_domain.get(c.domain, 0) + 1
         print(f"[gold  ]  {len(gold_chunks)} chunks from user-authored gold answers "
-              f"({', '.join(f'{s}={n}' for s, n in sorted(by_sport.items()))})")
+              f"({', '.join(f'{s}={n}' for s, n in sorted(by_domain.items()))})")
         all_chunks.extend(gold_chunks)
 
     if not all_chunks:

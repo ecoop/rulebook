@@ -55,7 +55,7 @@ def test_meta_uses_default_for_ungranted_user(client):
     assert client.get("/me").json()["allowed_domains"] == ["ultimate", "goaltimate"]
 
 
-def test_ask_rejects_disallowed_single_sport(client):
+def test_ask_rejects_disallowed_single_domain(client):
     # Enforced at the boundary, before retrieval — so this 403s without an index.
     _as(client, "tok_ult")
     resp = client.post("/ask", json={"question": "q?", "domain": "badminton"})
@@ -67,9 +67,9 @@ def test_allowlist_read_is_local_but_writes_need_gcs(client):
     # /advanced/roles: a row per known user plus the unfiltered menu.
     _as(client, "tok_admin")
     body = client.get("/advanced/allowed-domains").json()
-    assert set(body["all_sports"]) >= {"ultimate", "goaltimate"}
+    assert set(body["all_domains"]) >= {"ultimate", "goaltimate"}
     # The add-invite form pre-checks this; it's the concrete configured default.
-    assert body["default_sports"] == ["ultimate", "goaltimate"]
+    assert body["default_domains"] == ["ultimate", "goaltimate"]
     granted = {g["token"]: g for g in body["grants"]}
     assert granted["tok_ult"]["domains"] == ["ultimate"]
     assert granted["tok_ult"]["source"] == "seed"

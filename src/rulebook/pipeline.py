@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from .generate import generate_answer
-from .retrieve import RetrievedChunk, retrieve, retrieve_across_sports
+from .retrieve import RetrievedChunk, retrieve, retrieve_across_domains
 
 # Cold-start bootstrap ONLY. The domain set is otherwise derived from DATA:
 # from the index (store.list_domains) at serve time, and from the discovered
@@ -59,7 +59,7 @@ def ask(
     if domain is not None:
         chunks = retrieve(question, domain=domain, k=k)
     else:
-        chunks = retrieve_across_sports(question, domains, k_per_domain=k)
+        chunks = retrieve_across_domains(question, domains, k_per_domain=k)
 
     result = generate_answer(question, chunks)
     return AskResult(

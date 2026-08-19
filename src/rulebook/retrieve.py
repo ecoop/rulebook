@@ -6,7 +6,7 @@ Two flavors:
         Single-domain (or all-domains) top-k. Use for questions that are
         clearly about one domain: "what's the stall count in ultimate?".
 
-    retrieve_across_sports(question, domains, k_per_domain=4)
+    retrieve_across_domains(question, domains, k_per_domain=4)
         Retrieve k_per_domain results from EACH named domain, then combine.
         Use for comparison questions: "does either domain allow
         double-teaming?". The generator gets rules from every domain in
@@ -87,7 +87,7 @@ def retrieve(question: str, *, domain: str | None = None, k: int = 5) -> list[Re
 CROSS_DOMAIN_MAX_TOTAL = 12
 
 
-def retrieve_across_sports(
+def retrieve_across_domains(
     question: str,
     domains: list[str] | None = None,
     *,

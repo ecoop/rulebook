@@ -131,7 +131,7 @@ export default function App() {
   const [question, setQuestion] = useState('')
   // Empty set = "All" (compare across every domain). Any non-empty subset
   // restricts retrieval to exactly those domains.
-  const [selectedDomains, setSelectedSports] = useState<Set<string>>(() => new Set())
+  const [selectedDomains, setSelectedDomains] = useState<Set<string>>(() => new Set())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AskResponse | null>(null)
@@ -507,7 +507,7 @@ export default function App() {
               <span className="text-muted-foreground">Domains:</span>
               <button
                 type="button"
-                onClick={() => setSelectedSports(new Set())}
+                onClick={() => setSelectedDomains(new Set())}
                 aria-pressed={selectedDomains.size === 0}
                 className={
                   'rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ' +
@@ -526,7 +526,7 @@ export default function App() {
                     type="button"
                     aria-pressed={on}
                     onClick={() =>
-                      setSelectedSports((prev) => {
+                      setSelectedDomains((prev) => {
                         const next = new Set(prev)
                         if (next.has(s)) next.delete(s)
                         else next.add(s)
