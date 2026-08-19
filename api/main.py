@@ -410,6 +410,9 @@ class AdminAllowedSportsResponse(BaseModel):
     all_sports: list[str] = Field(
         ..., description="Every ruleset in the index — the unfiltered grant menu."
     )
+    default_sports: list[str] = Field(
+        ..., description="The grant a new user gets by default (pre-checks the add-invite form)."
+    )
 
 
 class AllowedSportsChangeRequest(BaseModel):
@@ -448,11 +451,19 @@ class InviteTokensResponse(BaseModel):
 class AddInviteTokenRequest(BaseModel):
     label: str = Field(..., min_length=1, description="Recipient label, e.g. 'alice'.")
     token: str | None = Field(default=None, description="Optional explicit token; minted if omitted.")
+    sports: list[str] | None = Field(
+        default=None,
+        description="Rulesets to grant the new user (#112), written as an explicit grant. "
+                    "Omit to use the configured default (settings.default_allowed_sports).",
+    )
 
 
 class AddInviteTokenResponse(BaseModel):
     token: str
     label: str
+    sports: list[str] = Field(
+        default_factory=list, description="The explicit ruleset grant written for the new user."
+    )
 
 
 class RemoveInviteTokenResponse(BaseModel):
@@ -948,6 +959,7 @@ def admin_list_allowed_sports() -> AdminAllowedSportsResponse:
     return AdminAllowedSportsResponse(
         grants=[_row(tok) for tok in sorted(known)],
         all_sports=all_sports,
+        default_sports=list(settings.default_allowed_sports),
     )
 
 
@@ -1102,10 +1114,33 @@ def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse
     token = req.token or mint_token()
     if token in tokens:
         raise HTTPException(status_code=409, detail=f"token already exists ({tokens[token]!r}).")
+    # Assign ruleset access at creation (#112) — an EXPLICIT grant, not a
+    # reliance on the resolver's default, so the new user's access is recorded
+    # from day one. Default to the configured set; the creator can override.
+    sports = req.sports if req.sports is not None else list(settings.default_allowed_sports)
+    all_sports = set(list_sports(settings.resolved_index_path) or DEFAULT_SPORTS)
+    unknown = [s for s in sports if s not in all_sports]
+    if unknown:
+        raise HTTPException(
+            status_code=422, detail=f"unknown ruleset(s) {unknown}; one of {sorted(all_sports)}"
+        )
     tokens[token] = req.label
     write_tokens_object(bucket, obj, tokens)
-    _audit(CAP_USERS_ADD, target=token, detail={"label": req.label})
-    return AddInviteTokenResponse(token=token, label=req.label)
+    guest = get_current_guest()
+    append_allowed_sports_row(
+        bucket,
+        settings.allowed_sports_object,
+        {
+            "v": 1,
+            "timestamp": utc_now_iso(),
+            "token": token,
+            "sports": sports,
+            "changed_by": (guest.recipient if guest else None),
+            "note": "assigned at user creation",
+        },
+    )
+    _audit(CAP_USERS_ADD, target=token, detail={"label": req.label, "sports": sports})
+    return AddInviteTokenResponse(token=token, label=req.label, sports=sports)
 
 
 @app.delete(

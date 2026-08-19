@@ -68,6 +68,8 @@ def test_allowlist_read_is_local_but_writes_need_gcs(client):
     _as(client, "tok_admin")
     body = client.get("/advanced/allowed-sports").json()
     assert set(body["all_sports"]) >= {"ultimate", "goaltimate"}
+    # The add-invite form pre-checks this; it's the concrete configured default.
+    assert body["default_sports"] == ["ultimate", "goaltimate"]
     granted = {g["token"]: g for g in body["grants"]}
     assert granted["tok_ult"]["sports"] == ["ultimate"]
     assert granted["tok_ult"]["source"] == "seed"
