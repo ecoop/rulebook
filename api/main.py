@@ -33,6 +33,15 @@ from pydantic import BaseModel, Field
 # Rulebook has a single-file API so ordering inside this module is
 # sufficient — see rulebook/app_state.py for the multi-file case.
 from rulebook import app_state  # noqa: E402
+from rulebook.allowed_sports import (  # noqa: E402
+    ALL_SENTINEL,
+    append_allowed_sports_row,
+    constrain_sports,
+    grants_from_rows,
+    read_allowed_sports_rows,
+    resolve_allowed_sports,
+)
+from rulebook.allowed_sports import RESET_SENTINEL as SPORTS_RESET_SENTINEL  # noqa: E402
 from rulebook.build_info import BUILD_INFO
 from rulebook.config import settings
 from rulebook.index_sync import sync_index_from_gcs
@@ -355,6 +364,11 @@ class MeResponse(BaseModel):
         default_factory=list,
         description="Sorted capability strings the effective role grants. The UI renders tabs/columns/buttons off these; the backend enforces them per-endpoint.",
     )
+    allowed_sports: list[str] | None = Field(
+        default=None,
+        description="Rulesets this caller may ask against (#112); null = unrestricted (all, "
+                    "including any added later). The picker filters to this set.",
+    )
     demo_mode: bool = Field(..., description="Whether the invite gate is active.")
 
 
@@ -380,6 +394,37 @@ class RoleChangeResponse(BaseModel):
     ok: bool = True
     token: str
     role: str = Field(..., description="Effective role after the change.")
+
+
+class AllowedSportsOut(BaseModel):
+    token: str
+    sports: list[str] | None = Field(
+        default=None,
+        description="Rulesets granted to this token; null = all (the '*' grant).",
+    )
+    source: str = Field(..., description='"override" (log) | "seed" (env) | "default".')
+
+
+class AdminAllowedSportsResponse(BaseModel):
+    grants: list[AllowedSportsOut]
+    all_sports: list[str] = Field(
+        ..., description="Every ruleset in the index — the unfiltered grant menu."
+    )
+
+
+class AllowedSportsChangeRequest(BaseModel):
+    token: str = Field(..., min_length=1, description="The guest token whose access is being set.")
+    sports: list[str] = Field(
+        ...,
+        description="Exact rulesets to grant. [] revokes all; ['*'] grants all (incl. future).",
+    )
+    note: str | None = Field(default=None, max_length=2000, description="Optional audit note.")
+
+
+class AllowedSportsChangeResponse(BaseModel):
+    ok: bool = True
+    token: str
+    sports: list[str] | None = Field(..., description="Effective allowlist after the change; null = all.")
 
 
 class InviteTokenOut(BaseModel):
@@ -479,6 +524,13 @@ class UsageResponse(BaseModel):
 def meta() -> MetaResponse:
     """Small metadata endpoint the frontend hits on load — sports + models in use."""
     sports = list_sports(settings.resolved_index_path) or DEFAULT_SPORTS
+    # Scope the ruleset list to what the caller may ask against (#112), so a
+    # restricted user's picker only offers their rulesets and they don't even
+    # learn the others exist. None = unrestricted (public deploy / no identity).
+    guest = get_current_guest()
+    allowed = resolve_allowed_sports(guest.token if guest else None)
+    if allowed is not None:
+        sports = [s for s in sports if s in allowed]
     return MetaResponse(
         sports=sports,
         embedding_provider=settings.embedding_provider,
@@ -580,8 +632,27 @@ def usage_endpoint() -> UsageResponse:
     ],
 )
 def ask_endpoint(req: AskRequest) -> AskResponse:
+    # Per-user ruleset access (#112): constrain the request to the caller's
+    # allowlist BEFORE retrieval. The frontend already filters the picker, but
+    # the boundary is enforced here regardless — a scoped caller must never
+    # reach the unmasked global search. allowed=None means unrestricted.
+    guest = get_current_guest()
+    allowed = resolve_allowed_sports(guest.token if guest else None)
+    call_sport, call_sports = req.sport, req.sports
+    if allowed is not None:
+        if req.sport is not None:
+            if req.sport not in allowed:
+                raise HTTPException(status_code=403, detail=f"ruleset '{req.sport}' not permitted")
+        else:
+            try:
+                # Empty selection = "all I'm allowed" (a concrete list), never
+                # the global all — so the sport=None search path stays unreached.
+                call_sports = constrain_sports(req.sports, allowed)
+            except PermissionError as e:
+                raise HTTPException(status_code=403, detail=str(e)) from e
+
     try:
-        result = ask(question=req.question, sport=req.sport, sports=req.sports, k=req.k)
+        result = ask(question=req.question, sport=call_sport, sports=call_sports, k=req.k)
     except RuntimeError as e:
         # e.g. "no index" — build_index.py hasn't been run yet
         raise HTTPException(status_code=503, detail=str(e)) from e
@@ -602,17 +673,15 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
 
     # Persist the full interaction so we can later mine downvoted answers
     # for corrections, upvoted ones for a "greatest hits" corpus, etc.
-    guest = get_current_guest()
-    # The exact rulesets this query ran against (for the Questions history and
-    # future per-user filtering): the chosen subset, else the singular sport,
-    # else every ruleset in the index.
-    effective_sports = req.sports or (
-        [req.sport] if req.sport else list_sports(settings.resolved_index_path)
+    # The exact rulesets this query ran against (post-allowlist constraint):
+    # the effective subset, else the singular sport, else every ruleset.
+    effective_sports = call_sports or (
+        [call_sport] if call_sport else list_sports(settings.resolved_index_path)
     )
     log_qa(
         qa_id,
         question=result.question,
-        sport=req.sport,
+        sport=call_sport,
         sports=effective_sports,
         k=req.k,
         answer=result.answer,
@@ -742,6 +811,7 @@ def me_endpoint() -> MeResponse:
         level=level_number(role),
         fingerprint=role_fingerprint(role),
         capabilities=sorted(capabilities_for(role)),
+        allowed_sports=resolve_allowed_sports(guest.token if guest else None),
         demo_mode=settings.demo_mode,
     )
 
@@ -831,6 +901,122 @@ def admin_reset_role(token: str) -> RoleChangeResponse:
     )
     _audit(CAP_USERS_CHANGE_ROLE, target=token, detail={"role": "reset"})
     return RoleChangeResponse(token=token, role=resolve_role(token))
+
+
+def _require_gcs_for_allowed_sports() -> tuple[str, str]:
+    if settings.state_backend_kind != "gcs" or not settings.gcs_state_bucket:
+        raise HTTPException(
+            status_code=400,
+            detail="ruleset-access changes require the gcs state backend (RULEBOOK_STATE_BACKEND=gcs).",
+        )
+    return settings.gcs_state_bucket, settings.allowed_sports_object
+
+
+@app.get(
+    "/advanced/allowed-sports",
+    response_model=AdminAllowedSportsResponse,
+    dependencies=[Depends(require_capability(CAP_USERS_VIEW))],
+)
+def admin_list_allowed_sports() -> AdminAllowedSportsResponse:
+    """Per-user ruleset allowlists (#112), one row per known user.
+
+    Effective allowlist = override (allowed_sports.jsonl) ▸ seed (env) ▸
+    default. Enumerates every invite token plus any token carrying an explicit
+    grant, so the Users tab has a row to edit for each user. `all_sports` is the
+    UNFILTERED menu — an operator grants from the full corpus, not their own
+    (possibly scoped) view.
+    """
+    all_sports = list_sports(settings.resolved_index_path) or DEFAULT_SPORTS
+    known: set[str] = set(settings.invite_tokens) | set(settings.initial_allowed_sports)
+    overrides: dict[str, list[str] | str] = {}
+    if settings.state_backend_kind == "gcs" and settings.gcs_state_bucket:
+        overrides = grants_from_rows(
+            read_allowed_sports_rows(settings.gcs_state_bucket, settings.allowed_sports_object)
+        )
+        known |= set(overrides)
+
+    def _row(tok: str) -> AllowedSportsOut:
+        if tok in overrides:
+            grant, source = overrides[tok], "override"
+        elif tok in settings.initial_allowed_sports:
+            grant, source = settings.initial_allowed_sports[tok], "seed"
+        else:
+            grant, source = list(settings.default_allowed_sports), "default"
+        sports = None if grant == ALL_SENTINEL else list(grant)
+        return AllowedSportsOut(token=tok, sports=sports, source=source)
+
+    return AdminAllowedSportsResponse(
+        grants=[_row(tok) for tok in sorted(known)],
+        all_sports=all_sports,
+    )
+
+
+@app.post(
+    "/advanced/allowed-sports",
+    response_model=AllowedSportsChangeResponse,
+    dependencies=[Depends(require_capability(CAP_USERS_CHANGE_ROLE))],
+)
+def admin_set_allowed_sports(req: AllowedSportsChangeRequest) -> AllowedSportsChangeResponse:
+    """Grant a token an exact ruleset allowlist. Takes effect within the TTL.
+
+    Same capability as role assignment (#112). `['*']` stores the all-grant;
+    otherwise every named ruleset must exist in the corpus (no granting a
+    ruleset that isn't there).
+    """
+    bucket, obj = _require_gcs_for_allowed_sports()
+    all_sports = set(list_sports(settings.resolved_index_path) or DEFAULT_SPORTS)
+    if req.sports == [ALL_SENTINEL]:
+        stored: list[str] | str = ALL_SENTINEL
+    else:
+        unknown = [s for s in req.sports if s not in all_sports]
+        if unknown:
+            raise HTTPException(
+                status_code=422,
+                detail=f"unknown ruleset(s) {unknown}; one of {sorted(all_sports)}",
+            )
+        stored = list(req.sports)
+    guest = get_current_guest()
+    append_allowed_sports_row(
+        bucket,
+        obj,
+        {
+            "v": 1,
+            "timestamp": utc_now_iso(),
+            "token": req.token,
+            "sports": stored,
+            "changed_by": (guest.recipient if guest else None),
+            "note": req.note,
+        },
+    )
+    _audit(CAP_USERS_CHANGE_ROLE, target=req.token, detail={"sports": stored})
+    return AllowedSportsChangeResponse(
+        token=req.token, sports=None if stored == ALL_SENTINEL else stored
+    )
+
+
+@app.post(
+    "/advanced/allowed-sports/{token}/reset",
+    response_model=AllowedSportsChangeResponse,
+    dependencies=[Depends(require_capability(CAP_USERS_CHANGE_ROLE))],
+)
+def admin_reset_allowed_sports(token: str) -> AllowedSportsChangeResponse:
+    """Clear a token's grant; allowlist falls back to the seed (or default)."""
+    bucket, obj = _require_gcs_for_allowed_sports()
+    guest = get_current_guest()
+    append_allowed_sports_row(
+        bucket,
+        obj,
+        {
+            "v": 1,
+            "timestamp": utc_now_iso(),
+            "token": token,
+            "sports": SPORTS_RESET_SENTINEL,
+            "changed_by": (guest.recipient if guest else None),
+            "note": None,
+        },
+    )
+    _audit(CAP_USERS_CHANGE_ROLE, target=token, detail={"sports": "reset"})
+    return AllowedSportsChangeResponse(token=token, sports=resolve_allowed_sports(token))
 
 
 def _require_gcs_for_invite_tokens() -> tuple[str, str]:
