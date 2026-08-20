@@ -40,7 +40,7 @@ from rulebook.interaction_log import (
     read_latest_curation,
     read_latest_source_curation,
 )
-from rulebook.store import write_store
+from rulebook.store import domain_index_path, write_store
 
 # Guardrails singletons — needed so the embedding calls this script
 # makes can record_usage against the cost counter. Same initialize()
@@ -178,12 +178,16 @@ def load_gold_chunks(gold_path: Path, known_domains: set[str]) -> tuple[list[Chu
         if not text:
             continue
 
+        sections = _split_by_domain_heading(text, known)
+        # Which domains this gold contributes to — for per-domain build
+        # provenance (#128). Heading-less golds fan out to every known domain.
+        gold_domains = sorted({d for d, _ in sections} if sections else known)
         records.append({
             "gold_id": row.get("gold_id"),
             "author": row.get("author"),
             "question": row.get("question", ""),
+            "domains": gold_domains,
         })
-        sections = _split_by_domain_heading(text, known)
         if not sections:
             # No domain headings — index once per domain so the whole
             # gold is retrievable under any domain filter.
@@ -239,7 +243,98 @@ def _split_by_domain_heading(text: str, known_domains: set[str]) -> list[tuple[s
     return sections
 
 
-def main() -> None:
+def _build_domain(
+    domain: str,
+    sources: list[Source],
+    gold_chunks: list[Chunk],
+    gold_records: list[dict],
+    embedder,
+) -> int:
+    """Chunk + embed + write + publish ONE domain's index (#128). Rows written."""
+    from datetime import datetime
+
+    from rulebook.build_info import BUILD_INFO
+    from rulebook.index_sync import publish_index_to_gcs
+
+    chunks: list[Chunk] = []
+    for src in sources:
+        print(f"[ingest]  {domain}: reading {src.path.name}")
+        pages = extract_pages(src.path)
+        print(f"          -> {len(pages)} pages of text")
+        c = chunk_pages(pages, source=src.path.name, domain=domain)
+        print(f"[chunk ]  {domain}: {len(c)} chunks "
+              f"(avg {sum(len(x.text) for x in c) // max(len(c), 1)} chars)")
+        chunks.extend(c)
+
+    dom_golds = [c for c in gold_chunks if c.domain == domain]
+    if dom_golds:
+        print(f"[gold  ]  {domain}: {len(dom_golds)} chunks from user-authored golds")
+        chunks.extend(dom_golds)
+
+    if not chunks:
+        print(f"[skip  ]  {domain}: no chunks produced — skipping")
+        return 0
+
+    print(f"[embed ]  {domain}: {len(chunks)} chunks via "
+          f"{settings.embedding_provider}/{settings.embedding_model}")
+    vectors: list[list[float]] = []
+    for i in tqdm(range(0, len(chunks), EMBED_BATCH_SIZE), desc=f"  {domain}"):
+        batch = chunks[i : i + EMBED_BATCH_SIZE]
+        vectors.extend(embedder.embed([c.text for c in batch], input_type="document"))
+
+    now = datetime.now(UTC)
+    dom_records = [r for r in gold_records if domain in r.get("domains", [])]
+    provenance = {
+        "build_id": now.strftime("%Y%m%dT%H%M%SZ"),
+        "built_at": now.isoformat(timespec="seconds"),
+        "git_sha": BUILD_INFO.sha,
+        "build_num": BUILD_INFO.build_num,
+        "domain": domain,
+        "sources": [{"domain": domain, "file": s.path.name} for s in sources],
+        "gold_answers": len(dom_records),
+        "gold_chunks": len(dom_golds),
+        "golds": dom_records,
+        "chunks_by_domain": {domain: len(chunks)},
+    }
+    written = write_store(
+        domain_index_path(settings.resolved_index_path, domain),
+        chunks,
+        vectors,
+        provider=settings.embedding_provider,
+        model=settings.embedding_model,
+        manifest_extra=provenance,
+    )
+    print(f"[store ]  {domain}: wrote {written} rows "
+          f"(build {provenance['build_id']} @ {provenance['git_sha']})")
+
+    # Durable per-domain build history (Indices tab). Self-contained manifest.
+    log_index_build({
+        **provenance,
+        "provider": settings.embedding_provider,
+        "model": settings.embedding_model,
+        "count": written,
+        "dimension": len(vectors[0]) if vectors else 0,
+        "domains": [domain],
+    })
+
+    # On a hosted (gcs) deploy, push just this domain's index to the bucket so
+    # the rebuild is durable (otherwise it lives only in this instance's /tmp).
+    if publish_index_to_gcs(domain):
+        print(f"[publish]  {domain}: uploaded to "
+              f"gs://{settings.gcs_state_bucket}/index/{domain}/")
+    return written
+
+
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Build the per-domain RAG index (#128).")
+    parser.add_argument(
+        "--domain",
+        help="build only this domain's index (default: rebuild every discovered domain)",
+    )
+    args = parser.parse_args(argv)
+
     # Use settings.rules_dir, not repo_root / RULES_ROOT: once rulebook is
     # pip-installed, repo_root resolves to a site-packages ancestor with no
     # rules/. rules_dir has the fallback the running app already relies on
@@ -254,108 +349,39 @@ def main() -> None:
             f"No source files found under {rules_root}. Add PDFs or .md files"
             " to rules/<domain>/ and re-run."
         )
-    print(f"[found ]  {len(sources)} source files across {len({s.domain for s in sources})} domain(s)")
+    all_domains = sorted({s.domain for s in sources})
+    print(f"[found ]  {len(sources)} source files across "
+          f"{len(all_domains)} domain(s): {', '.join(all_domains)}")
 
-    all_chunks: list[Chunk] = []
-    for src in sources:
-        print(f"[ingest]  {src.domain}: reading {src.path.name}")
-        pages = extract_pages(src.path)
-        print(f"          -> {len(pages)} pages of text")
+    if args.domain:
+        if args.domain not in all_domains:
+            raise SystemExit(
+                f"--domain {args.domain!r} has no rules/{args.domain}/ sources; "
+                f"one of {all_domains}"
+            )
+        targets = [args.domain]
+    else:
+        targets = all_domains
+        # Full rebuild: drop any pre-#128 flat index files at the root so the
+        # only thing left is the per-domain subdirs.
+        from rulebook.store import CHUNKS_FILE, MANIFEST_FILE, VECTORS_FILE
+        for name in (VECTORS_FILE, CHUNKS_FILE, MANIFEST_FILE):
+            (settings.resolved_index_path / name).unlink(missing_ok=True)
 
-        chunks = chunk_pages(pages, source=src.path.name, domain=src.domain)
-        print(f"[chunk ]  {src.domain}: {len(chunks)} chunks "
-              f"(avg {sum(len(c.text) for c in chunks) // max(len(chunks), 1)} chars)")
-
-        all_chunks.extend(chunks)
-
-    # Golds live under settings.data_dir/logs (where log_sync pulls prod's
-    # gold.jsonl) — NOT repo_root, which is a site-packages ancestor once
-    # installed. Reading the wrong path here would silently drop every
-    # user-authored gold from the rebuilt index.
-    # Known domains come from the discovered sources (the rules/<domain>/ dirs),
-    # NOT a hardcoded list — so a gold with a `## <NewDomain>` heading is honored
-    # the moment that domain's rules dir exists, instead of being silently dropped.
-    known_domains = {src.domain for src in sources}
+    # Load golds ONCE against ALL known domains, so a targeted build still
+    # routes '## <Domain>' golds correctly and heading-less golds fan out fully.
     gold_chunks, gold_records = load_gold_chunks(
-        settings.data_dir / "logs" / "gold.jsonl", known_domains
+        settings.data_dir / "logs" / "gold.jsonl", set(all_domains)
     )
-    if gold_chunks:
-        by_domain: dict[str, int] = {}
-        for c in gold_chunks:
-            by_domain[c.domain] = by_domain.get(c.domain, 0) + 1
-        print(f"[gold  ]  {len(gold_chunks)} chunks from user-authored gold answers "
-              f"({', '.join(f'{s}={n}' for s, n in sorted(by_domain.items()))})")
-        all_chunks.extend(gold_chunks)
-
-    if not all_chunks:
-        raise RuntimeError("No chunks produced — check the PDFs.")
 
     embedder = get_embedder()
-    print(f"[embed ]  provider={settings.embedding_provider} "
-          f"model={settings.embedding_model}  ({len(all_chunks)} chunks)")
+    total = 0
+    for domain in targets:
+        dom_sources = [s for s in sources if s.domain == domain]
+        total += _build_domain(domain, dom_sources, gold_chunks, gold_records, embedder)
 
-    vectors: list[list[float]] = []
-    for i in tqdm(range(0, len(all_chunks), EMBED_BATCH_SIZE), desc="  embedding batches"):
-        batch = all_chunks[i : i + EMBED_BATCH_SIZE]
-        vectors.extend(
-            embedder.embed([c.text for c in batch], input_type="document")
-        )
-
-    # Build provenance stamped into the manifest so the index is self-describing
-    # (when it was built, from which commit + sources + golds) — the foundation
-    # for build history / rollback (#77).
-    from datetime import datetime
-
-    from rulebook.build_info import BUILD_INFO
-
-    now = datetime.now(UTC)
-    chunks_by_domain: dict[str, int] = {}
-    for c in all_chunks:
-        chunks_by_domain[c.domain] = chunks_by_domain.get(c.domain, 0) + 1
-    provenance = {
-        "build_id": now.strftime("%Y%m%dT%H%M%SZ"),
-        "built_at": now.isoformat(timespec="seconds"),
-        "git_sha": BUILD_INFO.sha,
-        "build_num": BUILD_INFO.build_num,
-        "sources": [{"domain": s.domain, "file": s.path.name} for s in sources],
-        "gold_answers": len(gold_records),  # distinct gold answers that went in
-        "gold_chunks": len(gold_chunks),    # …expanded to this many chunks (per-domain)
-        "golds": gold_records,              # {gold_id, author, question} for the drill-down
-        "chunks_by_domain": dict(sorted(chunks_by_domain.items())),
-    }
-
-    written = write_store(
-        settings.resolved_index_path,
-        all_chunks,
-        vectors,
-        provider=settings.embedding_provider,
-        model=settings.embedding_model,
-        manifest_extra=provenance,
-    )
-    print(f"[store ]  wrote {written} rows to {settings.resolved_index_path}")
-    print(f"[stamp ]  build {provenance['build_id']} @ {provenance['git_sha']} — "
-          f"{len(sources)} sources, {provenance['gold_chunks']} gold chunks")
-
-    # Append this build to the durable history (Indices tab). Full manifest so
-    # each row is self-contained.
-    log_index_build({
-        **provenance,
-        "provider": settings.embedding_provider,
-        "model": settings.embedding_model,
-        "count": written,
-        "dimension": len(vectors[0]) if vectors else 0,
-        "domains": sorted(chunks_by_domain.keys()),
-    })
-
-    print(f"[done  ]  index dimension = {len(vectors[0])}")
-
-    # On a hosted (gcs) deploy, push the fresh index to the bucket so the
-    # rebuild is durable — otherwise it lives only in this instance's /tmp
-    # and the next restart re-pulls the old objects. No-op in local dev.
-    from rulebook.index_sync import publish_index_to_gcs
-
-    if publish_index_to_gcs():
-        print(f"[publish]  uploaded index to gs://{settings.gcs_state_bucket}/{'index/'}")
+    print(f"[done  ]  built {len(targets)} domain(s), {total} total rows "
+          f"→ {settings.resolved_index_path}/<domain>/")
 
 
 if __name__ == "__main__":

@@ -571,36 +571,33 @@ def diagnostics_endpoint() -> DiagnosticsResponse:
     directly — no aggregation cache. Fast enough because the numbers
     are all small.
     """
-    import json as _json
-    from collections import Counter
     from datetime import datetime
 
+    from rulebook.store import MANIFEST_FILE, domain_index_path, read_manifest
     from scripts.build_index import discover_sources
 
     index_path = settings.resolved_index_path
-    manifest_path = index_path / "manifest.json"
 
+    # Aggregate across per-domain indices (#128): one manifest per built domain.
     chunk_count = 0
     dimension = 0
     chunks_by_domain: dict[str, int] = {}
-    index_built_at: str | None = None
-    if manifest_path.exists():
-        manifest = _json.loads(manifest_path.read_text())
-        chunk_count = int(manifest.get("count", 0))
-        dimension = int(manifest.get("dimension", 0))
-        index_built_at = datetime.fromtimestamp(
-            manifest_path.stat().st_mtime, tz=UTC
-        ).isoformat(timespec="seconds")
-
-        chunks_path = index_path / "chunks.jsonl"
-        if chunks_path.exists():
-            domains = Counter()
-            with chunks_path.open() as f:
-                for line in f:
-                    row = _json.loads(line)
-                    # Back-compat (#113): a pre-rename chunk row keys on "sport".
-                    domains[row.get("domain") or row.get("sport")] += 1
-            chunks_by_domain = dict(domains)
+    latest_mtime: float | None = None
+    for domain in list_domains(index_path):
+        dom_dir = domain_index_path(index_path, domain)
+        manifest = read_manifest(dom_dir)
+        chunk_count += int(manifest.get("count", 0))
+        dimension = dimension or int(manifest.get("dimension", 0))
+        chunks_by_domain[domain] = int(
+            manifest.get("chunks_by_domain", {}).get(domain, manifest.get("count", 0))
+        )
+        mtime = (dom_dir / MANIFEST_FILE).stat().st_mtime
+        latest_mtime = mtime if latest_mtime is None else max(latest_mtime, mtime)
+    index_built_at = (
+        datetime.fromtimestamp(latest_mtime, tz=UTC).isoformat(timespec="seconds")
+        if latest_mtime is not None
+        else None
+    )
 
     gold_count = len(read_latest_golds())
     feedback_count = len(read_latest_feedback())
@@ -1441,8 +1438,13 @@ def admin_set_source_curation(req: SourceCurationRequest) -> SourceCurationRespo
 
 
 @app.post("/advanced/rebuild-index", response_model=RebuildIndexResponse, dependencies=[Depends(require_capability(CAP_INDEX_REBUILD))])
-def admin_rebuild_index() -> RebuildIndexResponse:
+def admin_rebuild_index(domain: str | None = None) -> RebuildIndexResponse:
     """Run scripts/build_index.py synchronously and return its outcome.
+
+    Pass ``?domain=<slug>`` to rebuild just one domain's index (#128) —
+    re-embeds only that domain, so the Indices tab can target a single-domain
+    change instead of re-embedding the whole corpus. Omit it to rebuild every
+    domain.
 
     Blocks while the build runs — typically 15s but occasionally 60-90s
     when Voyage is slow to respond. The 300s subprocess timeout is a
@@ -1461,8 +1463,11 @@ def admin_rebuild_index() -> RebuildIndexResponse:
     # ancestor (/opt/venv/…), where scripts/ doesn't exist — the rebuild button
     # failed with "can't open …/scripts/build_index.py".
     app_root = Path(__file__).resolve().parent.parent
+    cmd = [sys.executable, str(app_root / "scripts" / "build_index.py")]
+    if domain:
+        cmd += ["--domain", domain]
     proc = subprocess.run(
-        [sys.executable, str(app_root / "scripts" / "build_index.py")],
+        cmd,
         cwd=str(app_root),
         capture_output=True,
         text=True,
@@ -1489,32 +1494,37 @@ def admin_rebuild_index() -> RebuildIndexResponse:
     dependencies=[Depends(require_capability(CAP_INDEX_REBUILD))],
 )
 def admin_index_info() -> IndexInfoResponse:
-    """Provenance of the live index, from its manifest — powers the
-    'Current index' line so the running index is self-describing (#77)."""
-    import json
+    """Provenance of the live index, aggregated across per-domain manifests
+    (#128) — powers the 'Current index' line so the running index is
+    self-describing (#77). 'Current build' is the most recently built domain."""
+    from rulebook.store import domain_index_path, read_manifest
 
-    from rulebook.store import MANIFEST_FILE
+    root = settings.resolved_index_path
+    domains = list_domains(root)
+    manifests = [
+        (dom, read_manifest(domain_index_path(root, dom))) for dom in domains
+    ]
+    manifests = [(dom, m) for dom, m in manifests if m]
+    if not manifests:
+        return IndexInfoResponse()
 
-    path = settings.resolved_index_path / MANIFEST_FILE
-    if not path.exists():
-        return IndexInfoResponse()
-    try:
-        d = json.loads(path.read_text())
-    except (OSError, ValueError):
-        return IndexInfoResponse()
+    _, latest = max(manifests, key=lambda dm: dm[1].get("built_at", ""))
+    chunks_by_domain: dict[str, int] = {}
+    for _dom, m in manifests:
+        chunks_by_domain.update(m.get("chunks_by_domain", {}))
     return IndexInfoResponse(
-        build_id=d.get("build_id"),
-        built_at=d.get("built_at"),
-        git_sha=d.get("git_sha"),
-        build_num=d.get("build_num"),
-        count=d.get("count", 0),
-        dimension=d.get("dimension", 0),
-        domains=d.get("domains") or d.get("sports", []),  # back-compat (#113)
-        gold_answers=d.get("gold_answers", 0),
-        gold_chunks=d.get("gold_chunks", 0),
-        sources=d.get("sources", []),
-        golds=d.get("golds", []),
-        chunks_by_domain=d.get("chunks_by_domain", {}),
+        build_id=latest.get("build_id"),
+        built_at=latest.get("built_at"),
+        git_sha=latest.get("git_sha"),
+        build_num=latest.get("build_num"),
+        count=sum(int(m.get("count", 0)) for _, m in manifests),
+        dimension=latest.get("dimension", 0),
+        domains=domains,
+        gold_answers=sum(int(m.get("gold_answers", 0)) for _, m in manifests),
+        gold_chunks=sum(int(m.get("gold_chunks", 0)) for _, m in manifests),
+        sources=[s for _, m in manifests for s in m.get("sources", [])],
+        golds=[g for _, m in manifests for g in m.get("golds", [])],
+        chunks_by_domain=chunks_by_domain,
     )
 
 
