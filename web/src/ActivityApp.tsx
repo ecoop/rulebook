@@ -96,6 +96,7 @@ interface AdminFeedbackRow {
   rating: number
   tags: string[]
   comment: string | null
+  domains: string[]
   question: string
   has_gold: boolean
   is_own: boolean
@@ -1612,6 +1613,7 @@ export default function ActivityApp() {
                         )}
                         <div className="mt-1 font-mono text-[10px] text-muted-foreground">
                           {f.qa_id.slice(0, 8)}
+                          {f.domains?.length ? ` · ${f.domains.join(', ')}` : ''}
                           {!f.is_own && <span> · by {f.author ?? 'unknown'}</span>}
                         </div>
                       </td>
