@@ -172,6 +172,14 @@ class Settings(BaseSettings):
         },
         validation_alias="RULEBOOK_INITIAL_DOMAINS",
     )
+    # Gold answers (#133): fan a gold's cross-domain "shared" text — the leading
+    # preamble and any non-domain-heading section (## Shared / ## General) —
+    # into each domain the gold covers, so it retrieves alongside the
+    # domain-specific chunk. Off = the pre-#133 behavior (shared text dropped).
+    gold_shared_fanout: bool = Field(
+        default=True,
+        validation_alias="RULEBOOK_GOLD_SHARED_FANOUT",
+    )
 
     @property
     def repo_root(self) -> Path:
