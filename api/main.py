@@ -353,6 +353,21 @@ class IndexBuildsResponse(BaseModel):
     builds: list[IndexBuildRow] = Field(default_factory=list)
 
 
+class DomainStatus(BaseModel):
+    """Per-domain index status for the Indices tab (#128)."""
+    slug: str
+    display_name: str
+    enabled: bool = Field(..., description="Registry enabled flag — disabled domains are hidden from the product.")
+    built: bool = Field(..., description="Whether this domain has an index built.")
+    chunks: int = Field(0, description="Chunk count in the built index (0 if unbuilt).")
+    built_at: str | None = Field(default=None, description="ISO build time of this domain's index; null if unbuilt.")
+    source_files: int = Field(0, description="Count of source files under rules/<domain>/.")
+
+
+class DomainsResponse(BaseModel):
+    domains: list[DomainStatus]
+
+
 class MeResponse(BaseModel):
     recipient: str | None = Field(
         default=None,
@@ -409,7 +424,11 @@ class AllowedDomainsOut(BaseModel):
 class AdminAllowedDomainsResponse(BaseModel):
     grants: list[AllowedDomainsOut]
     all_domains: list[str] = Field(
-        ..., description="Every domain in the index — the unfiltered grant menu."
+        ..., description="Every AVAILABLE domain (rules dirs ∪ registry ∪ built) — the grant menu (#128)."
+    )
+    built_domains: list[str] = Field(
+        default_factory=list,
+        description="Which of all_domains actually have an index built today (#128).",
     )
     default_domains: list[str] = Field(
         ..., description="The grant a new user gets by default (pre-checks the add-invite form)."
@@ -930,6 +949,20 @@ def _require_gcs_for_allowed_domains() -> tuple[str, str]:
     return settings.gcs_state_bucket, settings.allowed_domains_object
 
 
+def available_domains() -> list[str]:
+    """Domains a user could be granted (#128) — the union of what has source
+    files (``rules/<domain>/``), what the registry declares, and what's already
+    built. Decouples 'grantable' from 'currently indexed', so a domain can be
+    granted before its index is built (its rules dir / registry entry is enough).
+    """
+    from rulebook.registry import declared_domains
+    from scripts.build_index import discover_sources
+
+    dirs = {s.domain for s in discover_sources(settings.rules_dir, apply_curation=False)}
+    built = set(list_domains(settings.resolved_index_path))
+    return sorted(dirs | set(declared_domains()) | built)
+
+
 @app.get(
     "/advanced/allowed-domains",
     response_model=AdminAllowedDomainsResponse,
@@ -941,10 +974,11 @@ def admin_list_allowed_domains() -> AdminAllowedDomainsResponse:
     Effective allowlist = override (allowed_domains.jsonl) ▸ seed (env) ▸
     default. Enumerates every invite token plus any token carrying an explicit
     grant, so the Users tab has a row to edit for each user. `all_domains` is the
-    UNFILTERED menu — an operator grants from the full corpus, not their own
-    (possibly scoped) view.
+    grantable menu — every AVAILABLE domain (#128), not just the built ones, so
+    a domain can be granted before its index exists; `built_domains` marks which
+    of those actually have an index today.
     """
-    all_domains = list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS
+    all_domains = available_domains()
     known: set[str] = set(settings.invite_tokens) | set(settings.initial_allowed_domains)
     overrides: dict[str, list[str] | str] = {}
     if settings.state_backend_kind == "gcs" and settings.gcs_state_bucket:
@@ -966,6 +1000,7 @@ def admin_list_allowed_domains() -> AdminAllowedDomainsResponse:
     return AdminAllowedDomainsResponse(
         grants=[_row(tok) for tok in sorted(known)],
         all_domains=all_domains,
+        built_domains=list_domains(settings.resolved_index_path),
         default_domains=list(settings.default_allowed_domains),
     )
 
@@ -983,7 +1018,7 @@ def admin_set_allowed_domains(req: AllowedDomainsChangeRequest) -> AllowedDomain
     domain that isn't there).
     """
     bucket, obj = _require_gcs_for_allowed_domains()
-    all_domains = set(list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS)
+    all_domains = set(available_domains())  # grantable = available, not just built (#128)
     if req.domains == [ALL_SENTINEL]:
         stored: list[str] | str = ALL_SENTINEL
     else:
@@ -1125,7 +1160,7 @@ def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse
     # reliance on the resolver's default, so the new user's access is recorded
     # from day one. Default to the configured set; the creator can override.
     domains = req.domains if req.domains is not None else list(settings.default_allowed_domains)
-    all_domains = set(list_domains(settings.resolved_index_path) or DEFAULT_DOMAINS)
+    all_domains = set(available_domains())  # grantable = available, not just built (#128)
     unknown = [s for s in domains if s not in all_domains]
     if unknown:
         raise HTTPException(
@@ -1570,6 +1605,45 @@ def admin_index_builds() -> IndexBuildsResponse:
             ),
         )
     return IndexBuildsResponse(active_build_id=info.build_id, builds=rows)
+
+
+@app.get(
+    "/advanced/domains",
+    response_model=DomainsResponse,
+    dependencies=[Depends(require_capability(CAP_INDEX_REBUILD))],
+)
+def admin_domains() -> DomainsResponse:
+    """Per-domain index status for the Indices tab (#128) — one row per available
+    domain with its registry name, enabled flag, build status, chunk count, and
+    source-file count. Powers the per-domain Build buttons + the grant menu's
+    'not built yet' hints."""
+    from collections import Counter
+
+    from rulebook.registry import domain_info
+    from rulebook.store import domain_index_path, read_manifest
+    from scripts.build_index import discover_sources
+
+    root = settings.resolved_index_path
+    built = set(list_domains(root))
+    src_counts = Counter(
+        s.domain for s in discover_sources(settings.rules_dir, apply_curation=False)
+    )
+    rows: list[DomainStatus] = []
+    for slug in available_domains():
+        info = domain_info(slug)
+        manifest = read_manifest(domain_index_path(root, slug)) if slug in built else {}
+        rows.append(
+            DomainStatus(
+                slug=slug,
+                display_name=info.display_name,
+                enabled=info.enabled,
+                built=slug in built,
+                chunks=int(manifest.get("count", 0)),
+                built_at=manifest.get("built_at"),
+                source_files=src_counts.get(slug, 0),
+            )
+        )
+    return DomainsResponse(domains=rows)
 
 
 # ── Web bundle (production only) ──────────────────────────────────────────────
