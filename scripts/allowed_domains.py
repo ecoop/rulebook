@@ -19,11 +19,19 @@ Credentials (locally ``gcloud auth application-default login``):
 ``--domains``) for every invite token that has NO grant row yet. It is
 idempotent and ADD-ONLY: a token that already carries an explicit grant is left
 untouched, so re-running is safe.
+
+`list`/`backfill` enumerate the SAME users the app sees — the
+``RULEBOOK_INVITE_TOKENS`` env seed merged with the GCS ``invite_tokens.json``
+object (GCS wins). Users baked into the deploy env rather than the GCS object are
+only visible if you export the same ``RULEBOOK_INVITE_TOKENS`` value the deploy
+uses when you run the command; otherwise only GCS-object users are listed (they
+still resolve to the default at runtime regardless).
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from datetime import UTC, datetime
@@ -53,6 +61,23 @@ def _invite_object() -> str:
     return os.getenv("RULEBOOK_INVITE_TOKENS_OBJECT", "invite_tokens.json")
 
 
+def _all_invite_tokens(bucket: str) -> dict[str, str]:
+    """Every invite token the APP sees: the ``RULEBOOK_INVITE_TOKENS`` env seed
+    merged with the GCS object (GCS wins), mirroring
+    ``rulebook.tokens.get_invite_tokens``. Without the seed, users baked into the
+    deploy env — not the GCS object — are invisible to `list`/`backfill`. Export
+    the same ``RULEBOOK_INVITE_TOKENS`` the deploy uses to include them.
+    """
+    seed_raw = os.getenv("RULEBOOK_INVITE_TOKENS", "").strip()
+    seed: dict[str, str] = {}
+    if seed_raw:
+        try:
+            seed = json.loads(seed_raw)
+        except json.JSONDecodeError:
+            sys.exit("allowed_domains: RULEBOOK_INVITE_TOKENS is set but not valid JSON.")
+    return {**seed, **read_tokens_object(bucket, _invite_object())}
+
+
 def _parse_domains(args: argparse.Namespace) -> list[str] | str:
     if getattr(args, "all", False):
         return ALL_SENTINEL
@@ -75,7 +100,7 @@ def _row(token: str, domains: list[str] | str, note: str) -> dict:
 def cmd_list(_args: argparse.Namespace) -> None:
     bucket = _require_gcs()
     grants = grants_from_rows(read_allowed_domains_rows(bucket, _domains_object()))
-    tokens = read_tokens_object(bucket, _invite_object())
+    tokens = _all_invite_tokens(bucket)
     if not tokens:
         print(f"(no invite tokens) gs://{bucket}/{_invite_object()}")
         return
@@ -98,7 +123,7 @@ def cmd_backfill(args: argparse.Namespace) -> None:
     bucket = _require_gcs()
     domains = _parse_domains(args)
     grants = grants_from_rows(read_allowed_domains_rows(bucket, _domains_object()))
-    tokens = read_tokens_object(bucket, _invite_object())
+    tokens = _all_invite_tokens(bucket)
     missing = [(t, label) for t, label in sorted(tokens.items(), key=lambda kv: kv[1])
                if t not in grants]
     shown = "all (*)" if domains == ALL_SENTINEL else ", ".join(domains)
