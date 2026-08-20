@@ -70,6 +70,7 @@ interface IndexBuild {
   built_at: string | null
   git_sha: string | null
   build_num: string | null
+  domains: string[]
   count: number
   sources: { domain: string; file: string }[]
   gold_answers: number
@@ -340,6 +341,7 @@ export default function ActivityApp() {
   const [sources, setSources] = useState<AdminSourceRow[] | null>(null)
   const [sourcePending, setSourcePending] = useState<Set<string>>(() => new Set())
   const [questions, setQuestions] = useState<AdminQuestionRow[] | null>(null)
+  const [questionDomain, setQuestionDomain] = useState<string | null>(null)  // null = all
   const [expandedQ, setExpandedQ] = useState<Set<string>>(() => new Set())
   // Add a gold to a past question (#51): the promotion payoff — reuses POST /gold.
   const [addGoldQa, setAddGoldQa] = useState<string | null>(null)
@@ -1257,8 +1259,47 @@ export default function ActivityApp() {
             You haven't asked any questions yet. Ask one on the main page and it'll show up here.
           </div>
         )}
-        {activeTab === 'questions' && questions !== null && questions.length > 0 && (
+        {activeTab === 'questions' && questions !== null && questions.length > 0 && (() => {
+          const domainOptions = Array.from(
+            new Set(questions.flatMap((q) => q.domains ?? [])),
+          ).sort()
+          const shown = questionDomain
+            ? questions.filter((q) => (q.domains ?? []).includes(questionDomain))
+            : questions
+          return (
           <section className="overflow-x-auto">
+            {domainOptions.length > 1 && (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-muted-foreground">Domain:</span>
+                <button
+                  type="button"
+                  onClick={() => setQuestionDomain(null)}
+                  className={
+                    'rounded-full border px-2.5 py-0.5 font-medium transition-colors ' +
+                    (questionDomain === null
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
+                  }
+                >
+                  All
+                </button>
+                {domainOptions.map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setQuestionDomain(d)}
+                    className={
+                      'rounded-full border px-2.5 py-0.5 font-medium transition-colors ' +
+                      (questionDomain === d
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
+                    }
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            )}
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
@@ -1272,7 +1313,7 @@ export default function ActivityApp() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {questions.map((q) => {
+                {shown.map((q) => {
                   const open = expandedQ.has(q.qa_id)
                   const adding = addGoldQa === q.qa_id
                   return (
@@ -1476,7 +1517,8 @@ export default function ActivityApp() {
               </tbody>
             </table>
           </section>
-        )}
+          )
+        })()}
 
         {activeTab === 'feedback' && feedback === null && !error && (
           <div className="text-sm text-muted-foreground">Loading feedback…</div>
@@ -2494,6 +2536,7 @@ export default function ActivityApp() {
                       <th className="w-6 px-2 py-2"></th>
                       <th className="px-3 py-2">built</th>
                       <th className="px-3 py-2">build</th>
+                      <th className="px-3 py-2">domain(s)</th>
                       <th className="px-3 py-2 text-right">chunks</th>
                       <th className="px-3 py-2 text-right">sources</th>
                       <th className="px-3 py-2 text-right">golds</th>
@@ -2518,6 +2561,13 @@ export default function ActivityApp() {
                             <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
                               {b.build_num} ({b.git_sha})
                             </td>
+                            <td className="px-3 py-2">
+                              <div className="flex flex-wrap gap-1">
+                                {(b.domains ?? []).map((d) => (
+                                  <span key={d} className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">{d}</span>
+                                ))}
+                              </div>
+                            </td>
                             <td className="px-3 py-2 text-right tabular-nums">{b.count}</td>
                             <td className="px-3 py-2 text-right tabular-nums">{b.sources.length}</td>
                             <td className="px-3 py-2 text-right tabular-nums">{b.gold_answers}</td>
@@ -2532,7 +2582,7 @@ export default function ActivityApp() {
                           {expanded && (
                             <tr className="bg-muted/30">
                               <td></td>
-                              <td colSpan={6} className="px-3 py-3">
+                              <td colSpan={7} className="px-3 py-3">
                                 <div className="grid gap-5 md:grid-cols-2">
                                   <div>
                                     <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
