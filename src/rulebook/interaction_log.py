@@ -66,7 +66,12 @@ QA_LOG_SCHEMA_VERSION = 5
 #       §5): several golds can coexist per qa_id (different authors / clones), so
 #       identity moves from qa_id to a per-gold id. Legacy rows (no gold_id)
 #       resolve to gold_id == qa_id on read, so nothing needs migrating.
-GOLD_SCHEMA_VERSION = 3
+#   v4  v3 + explicit `domains` — the domains this gold applies to (#135), frozen
+#       at authoring time so a heading-less gold indexes only where it belongs
+#       instead of fanning into every domain. Null/absent on pre-v4 rows; the
+#       build/migration resolves those from the qa_log's frozen list or the
+#       configured legacy set (never today's live "all").
+GOLD_SCHEMA_VERSION = 4
 
 # Gold curation — admin decisions about whether a given gold should be
 # included in the next index rebuild. Kept SEPARATE from gold.jsonl so
@@ -158,6 +163,7 @@ def log_gold(
     question: str,
     gold_answer: str,
     author: str | None = None,
+    domains: list[str] | None = None,
 ) -> None:
     """Record a user-authored gold (canonical) answer, identified by gold_id.
 
@@ -178,6 +184,7 @@ def log_gold(
             "question": question,
             "gold_answer": gold_answer,
             "author": author,
+            "domains": domains,
         },
     )
 

@@ -23,7 +23,6 @@ ones and retrieval quality would silently degrade.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from datetime import UTC
 from pathlib import Path
@@ -34,11 +33,13 @@ from rulebook import app_state
 from rulebook.chunking import Chunk, chunk_pages
 from rulebook.config import settings
 from rulebook.embeddings import get_embedder
+from rulebook.gold_domains import DOMAIN_HEADING, qa_domains, resolve_domains
 from rulebook.ingest import extract_pages
 from rulebook.interaction_log import (
     log_index_build,
     read_latest_curation,
     read_latest_source_curation,
+    read_qa_entries,
 )
 from rulebook.store import domain_index_path, write_store
 
@@ -125,28 +126,15 @@ def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[S
 EMBED_BATCH_SIZE = 64
 
 
-# Section-heading pattern for splitting a gold answer into per-domain
-# chunks. Matches a line beginning with "## Ultimate" or "## Goaltimate"
-# (case-insensitive). If a gold answer has no such headings, the whole
-# text becomes one chunk tagged with every known domain (so it retrieves
-# for any domain-filtered query).
-_DOMAIN_HEADING = re.compile(r"^\s*##\s+([A-Za-z][A-Za-z_ -]*?)\s*$", re.M)
-
-
 def load_gold_chunks(gold_path: Path, known_domains: set[str]) -> tuple[list[Chunk], list[dict]]:
     """Turn user-authored gold answers into per-domain retrievable chunks.
 
-    Gold answers are append-only in gold.jsonl (latest row per qa_id
-    wins). Each surviving gold is split on ``## Domain`` headings; each
-    section becomes one Chunk tagged with that domain. Sections whose
-    heading isn't a recognized domain are ignored. A gold answer with no
-    matching headings falls back to one shared chunk per known domain so
-    the content still retrieves under any domain filter.
-
-    Chunk metadata is chosen so citations read clearly downstream:
-        rule_id = f"user-gold-{qa_id[:8]}"
-        source  = "gold.jsonl"
-        page    = 0 (no meaningful page for user text)
+    Gold answers are append-only in gold.jsonl (latest row per gold_id wins).
+    Each gold is split on ``## Domain`` headings into per-domain section chunks;
+    its cross-domain "shared" text (preamble + non-domain headings) fans into the
+    covered domains (#133). A heading-less gold indexes into the domains it NAMES
+    (#135) — its persisted ``domains``, else the originating question's frozen
+    qa_log list, else the legacy set — NOT every domain.
     """
     if not gold_path.exists():
         return [], []
@@ -171,6 +159,9 @@ def load_gold_chunks(gold_path: Path, known_domains: set[str]) -> tuple[list[Chu
         print(f"[curate]  {len(excluded)} gold(s) excluded by admin")
 
     known = set(known_domains)
+    # qa_log rows by qa_id — the frozen domain list a heading-less gold's
+    # question ran against (#135), so it indexes only where it belongs.
+    qa_index = {r["qa_id"]: r for r in read_qa_entries()}
     chunks: list[Chunk] = []
     records: list[dict] = []  # one per contributing gold, for build provenance
     for row in latest.values():
@@ -187,10 +178,22 @@ def load_gold_chunks(gold_path: Path, known_domains: set[str]) -> tuple[list[Chu
             )
 
         if not domain_sections:
-            # No known-domain sections — index the whole gold once per domain so
-            # a general answer is retrievable under any domain filter.
-            gold_domains = sorted(known)
-            for domain in known:
+            # No `## Domain` sections — index the whole gold into the domains it
+            # NAMES (#135): its persisted `domains`, else the qa_log's frozen
+            # list, else the legacy set — never today's live "all". Toggle off to
+            # restore the pre-#135 fan-to-every-domain behavior.
+            if settings.gold_domain_attribution:
+                qrow = qa_index.get(row.get("qa_id"))
+                target = resolve_domains(
+                    explicit=row.get("domains"),
+                    qa=qa_domains(qrow) if qrow else None,
+                    legacy=settings.gold_legacy_domains,
+                    known=known,
+                )
+            else:
+                target = sorted(known)
+            gold_domains = sorted(target)
+            for domain in target:
                 chunks.append(_gold_chunk(domain, text))
         else:
             # Domain sections → one chunk each. The gold's cross-domain "shared"
@@ -225,7 +228,7 @@ def _split_gold_sections(
     domains (#133) instead of dropping it. Returns ``([], "")`` when there are no
     ``##`` headings at all — the caller handles that heading-less fan-out.
     """
-    matches = list(_DOMAIN_HEADING.finditer(text))
+    matches = list(DOMAIN_HEADING.finditer(text))
     if not matches:
         return [], ""
 
