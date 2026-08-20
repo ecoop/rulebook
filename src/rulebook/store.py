@@ -144,6 +144,22 @@ def open_store(path: Path) -> Store:
     return Store(path).load()
 
 
+def domain_index_path(index_root: Path, domain: str) -> Path:
+    """Where one domain's index lives — a subdir of the index root (#128)."""
+    return index_root / domain
+
+
+def open_domain_store(index_root: Path, domain: str) -> Store:
+    """Open one domain's per-domain store (``index_root/<domain>/``)."""
+    return open_store(domain_index_path(index_root, domain))
+
+
+def read_manifest(path: Path) -> dict:
+    """The manifest dict for one index dir; ``{}`` if absent."""
+    mf = path / MANIFEST_FILE
+    return json.loads(mf.read_text()) if mf.exists() else {}
+
+
 def write_store(
     path: Path,
     chunks: Iterable[Chunk],
@@ -200,10 +216,18 @@ def count_rows(path: Path) -> int:
         return sum(1 for _ in f)
 
 
-def list_domains(path: Path) -> list[str]:
-    if not (path / MANIFEST_FILE).exists():
+def list_domains(index_root: Path) -> list[str]:
+    """Domains that have a BUILT index — one subdirectory each (#128).
+
+    Per-domain layout: each domain's index is ``index_root/<domain>/`` with its
+    own vectors/chunks/manifest. A domain shows up here once it's been built;
+    an available-but-unbuilt domain (its ``rules/<domain>/`` exists but no index
+    yet) does not. Pre-#128 flat indexes are migrated by a rebuild.
+    """
+    if not index_root.is_dir():
         return []
-    with (path / MANIFEST_FILE).open() as f:
-        d = json.load(f)
-    # Back-compat (#113): a pre-rename manifest lists "sports".
-    return d.get("domains") or d.get("sports", [])
+    return sorted(
+        p.name
+        for p in index_root.iterdir()
+        if p.is_dir() and (p / MANIFEST_FILE).exists()
+    )
