@@ -31,13 +31,25 @@ the index without the binaries living in git.
 - **USAG field diagram**. → `rules/goaltimate/usag-field-diagram.pdf` (+ `.extracted.md`) — URL: ‹confirm›
 
 ### badminton — Badminton (BWF)  _(#114 — pending download)_
-- **Laws of Badminton**, Badminton World Federation (BWF) — in the BWF Statutes /
-  Handbook. → download into `rules/badminton/`.
-  URL: https://bwfbadminton.com/ ‹confirm exact Laws-of-Badminton PDF link›
+- **Laws of Badminton** — BWF Statutes, Section 4.1. **Version 4.0, in force
+  05/08/2024** (the edition governing play now). → download into
+  `rules/badminton/` (suggested: `bwf-laws-of-badminton-v4.0-2024.pdf`).
+  Listed at https://corporate.bwfbadminton.com/statutes/ (Chapter 4); direct PDF:
+  https://system.bwfbadminton.com/documents/folder_1_81/Statutes/CHAPTER-4---RULES-OF-THE-GAME/SECTION%204.1-%20Laws%20of%20Badminton.pdf
+  (opens in a browser; 403s automated fetchers).
+  - **Scheduled swap:** a new edition (3×4 scoring — Clauses 7/8/16, adopted at
+    BWF AGM Apr 2026) comes **into force 4 January 2027**; re-ingest then.
+  - **Do NOT ingest** BWF §4.1.4 *Alternative Laws of Badminton* (half-court and
+    other variants) as default rules — variant handling is tracked in #120.
 
 ### curling — Curling (World Curling)  _(#114 — pending download)_
-- **The Rules of Curling**, World Curling. → download into `rules/curling/`.
-  URL: https://worldcurling.org/ ‹confirm exact Rules-of-Curling PDF link›
+- **The Rules of Curling (2025)** — World Curling, the current edition.
+  → download into `rules/curling/` (suggested: `wcf-rules-of-curling-2025.pdf`).
+  Listed at https://worldcurling.org/rules/ ; direct PDF:
+  https://worldcurling.org/wp-content/uploads/2025/08/Rules-2025.pdf
+  - Optional companions (not the core rules): *Competition Policy & Procedure
+    Manual (19 Aug 2025)* for competition procedures; *Rules of Curling Showing
+    Changes (2025)* is just a diff — don't ingest it.
 
 ## Adding a domain (runbook)
 
