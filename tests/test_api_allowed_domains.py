@@ -83,6 +83,23 @@ def test_allowlist_read_is_local_but_writes_need_gcs(client):
     )
 
 
+def test_grant_menu_offers_available_not_just_built(client, monkeypatch):
+    # #128: the grant menu is AVAILABLE domains (registry ∪ rules dirs ∪ built),
+    # so a declared-but-unbuilt domain is grantable before its index exists.
+    import rulebook.registry as registry
+    from rulebook.config import settings
+
+    monkeypatch.setattr(
+        settings, "initial_domains", {"chess": {"display_name": "Chess"}}
+    )
+    registry._registry_cache.clear()
+
+    _as(client, "tok_admin")
+    body = client.get("/advanced/allowed-domains").json()
+    assert "chess" in body["all_domains"]        # declared → grantable
+    assert "chess" not in body["built_domains"]  # …but no index yet
+
+
 def test_allowlist_write_refused_without_capability(client):
     # A novice (no users.change_role) is refused on authz, before the gcs check.
     _as(client, "tok_nov")

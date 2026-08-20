@@ -175,7 +175,23 @@ interface AllowedDomainsOut {
 interface AdminAllowedDomainsResponse {
   grants: AllowedDomainsOut[]
   all_domains: string[]
+  built_domains: string[]
   default_domains: string[]
+}
+
+// Per-domain index status for the Indices tab (#128).
+interface DomainStatus {
+  slug: string
+  display_name: string
+  enabled: boolean
+  built: boolean
+  chunks: number
+  built_at: string | null
+  source_files: number
+}
+
+interface DomainsResponse {
+  domains: DomainStatus[]
 }
 
 // One row per invite token, joined with its effective role + engagement.
@@ -379,6 +395,10 @@ export default function ActivityApp() {
   // Per-user domain access (#112): the grant rows + the full domain menu.
   const [allowedDomains, setAllowedDomains] = useState<AllowedDomainsOut[] | null>(null)
   const [allDomains, setAllDomains] = useState<string[]>([])
+  const [builtDomains, setBuiltDomains] = useState<string[]>([])
+  // Per-domain index status + the domain currently being (re)built (#128).
+  const [domainStatus, setDomainStatus] = useState<DomainStatus[] | null>(null)
+  const [buildingDomain, setBuildingDomain] = useState<string | null>(null)
   // The default grant a new user gets, and the add-invite form's working set
   // (pre-checked to the default until the creator touches it).
   const [defaultDomains, setDefaultDomains] = useState<string[]>([])
@@ -426,7 +446,10 @@ export default function ActivityApp() {
     if (can('feedback.view')) void refreshFeedback()
     if (can('users.view')) void refreshUsers()
     if (can('attribution.view')) void refreshAudit()
-    if (can('index.rebuild')) void refreshIndexBuilds()
+    if (can('index.rebuild')) {
+      void refreshIndexBuilds()
+      void refreshDomains()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canUseActivity, caps.join(',')])
 
@@ -550,6 +573,7 @@ export default function ActivityApp() {
       setLadder(r.ladder)
       setAllowedDomains(a.grants)
       setAllDomains(a.all_domains)
+      setBuiltDomains(a.built_domains)
       setDefaultDomains(a.default_domains)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -828,6 +852,39 @@ export default function ActivityApp() {
     }
   }
 
+  async function refreshDomains() {
+    try {
+      const resp = await fetch('/advanced/domains')
+      if (resp.ok) setDomainStatus(((await resp.json()) as DomainsResponse).domains)
+    } catch {
+      /* non-fatal — the per-domain table just won't populate */
+    }
+  }
+
+  // Build (or rebuild) ONE domain's index (#128) — re-embeds just that domain.
+  async function rebuildDomain(slug: string) {
+    if (buildingDomain) return
+    setBuildingDomain(slug)
+    setRebuildResult(null)
+    try {
+      const resp = await fetch(`/advanced/rebuild-index?domain=${encodeURIComponent(slug)}`, {
+        method: 'POST',
+      })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      setRebuildResult((await resp.json()) as RebuildResult)
+      void refreshDomains()
+      void refreshIndexBuilds()
+      void refreshUsers() // built_domains changed → grant chips update
+    } catch (err) {
+      setRebuildResult({
+        ok: false, duration_seconds: 0, stdout_tail: '',
+        stderr_tail: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setBuildingDomain(null)
+    }
+  }
+
   async function rebuildIndex() {
     if (rebuilding) return
     setRebuilding(true)
@@ -840,6 +897,8 @@ export default function ActivityApp() {
       // A rebuild may have picked up new files added on disk since page load.
       void refreshSources()
       void refreshIndexBuilds()
+      void refreshDomains()
+      void refreshUsers()
     } catch (err) {
       setRebuildResult({
         ok: false,
@@ -1933,6 +1992,7 @@ export default function ActivityApp() {
                               return next
                             })
                           }}
+                          title={builtDomains.includes(s) ? undefined : 'Not indexed yet — grant now, build its index later (#128)'}
                           className={
                             'rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ' +
                             (on
@@ -1940,7 +2000,7 @@ export default function ActivityApp() {
                               : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
                           }
                         >
-                          {s}
+                          {s}{builtDomains.includes(s) ? '' : ' ·'}
                         </button>
                       )
                     })}
@@ -2151,6 +2211,7 @@ export default function ActivityApp() {
                                           return next
                                         })
                                       }
+                                      title={builtDomains.includes(s) ? undefined : 'Not indexed yet — grant now, build its index later (#128)'}
                                       className={
                                         'rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ' +
                                         (on
@@ -2158,7 +2219,7 @@ export default function ActivityApp() {
                                           : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
                                       }
                                     >
-                                      {s}
+                                      {s}{builtDomains.includes(s) ? '' : ' ·'}
                                     </button>
                                   )
                                 })}
@@ -2334,13 +2395,73 @@ export default function ActivityApp() {
               <button
                 type="button"
                 onClick={rebuildIndex}
-                disabled={rebuilding}
-                title="Runs scripts/build_index.py — typically 15s, occasionally a minute or two when Voyage is slow"
+                disabled={rebuilding || buildingDomain !== null}
+                title="Rebuilds every domain — re-embeds the whole corpus (slower). Use a per-domain Build below for a single-domain change."
                 className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
               >
-                {rebuilding ? 'Rebuilding…' : 'Rebuild index'}
+                {rebuilding ? 'Rebuilding all…' : 'Rebuild all'}
               </button>
             </div>
+
+            {/* Per-domain indices (#128): status + a targeted Build per domain. */}
+            {domainStatus !== null && domainStatus.length > 0 && (
+              <section className="overflow-x-auto rounded-md border border-border bg-card shadow-sm">
+                <div className="border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  domains — build each independently
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2">domain</th>
+                      <th className="px-3 py-2">status</th>
+                      <th className="px-3 py-2 text-right">chunks</th>
+                      <th className="px-3 py-2 text-right">sources</th>
+                      <th className="px-3 py-2 text-right">built</th>
+                      <th className="px-3 py-2 text-right">action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {domainStatus.map((d) => (
+                      <tr key={d.slug} className="hover:bg-accent/30">
+                        <td className="whitespace-nowrap px-3 py-2 text-foreground">
+                          {d.display_name}
+                          <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{d.slug}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          {!d.enabled ? (
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">disabled</span>
+                          ) : d.built ? (
+                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">built</span>
+                          ) : d.source_files > 0 ? (
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">not built</span>
+                          ) : (
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">no sources</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{d.built ? d.chunks : '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{d.source_files || '—'}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-muted-foreground">
+                          {d.built_at ? new Date(d.built_at).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => void rebuildDomain(d.slug)}
+                            disabled={buildingDomain !== null || rebuilding || d.source_files === 0}
+                            title={d.source_files === 0
+                              ? `No source files under rules/${d.slug}/ to build from`
+                              : 'Re-embed just this domain'}
+                            className="rounded-md border border-input bg-card px-2 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            {buildingDomain === d.slug ? 'Building…' : d.built ? 'Rebuild' : 'Build'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            )}
 
             {indexBuilds !== null && indexBuilds.length === 0 && (
               <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
