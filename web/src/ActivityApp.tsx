@@ -51,6 +51,7 @@ interface AdminGoldRow {
   is_own: boolean
   timestamp: string
   included: boolean
+  domains: string[]
 }
 
 interface AdminGoldListResponse {
@@ -1692,6 +1693,7 @@ export default function ActivityApp() {
                   <tr>
                     <th className="w-16 px-3 py-2">incl.</th>
                     <th className="px-3 py-2">question</th>
+                    <th className="px-3 py-2">domains</th>
                     <th className="w-40 px-3 py-2">saved</th>
                     <th className="w-24 px-3 py-2">qa_id</th>
                   </tr>
@@ -1734,6 +1736,22 @@ export default function ActivityApp() {
                             {expanded.has(r.qa_id) ? '▼' : '▶'} {r.question}
                           </button>
                         </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap gap-1">
+                            {r.domains.length === 0 ? (
+                              <span className="text-xs italic text-muted-foreground">—</span>
+                            ) : (
+                              r.domains.map((d) => (
+                                <span
+                                  key={d}
+                                  className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground"
+                                >
+                                  {d}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        </td>
                         <td className="px-3 py-2 text-xs text-muted-foreground">
                           {formatWhen(r.timestamp)}
                         </td>
@@ -1744,7 +1762,7 @@ export default function ActivityApp() {
                       {expanded.has(r.qa_id) && (
                         <tr className="bg-muted">
                           <td />
-                          <td colSpan={3} className="px-3 py-3">
+                          <td colSpan={4} className="px-3 py-3">
                             {editingQaId === r.qa_id ? (
                               <div className="space-y-2">
                                 <textarea
