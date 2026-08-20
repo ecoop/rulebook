@@ -101,6 +101,11 @@ def display_labels(index_domains: Iterable[str]) -> dict[str, str]:
     return {s: domain_info(s, declared).display_name for s in index_domains}
 
 
+def declared_domains() -> list[str]:
+    """Slugs the registry declares (seed ⊕ GCS object) — for the grant menu."""
+    return sorted(_declared_registry())
+
+
 def _declared_registry() -> dict[str, dict]:
     """Seed ⊕ GCS object, TTL-cached; {slug: raw-entry-dict}. Seed unless gcs."""
     seed: dict[str, dict] = dict(settings.initial_domains)
