@@ -178,69 +178,76 @@ def load_gold_chunks(gold_path: Path, known_domains: set[str]) -> tuple[list[Chu
         if not text:
             continue
 
-        sections = _split_by_domain_heading(text, known)
-        # Which domains this gold contributes to — for per-domain build
-        # provenance (#128). Heading-less golds fan out to every known domain.
-        gold_domains = sorted({d for d, _ in sections} if sections else known)
+        domain_sections, shared = _split_gold_sections(text, known)
+
+        def _gold_chunk(domain: str, body: str) -> Chunk:
+            return Chunk(
+                source="gold.jsonl", domain=domain, rule_id="correction",
+                page_start=0, page_end=0, text=body,
+            )
+
+        if not domain_sections:
+            # No known-domain sections — index the whole gold once per domain so
+            # a general answer is retrievable under any domain filter.
+            gold_domains = sorted(known)
+            for domain in known:
+                chunks.append(_gold_chunk(domain, text))
+        else:
+            # Domain sections → one chunk each. The gold's cross-domain "shared"
+            # text (preamble + non-domain headings) fans into every domain the
+            # gold COVERS (#133), so it retrieves alongside the specific chunk;
+            # gated by settings.gold_shared_fanout.
+            gold_domains = sorted({d for d, _ in domain_sections})
+            for domain, section_text in domain_sections:
+                chunks.append(_gold_chunk(domain, section_text))
+            if shared and settings.gold_shared_fanout:
+                for domain in gold_domains:
+                    chunks.append(_gold_chunk(domain, shared))
+
         records.append({
             "gold_id": row.get("gold_id"),
             "author": row.get("author"),
             "question": row.get("question", ""),
             "domains": gold_domains,
         })
-        if not sections:
-            # No domain headings — index once per domain so the whole
-            # gold is retrievable under any domain filter.
-            for domain in known:
-                chunks.append(
-                    Chunk(
-                        source="gold.jsonl",
-                        domain=domain,
-                        rule_id="correction",
-                        page_start=0,
-                        page_end=0,
-                        text=text,
-                    )
-                )
-            continue
-
-        for domain, section_text in sections:
-            chunks.append(
-                Chunk(
-                    source="gold.jsonl",
-                    domain=domain,
-                    rule_id="correction",
-                    page_start=0,
-                    page_end=0,
-                    text=section_text,
-                )
-            )
     return chunks, records
 
 
-def _split_by_domain_heading(text: str, known_domains: set[str]) -> list[tuple[str, str]]:
-    """Return [(domain, section_text)] for each ``## Domain`` section.
+def _split_gold_sections(
+    text: str, known_domains: set[str]
+) -> tuple[list[tuple[str, str]], str]:
+    """Split a gold into ([(domain, section_text)], shared_text).
 
-    Domains whose heading isn't in known_domains are dropped (protects
-    against noise headings like ``## Shared`` — that content is
-    currently discarded; if we later want a "both domains" bucket we'd
-    duplicate its text into every known domain here).
+    Each ``## <known-domain>`` heading yields one domain section. The **shared**
+    text is everything cross-domain: the leading preamble (before the first
+    heading) plus any section under a NON-domain heading (``## Shared`` /
+    ``## General`` / …). Callers fan the shared text into the gold's covered
+    domains (#133) instead of dropping it. Returns ``([], "")`` when there are no
+    ``##`` headings at all — the caller handles that heading-less fan-out.
     """
     matches = list(_DOMAIN_HEADING.finditer(text))
     if not matches:
-        return []
+        return [], ""
 
-    sections: list[tuple[str, str]] = []
+    domain_sections: list[tuple[str, str]] = []
+    shared_parts: list[str] = []
+    preamble = text[: matches[0].start()].strip()
+    if preamble:
+        shared_parts.append(preamble)
+
     for i, m in enumerate(matches):
-        domain = m.group(1).strip().lower()
-        if domain not in known_domains:
-            continue
+        name = m.group(1).strip().lower()
         start = m.end()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         section_text = text[start:end].strip()
-        if section_text:
-            sections.append((domain, section_text))
-    return sections
+        if not section_text:
+            continue
+        if name in known_domains:
+            domain_sections.append((name, section_text))
+        else:
+            shared_parts.append(section_text)  # non-domain heading → shared
+
+    return domain_sections, "\n\n".join(shared_parts)
 
 
 def _build_domain(
