@@ -44,6 +44,7 @@ from rulebook.allowed_domains import (  # noqa: E402
 from rulebook.allowed_domains import RESET_SENTINEL as DOMAINS_RESET_SENTINEL  # noqa: E402
 from rulebook.build_info import BUILD_INFO
 from rulebook.config import settings
+from rulebook.gold_domains import gold_target_domains  # noqa: E402
 from rulebook.gold_domains import qa_domains as _qa_domains  # noqa: E402
 from rulebook.index_sync import sync_index_from_gcs
 from rulebook.log_sync import sync_logs_from_gcs
@@ -222,6 +223,11 @@ class AdminGoldRow(BaseModel):
     is_own: bool = Field(..., description="Whether the current caller authored it — drives Edit vs Clone.")
     timestamp: str
     included: bool = Field(..., description="Whether this gold is included in the next index rebuild.")
+    domains: list[str] = Field(
+        default_factory=list,
+        description="Domains this gold indexes into (#135) — persisted if stamped, else resolved live "
+                    "(headings ▸ its question's frozen list ▸ legacy).",
+    )
 
 
 class AdminGoldListResponse(BaseModel):
@@ -1280,6 +1286,11 @@ def admin_list_golds() -> AdminGoldListResponse:
     golds = read_latest_golds()
     if not see_all:
         golds = [g for g in golds if g.get("author") == me_author]
+    # Effective domains per gold (#135): the persisted `domains`, else resolved
+    # live (headings ▸ the question's frozen qa_log list ▸ legacy) — so the
+    # Golds tab shows attribution even before the backfill stamps it.
+    qa_index = {r["qa_id"]: r for r in read_qa_entries()}
+    known = set(list_domains(settings.resolved_index_path)) | set(settings.gold_legacy_domains)
     rows = [
         AdminGoldRow(
             gold_id=g["gold_id"],
@@ -1290,6 +1301,9 @@ def admin_list_golds() -> AdminGoldListResponse:
             is_own=g.get("author") == me_author,
             timestamp=g["timestamp"],
             included=curation.get(g["gold_id"], True),
+            domains=gold_target_domains(
+                g, qa_index, legacy=settings.gold_legacy_domains, known=known
+            ),
         )
         for g in golds
     ]
