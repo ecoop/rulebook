@@ -180,6 +180,22 @@ class Settings(BaseSettings):
         default=True,
         validation_alias="RULEBOOK_GOLD_SHARED_FANOUT",
     )
+    # Golds (#135): attribute a heading-less gold to the domains it NAMES
+    # (its persisted `domains`, else the qa_log's frozen list, else the legacy
+    # set) instead of fanning it into every domain. Off = the pre-#135
+    # fan-to-all behavior.
+    gold_domain_attribution: bool = Field(
+        default=True,
+        validation_alias="RULEBOOK_GOLD_DOMAIN_ATTRIBUTION",
+    )
+    # The domains an ambiguous pre-v4 "all" gold resolves to (its qa_log row had
+    # `domain: null` with no frozen list). "All" is time-relative — this pins
+    # the old meaning (ultimate+goaltimate) instead of today's live domain set.
+    #   RULEBOOK_GOLD_LEGACY_DOMAINS='["ultimate", "goaltimate"]'
+    gold_legacy_domains: list[str] = Field(
+        default_factory=lambda: ["ultimate", "goaltimate"],
+        validation_alias="RULEBOOK_GOLD_LEGACY_DOMAINS",
+    )
 
     @property
     def repo_root(self) -> Path:

@@ -44,6 +44,7 @@ from rulebook.allowed_domains import (  # noqa: E402
 from rulebook.allowed_domains import RESET_SENTINEL as DOMAINS_RESET_SENTINEL  # noqa: E402
 from rulebook.build_info import BUILD_INFO
 from rulebook.config import settings
+from rulebook.gold_domains import qa_domains as _qa_domains  # noqa: E402
 from rulebook.index_sync import sync_index_from_gcs
 from rulebook.log_sync import sync_logs_from_gcs
 
@@ -812,12 +813,19 @@ def gold_endpoint(req: GoldRequest) -> GoldResponse:
         None,
     )
     gold_id = mine["gold_id"] if mine else uuid.uuid4().hex
+    # Stamp the domains this gold applies to (#135), frozen from its originating
+    # question's qa_log row — so a heading-less gold indexes only where it
+    # belongs, not into every (growing) domain. Falls back to the legacy set for
+    # an ambiguous pre-v4 "all" question.
+    qa_row = next((r for r in read_qa_entries() if r["qa_id"] == req.qa_id), None)
+    domains = (qa_row and _qa_domains(qa_row)) or list(settings.gold_legacy_domains)
     log_gold(
         req.qa_id,
         gold_id=gold_id,
         question=req.question,
         gold_answer=req.gold_answer,
         author=author,
+        domains=domains,
     )
     return GoldResponse()
 
@@ -1320,6 +1328,7 @@ def admin_clone_gold(gold_id: str) -> CloneGoldResponse:
         question=src["question"],
         gold_answer=src["gold_answer"],
         author=(guest.recipient if guest else None),
+        domains=src.get("domains"),  # carry the source gold's domain attribution (#135)
     )
     _audit(CAP_GOLDS_CLONE, target=gold_id, detail={"new_gold_id": new_id})
     return CloneGoldResponse(gold_id=new_id)
