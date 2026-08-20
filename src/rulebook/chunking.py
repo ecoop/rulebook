@@ -76,6 +76,15 @@ RULE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 ]
 MIN_ANCHORS_TO_TRUST = 5
 
+# NUMBERED-TITLE pattern — rules written as "R13. INTERRUPTED GAMES": a prefixed
+# number followed by an ALL-CAPS title (the World Curling rules). PDF extraction
+# frequently flattens these off the line start (only ~5 of 19 curling rules land
+# at ^), so — unlike every pattern above — we match ANYWHERE and lean on the caps
+# title as the low-false-positive signal. A bare cross-reference ("see R6.") is
+# followed by prose ("R6. The …"), whose second title char is lowercase, so it
+# doesn't match. Group 1 is the rule id (e.g. "R6").
+_NUMBERED_TITLE = re.compile(r"\b(R\d+)\.\s+[A-Z][A-Z]+(?:[A-Z '&/-]*[A-Z])?")
+
 # HIERARCHICAL patterns — each level appears alone at line start on its own
 # line, and we synthesize a qualified rule id (e.g. "III.D.2") by tracking
 # the most recent anchor at each level. This is what the USAG Goaltimate
@@ -221,6 +230,10 @@ def _detect_anchors(text: str) -> list[tuple[int, str]]:
     if len(hierarchical) >= MIN_ANCHORS_TO_TRUST:
         all_matches.extend(hierarchical)
 
+    numbered_title = _detect_numbered_title_anchors(text)
+    if len(numbered_title) >= MIN_ANCHORS_TO_TRUST:
+        all_matches.extend(numbered_title)
+
     if not all_matches:
         return []
 
@@ -233,6 +246,20 @@ def _detect_anchors(text: str) -> list[tuple[int, str]]:
             by_offset[offset] = rule_id
 
     return sorted(by_offset.items(), key=lambda x: x[0])
+
+
+def _detect_numbered_title_anchors(text: str) -> list[tuple[int, str]]:
+    """Detect "R13. INTERRUPTED GAMES"-style rules matched anywhere (not just ^).
+
+    Deduped by rule id keeping the LAST occurrence — a rulebook lists every rule
+    in its table of contents before the body, so the TOC copies come first and
+    the real body definition is last (the same TOC-pollution fix the
+    hierarchical detector uses).
+    """
+    seen_last: dict[str, int] = {}
+    for m in _NUMBERED_TITLE.finditer(text):
+        seen_last[m.group(1)] = m.start()
+    return sorted(((off, rid) for rid, off in seen_last.items()), key=lambda x: x[0])
 
 
 def _detect_hierarchical_anchors(text: str) -> list[tuple[int, str]]:
