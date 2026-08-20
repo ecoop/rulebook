@@ -267,6 +267,10 @@ class AdminFeedbackRow(BaseModel):
     rating: int
     tags: list[str] = Field(default_factory=list)
     comment: str | None = None
+    domains: list[str] = Field(
+        default_factory=list,
+        description="Domains the rated question ran against (#128), resolved from its qa_log row.",
+    )
     question: str = Field(..., description="From qa_log; may be empty for orphan feedback rows.")
     has_gold: bool = Field(..., description="True if the user has authored a gold answer for this qa_id.")
     is_own: bool = Field(..., description="Whether the current caller authored it — gates inline Edit.")
@@ -1374,6 +1378,20 @@ def admin_list_audit(limit: int = 200) -> AuditListResponse:
     return AuditListResponse(audit=rows)
 
 
+def _effective_domains(qa_row: dict | None, legacy: list[str]) -> list[str]:
+    """Domains a question ran against, always populated: the frozen `domains`
+    list ▸ a single `domain` ▸ the legacy set (what an old, unrecorded "all"
+    meant). Back-compat (#113): older rows key on `sport`/`sports`."""
+    if qa_row:
+        recorded = qa_row.get("domains") or qa_row.get("sports")
+        if recorded:
+            return list(recorded)
+        single = qa_row.get("domain") or qa_row.get("sport")
+        if single:
+            return [single]
+    return list(legacy)
+
+
 @app.get("/advanced/feedback", response_model=AdminFeedbackListResponse, dependencies=[Depends(require_capability(CAP_FEEDBACK_VIEW))])
 def admin_list_feedback() -> AdminFeedbackListResponse:
     """List the latest feedback event per qa_id, sorted newest-first.
@@ -1386,6 +1404,8 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
     they authored.
     """
     questions = read_qa_questions()
+    qa_index = {r["qa_id"]: r for r in read_qa_entries()}
+    legacy = settings.gold_legacy_domains
     gold_qa_ids = {g["qa_id"] for g in read_latest_golds()}
 
     see_all, author = _view_scope(CAP_FEEDBACK_VIEW_ALL)
@@ -1404,6 +1424,7 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
                 rating=int(r["rating"]),
                 tags=list(r.get("tags") or []),
                 comment=r.get("comment"),
+                domains=_effective_domains(qa_index.get(r["qa_id"]), legacy),
                 question=questions.get(r["qa_id"], ""),
                 has_gold=r["qa_id"] in gold_qa_ids,
                 is_own=r.get("author") == me_author,
@@ -1436,24 +1457,13 @@ def admin_list_questions() -> AdminQuestionListResponse:
     }
     my_golds = {g["qa_id"] for g in read_latest_golds() if g.get("author") == me_author}
     legacy = settings.gold_legacy_domains  # what an old, unrecorded "all" meant
-
-    def _q_domains(r: dict) -> list[str]:
-        # Effective domains this question ran against, always populated so the
-        # Questions tab tags every row (foundation for sort/filter). v4+ froze
-        # the list; a single domain → [it]; a pre-v4 "all" (no list, null) → the
-        # legacy set. Back-compat (#113): older rows key on "sport"/"sports".
-        if r.get("domains") or r.get("sports"):
-            return r.get("domains") or r.get("sports")
-        single = r.get("domain") or r.get("sport")
-        return [single] if single else list(legacy)
-
     rows = [
         AdminQuestionRow(
             qa_id=r["qa_id"],
             question=r.get("question", ""),
             answer=r.get("answer", ""),
             domain=r.get("domain") or r.get("sport"),
-            domains=_q_domains(r),
+            domains=_effective_domains(r, legacy),
             timestamp=r["timestamp"],
             rating=my_ratings.get(r["qa_id"]),
             has_gold=r["qa_id"] in my_golds,
