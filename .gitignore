@@ -49,3 +49,6 @@ web/.vite/
 # IDE
 .vscode/
 .idea/
+
+# Claude Code local session/editor state (launch.json, settings.local.json, …)
+.claude/
