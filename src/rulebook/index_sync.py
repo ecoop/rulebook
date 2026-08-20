@@ -35,49 +35,56 @@ _GCS_PREFIX = "index/"
 
 
 def sync_index_from_gcs() -> bool:
-    """Download the index objects from GCS into ``resolved_index_path``.
+    """Download every per-domain index tree from GCS into ``resolved_index_path``.
 
-    No-op (returns ``False``) unless ``state_backend_kind == "gcs"`` and a
-    bucket is configured — i.e. local dev and any non-GCS deploy skip it.
-    Returns ``True`` when at least one index file was pulled.
+    Per-domain layout (#128): each domain lives under ``index/<domain>/`` in the
+    bucket and is pulled into ``resolved_index_path/<domain>/``. No-op (returns
+    ``False``) unless ``state_backend_kind == "gcs"`` and a bucket is configured.
+    Returns ``True`` when at least one domain's index was pulled.
     """
     if settings.state_backend_kind != "gcs" or not settings.gcs_state_bucket:
         return False
 
     bucket_name = settings.gcs_state_bucket
-    dest = settings.resolved_index_path
+    dest_root = settings.resolved_index_path
 
     try:
         # Lazy import: only hosted (gcs) deploys carry/need the SDK path.
         from google.cloud import storage
 
-        dest.mkdir(parents=True, exist_ok=True)
+        dest_root.mkdir(parents=True, exist_ok=True)
         client = storage.Client()
         bucket = client.bucket(bucket_name)
 
-        pulled = 0
-        for name in _INDEX_FILES:
-            blob = bucket.blob(f"{_GCS_PREFIX}{name}")
-            if not blob.exists():
-                log.warning(
-                    "index sync: gs://%s/%s%s missing — skipping",
-                    bucket_name,
-                    _GCS_PREFIX,
-                    name,
-                )
-                continue
-            blob.download_to_filename(str(dest / name))
-            pulled += 1
+        # Enumerate the domain "subdirs" under index/ via a delimited listing.
+        blobs = client.list_blobs(bucket_name, prefix=_GCS_PREFIX, delimiter="/")
+        for _ in blobs:  # must consume the iterator to populate .prefixes
+            pass
+        domains = sorted(p[len(_GCS_PREFIX):].rstrip("/") for p in blobs.prefixes)
+
+        pulled_domains = 0
+        for domain in domains:
+            dest = dest_root / domain
+            dest.mkdir(parents=True, exist_ok=True)
+            got = 0
+            for name in _INDEX_FILES:
+                blob = bucket.blob(f"{_GCS_PREFIX}{domain}/{name}")
+                if not blob.exists():
+                    continue
+                blob.download_to_filename(str(dest / name))
+                got += 1
+            if got:
+                pulled_domains += 1
 
         log.info(
-            "index sync: pulled %d/%d files from gs://%s/%s into %s",
-            pulled,
-            len(_INDEX_FILES),
+            "index sync: pulled %d domain(s) %s from gs://%s/%s into %s",
+            pulled_domains,
+            domains,
             bucket_name,
             _GCS_PREFIX,
-            dest,
+            dest_root,
         )
-        return pulled > 0
+        return pulled_domains > 0
     except Exception:  # noqa: BLE001 — boot must survive a bad bucket pull
         log.exception(
             "index sync: failed pulling index from gs://%s/%s; "
@@ -88,25 +95,26 @@ def sync_index_from_gcs() -> bool:
         return False
 
 
-def publish_index_to_gcs() -> bool:
-    """Upload the freshly-built index from ``resolved_index_path`` to GCS.
+def publish_index_to_gcs(domain: str | None = None) -> bool:
+    """Upload built per-domain index tree(s) from ``resolved_index_path`` to GCS.
 
-    The mirror of :func:`sync_index_from_gcs`. Without it, a rebuild (the
-    ``/advanced/rebuild-index`` button) writes only the instance's ephemeral
-    ``/tmp`` copy and is lost on the next restart, which re-pulls the *old*
-    objects — so a hosted rebuild never sticks. Call this after
-    ``build_index`` writes the store so the rebuild is durable and every
-    instance converges on it at next boot.
+    Per-domain (#128): each domain's ``resolved_index_path/<domain>/`` is pushed
+    to ``index/<domain>/`` in the bucket. Pass ``domain`` to publish just one (a
+    targeted rebuild); omit it to publish every built domain. The mirror of
+    :func:`sync_index_from_gcs`; without it a hosted rebuild lives only in the
+    instance's ephemeral ``/tmp`` and is lost on the next restart.
 
     No-op (returns ``False``) unless ``state_backend_kind == "gcs"`` and a
-    bucket is set. Best-effort: a failed push logs and returns ``False``
-    rather than failing the build.
+    bucket is set. Best-effort: a failed push logs and returns ``False``.
     """
     if settings.state_backend_kind != "gcs" or not settings.gcs_state_bucket:
         return False
 
+    from .store import list_domains
+
     bucket_name = settings.gcs_state_bucket
-    src = settings.resolved_index_path
+    root = settings.resolved_index_path
+    domains = [domain] if domain else list_domains(root)
 
     try:
         from google.cloud import storage
@@ -114,24 +122,28 @@ def publish_index_to_gcs() -> bool:
         client = storage.Client()
         bucket = client.bucket(bucket_name)
 
-        pushed = 0
-        for name in _INDEX_FILES:
-            path = src / name
-            if not path.exists():
-                log.warning("index publish: %s missing — skipping", path)
-                continue
-            bucket.blob(f"{_GCS_PREFIX}{name}").upload_from_filename(str(path))
-            pushed += 1
+        pushed_domains = 0
+        for dom in domains:
+            src = root / dom
+            got = 0
+            for name in _INDEX_FILES:
+                path = src / name
+                if not path.exists():
+                    log.warning("index publish: %s missing — skipping", path)
+                    continue
+                bucket.blob(f"{_GCS_PREFIX}{dom}/{name}").upload_from_filename(str(path))
+                got += 1
+            if got:
+                pushed_domains += 1
 
         log.info(
-            "index publish: pushed %d/%d files from %s to gs://%s/%s",
-            pushed,
-            len(_INDEX_FILES),
-            src,
+            "index publish: pushed %d domain(s) %s to gs://%s/%s",
+            pushed_domains,
+            domains,
             bucket_name,
             _GCS_PREFIX,
         )
-        return pushed > 0
+        return pushed_domains > 0
     except Exception:  # noqa: BLE001 — a bad push shouldn't crash the rebuild
         log.exception(
             "index publish: failed pushing index to gs://%s/%s",
