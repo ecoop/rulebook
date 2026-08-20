@@ -31,7 +31,7 @@ from dataclasses import dataclass
 
 from .config import settings
 from .embeddings import get_embedder
-from .store import list_domains, open_store
+from .store import list_domains, open_domain_store
 
 _WHITESPACE_RUN = re.compile(r"\s+")
 
@@ -73,12 +73,13 @@ def _row_to_chunk(row: dict) -> RetrievedChunk:
     )
 
 
-def retrieve(question: str, *, domain: str | None = None, k: int = 5) -> list[RetrievedChunk]:
+def retrieve(question: str, *, domain: str, k: int = 5) -> list[RetrievedChunk]:
+    # Per-domain index (#128): each domain has its own store, so there's no
+    # masking — the store IS the domain.
     embedder = get_embedder()
     [q_vec] = embedder.embed([question], input_type="query")
-    store = open_store(settings.resolved_index_path)
-    rows = store.search(q_vec, k=k, domain=domain)
-    return [_row_to_chunk(r) for r in rows]
+    store = open_domain_store(settings.resolved_index_path, domain)
+    return [_row_to_chunk(r) for r in store.search(q_vec, k=k)]
 
 
 # Cap on total passages returned across a cross-domain query, so N selected
@@ -96,12 +97,13 @@ def retrieve_across_domains(
 ) -> list[RetrievedChunk]:
     embedder = get_embedder()
     [q_vec] = embedder.embed([question], input_type="query")
-    store = open_store(settings.resolved_index_path)
-    # Default to every domain actually in the index (not a hardcoded list), so a
-    # newly-added domain joins cross-domain comparison automatically.
-    domains = list(domains or list_domains(settings.resolved_index_path))
+    root = settings.resolved_index_path
+    # Default to every BUILT domain (not a hardcoded list), so a newly-built
+    # domain joins cross-domain comparison automatically. Per-domain (#128):
+    # open each selected domain's own store rather than masking one big index.
+    domains = list(domains or list_domains(root))
     per_domain = [
-        [_row_to_chunk(r) for r in store.search(q_vec, k=k_per_domain, domain=s)]
+        [_row_to_chunk(r) for r in open_domain_store(root, s).search(q_vec, k=k_per_domain)]
         for s in domains
     ]
     # Interleave by rank so every selected domain is represented, then cap the
