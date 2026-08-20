@@ -348,6 +348,7 @@ class IndexBuildRow(BaseModel):
     built_at: str | None = None
     git_sha: str | None = None
     build_num: str | None = None
+    domains: list[str] = Field(default_factory=list, description="Domain(s) this build built (#128).")
     count: int = 0
     gold_answers: int = 0
     gold_chunks: int = 0
@@ -1434,14 +1435,25 @@ def admin_list_questions() -> AdminQuestionListResponse:
         if f.get("author") == me_author
     }
     my_golds = {g["qa_id"] for g in read_latest_golds() if g.get("author") == me_author}
+    legacy = settings.gold_legacy_domains  # what an old, unrecorded "all" meant
+
+    def _q_domains(r: dict) -> list[str]:
+        # Effective domains this question ran against, always populated so the
+        # Questions tab tags every row (foundation for sort/filter). v4+ froze
+        # the list; a single domain → [it]; a pre-v4 "all" (no list, null) → the
+        # legacy set. Back-compat (#113): older rows key on "sport"/"sports".
+        if r.get("domains") or r.get("sports"):
+            return r.get("domains") or r.get("sports")
+        single = r.get("domain") or r.get("sport")
+        return [single] if single else list(legacy)
+
     rows = [
         AdminQuestionRow(
             qa_id=r["qa_id"],
             question=r.get("question", ""),
             answer=r.get("answer", ""),
-            # Back-compat (#113): pre-rename qa_log rows key on "sport"/"sports".
             domain=r.get("domain") or r.get("sport"),
-            domains=r.get("domains") or r.get("sports") or [],
+            domains=_q_domains(r),
             timestamp=r["timestamp"],
             rating=my_ratings.get(r["qa_id"]),
             has_gold=r["qa_id"] in my_golds,
@@ -1603,6 +1615,7 @@ def admin_index_builds() -> IndexBuildsResponse:
             built_at=d.get("built_at"),
             git_sha=d.get("git_sha"),
             build_num=d.get("build_num"),
+            domains=d.get("domains") or ([d["domain"]] if d.get("domain") else []),
             count=d.get("count", 0),
             gold_answers=d.get("gold_answers", 0),
             gold_chunks=d.get("gold_chunks", 0),
@@ -1620,6 +1633,7 @@ def admin_index_builds() -> IndexBuildsResponse:
                 built_at=info.built_at,
                 git_sha=info.git_sha,
                 build_num=info.build_num,
+                domains=info.domains,
                 count=info.count,
                 gold_answers=info.gold_answers,
                 gold_chunks=info.gold_chunks,
