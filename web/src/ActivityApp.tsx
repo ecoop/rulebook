@@ -1391,7 +1391,7 @@ export default function ActivityApp() {
                       <button
                         type="button"
                         onClick={() => setQuestionSort((s) => nextSort(s, 'author'))}
-                        className="hover:text-foreground"
+                        className="uppercase hover:text-foreground"
                       >
                         Asked by{sortIndicator(questionSort.col === 'author', questionSort.dir)}
                       </button>
@@ -1401,7 +1401,7 @@ export default function ActivityApp() {
                     <button
                       type="button"
                       onClick={() => setQuestionSort((s) => nextSort(s, 'rating'))}
-                      className="hover:text-foreground"
+                      className="uppercase hover:text-foreground"
                     >
                       Rating{sortIndicator(questionSort.col === 'rating', questionSort.dir)}
                     </button>
@@ -1410,7 +1410,7 @@ export default function ActivityApp() {
                     <button
                       type="button"
                       onClick={() => setQuestionSort((s) => nextSort(s, 'has_gold'))}
-                      className="hover:text-foreground"
+                      className="uppercase hover:text-foreground"
                     >
                       Gold{sortIndicator(questionSort.col === 'has_gold', questionSort.dir)}
                     </button>
@@ -1419,7 +1419,7 @@ export default function ActivityApp() {
                     <button
                       type="button"
                       onClick={() => setQuestionSort((s) => nextSort(s, 'timestamp'))}
-                      className="hover:text-foreground"
+                      className="uppercase hover:text-foreground"
                     >
                       When{sortIndicator(questionSort.col === 'timestamp', questionSort.dir)}
                     </button>
@@ -1652,7 +1652,7 @@ export default function ActivityApp() {
                     <button
                       type="button"
                       onClick={() => setFeedbackSort((s) => nextSort(s, 'rating'))}
-                      className="hover:text-foreground"
+                      className="uppercase hover:text-foreground"
                     >
                       rating{sortIndicator(feedbackSort.col === 'rating', feedbackSort.dir)}
                     </button>
@@ -1661,7 +1661,7 @@ export default function ActivityApp() {
                     <button
                       type="button"
                       onClick={() => setFeedbackSort((s) => nextSort(s, 'has_gold'))}
-                      className="hover:text-foreground"
+                      className="uppercase hover:text-foreground"
                     >
                       gold{sortIndicator(feedbackSort.col === 'has_gold', feedbackSort.dir)}
                     </button>
@@ -1671,7 +1671,7 @@ export default function ActivityApp() {
                     <button
                       type="button"
                       onClick={() => setFeedbackSort((s) => nextSort(s, 'timestamp'))}
-                      className="hover:text-foreground"
+                      className="uppercase hover:text-foreground"
                     >
                       when{sortIndicator(feedbackSort.col === 'timestamp', feedbackSort.dir)}
                     </button>
@@ -1856,7 +1856,7 @@ export default function ActivityApp() {
                       <button
                         type="button"
                         onClick={() => setGoldSort((s) => nextSort(s, 'included'))}
-                        className="hover:text-foreground"
+                        className="uppercase hover:text-foreground"
                       >
                         incl.{sortIndicator(goldSort.col === 'included', goldSort.dir)}
                       </button>
@@ -1867,7 +1867,7 @@ export default function ActivityApp() {
                       <button
                         type="button"
                         onClick={() => setGoldSort((s) => nextSort(s, 'author'))}
-                        className="hover:text-foreground"
+                        className="uppercase hover:text-foreground"
                       >
                         author{sortIndicator(goldSort.col === 'author', goldSort.dir)}
                       </button>
@@ -1876,7 +1876,7 @@ export default function ActivityApp() {
                       <button
                         type="button"
                         onClick={() => setGoldSort((s) => nextSort(s, 'timestamp'))}
-                        className="hover:text-foreground"
+                        className="uppercase hover:text-foreground"
                       >
                         saved{sortIndicator(goldSort.col === 'timestamp', goldSort.dir)}
                       </button>
@@ -2035,7 +2035,7 @@ export default function ActivityApp() {
                     <button
                       type="button"
                       onClick={() => setSourceSort((s) => nextSort(s, 'included'))}
-                      className="hover:text-foreground"
+                      className="uppercase hover:text-foreground"
                     >
                       incl.{sortIndicator(sourceSort.col === 'included', sourceSort.dir)}
                     </button>
@@ -2044,7 +2044,7 @@ export default function ActivityApp() {
                     <button
                       type="button"
                       onClick={() => setSourceSort((s) => nextSort(s, 'domain'))}
-                      className="hover:text-foreground"
+                      className="uppercase hover:text-foreground"
                     >
                       domain{sortIndicator(sourceSort.col === 'domain', sourceSort.dir)}
                     </button>
@@ -2053,7 +2053,7 @@ export default function ActivityApp() {
                     <button
                       type="button"
                       onClick={() => setSourceSort((s) => nextSort(s, 'path'))}
-                      className="hover:text-foreground"
+                      className="uppercase hover:text-foreground"
                     >
                       path{sortIndicator(sourceSort.col === 'path', sourceSort.dir)}
                     </button>
@@ -2062,7 +2062,7 @@ export default function ActivityApp() {
                     <button
                       type="button"
                       onClick={() => setSourceSort((s) => nextSort(s, 'size_bytes'))}
-                      className="hover:text-foreground"
+                      className="uppercase hover:text-foreground"
                     >
                       size{sortIndicator(sourceSort.col === 'size_bytes', sourceSort.dir)}
                     </button>
@@ -2071,7 +2071,7 @@ export default function ActivityApp() {
                     <button
                       type="button"
                       onClick={() => setSourceSort((s) => nextSort(s, 'modified_at'))}
-                      className="hover:text-foreground"
+                      className="uppercase hover:text-foreground"
                     >
                       modified{sortIndicator(sourceSort.col === 'modified_at', sourceSort.dir)}
                     </button>
