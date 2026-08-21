@@ -356,14 +356,20 @@ function DomainChips({ domains }: { domains: string[] }) {
 // Hidden when there's nothing to filter (0 or 1 domain in view).
 function DomainFilter({
   options,
-  value,
+  selected,
   onChange,
 }: {
   options: string[]
-  value: string | null
-  onChange: (d: string | null) => void
+  selected: Set<string>
+  onChange: (next: Set<string>) => void
 }) {
   if (options.length <= 1) return null
+  const toggle = (d: string) => {
+    const next = new Set(selected)
+    if (next.has(d)) next.delete(d)
+    else next.add(d)
+    onChange(next)
+  }
   const chip = (active: boolean) =>
     'rounded-full border px-2.5 py-0.5 font-medium transition-colors ' +
     (active
@@ -372,11 +378,21 @@ function DomainFilter({
   return (
     <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
       <span className="text-muted-foreground">Domain:</span>
-      <button type="button" onClick={() => onChange(null)} className={chip(value === null)}>
+      <button
+        type="button"
+        onClick={() => onChange(new Set())}
+        className={chip(selected.size === 0)}
+      >
         All
       </button>
       {options.map((d) => (
-        <button key={d} type="button" onClick={() => onChange(d)} className={chip(value === d)}>
+        <button
+          key={d}
+          type="button"
+          aria-pressed={selected.has(d)}
+          onClick={() => toggle(d)}
+          className={chip(selected.has(d))}
+        >
           {d}
         </button>
       ))}
@@ -405,9 +421,9 @@ export default function ActivityApp() {
   const [sources, setSources] = useState<AdminSourceRow[] | null>(null)
   const [sourcePending, setSourcePending] = useState<Set<string>>(() => new Set())
   const [questions, setQuestions] = useState<AdminQuestionRow[] | null>(null)
-  const [questionDomain, setQuestionDomain] = useState<string | null>(null)  // null = all
-  const [feedbackDomain, setFeedbackDomain] = useState<string | null>(null)
-  const [goldDomain, setGoldDomain] = useState<string | null>(null)
+  const [questionDomains, setQuestionDomains] = useState<Set<string>>(() => new Set())  // empty = all
+  const [feedbackDomains, setFeedbackDomains] = useState<Set<string>>(() => new Set())
+  const [goldDomains, setGoldDomains] = useState<Set<string>>(() => new Set())
   const [expandedQ, setExpandedQ] = useState<Set<string>>(() => new Set())
   // Add a gold to a past question (#51): the promotion payoff — reuses POST /gold.
   const [addGoldQa, setAddGoldQa] = useState<string | null>(null)
@@ -1171,14 +1187,14 @@ export default function ActivityApp() {
     new Set((feedback ?? []).flatMap(rowDomains)),
   ).sort()
   const shownFeedback = sortedFeedback?.filter(
-    (f) => !feedbackDomain || rowDomains(f).includes(feedbackDomain),
+    (f) => feedbackDomains.size === 0 || rowDomains(f).some((d) => feedbackDomains.has(d)),
   )
 
   const goldDomainOptions = Array.from(
     new Set((rows ?? []).flatMap(rowDomains)),
   ).sort()
   const shownGolds = (rows ?? [])
-    .filter((r) => !goldDomain || rowDomains(r).includes(goldDomain))
+    .filter((r) => goldDomains.size === 0 || rowDomains(r).some((d) => goldDomains.has(d)))
     .slice()
     .sort((a, b) => {
       const { col, dir } = goldSort
@@ -1361,8 +1377,8 @@ export default function ActivityApp() {
           const domainOptions = Array.from(
             new Set(questions.flatMap((q) => rowDomains(q))),
           ).sort()
-          const shown = (questionDomain
-            ? questions.filter((q) => rowDomains(q).includes(questionDomain))
+          const shown = (questionDomains.size > 0
+            ? questions.filter((q) => rowDomains(q).some((d) => questionDomains.has(d)))
             : questions)
             .slice()
             .sort((a, b) => {
@@ -1380,7 +1396,7 @@ export default function ActivityApp() {
             })
           return (
           <section className="overflow-x-auto">
-            <DomainFilter options={domainOptions} value={questionDomain} onChange={setQuestionDomain} />
+            <DomainFilter options={domainOptions} selected={questionDomains} onChange={setQuestionDomains} />
             <table className="w-full text-sm">
               <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
@@ -1641,7 +1657,7 @@ export default function ActivityApp() {
         )}
         {activeTab === 'feedback' && feedback !== null && feedback.length > 0 && (
           <>
-            <DomainFilter options={feedbackDomainOptions} value={feedbackDomain} onChange={setFeedbackDomain} />
+            <DomainFilter options={feedbackDomainOptions} selected={feedbackDomains} onChange={setFeedbackDomains} />
           <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -1847,7 +1863,7 @@ export default function ActivityApp() {
         )}
         {activeTab === 'golds' && rows !== null && rows.length > 0 && (
           <>
-            <DomainFilter options={goldDomainOptions} value={goldDomain} onChange={setGoldDomain} />
+            <DomainFilter options={goldDomainOptions} selected={goldDomains} onChange={setGoldDomains} />
             <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
               <table className="w-full text-sm">
                 <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
