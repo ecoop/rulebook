@@ -169,6 +169,8 @@ class Settings(BaseSettings):
             "goaltimate": {"display_name": "Goaltimate (USAG)"},
             "badminton": {"display_name": "Badminton (BWF)"},
             "curling": {"display_name": "Curling (WCF)"},
+            "hearts": {"display_name": "Hearts"},
+            "backgammon": {"display_name": "Backgammon"},
         },
         validation_alias="RULEBOOK_INITIAL_DOMAINS",
     )
