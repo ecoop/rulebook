@@ -218,7 +218,7 @@ type AdminTab = 'questions' | 'feedback' | 'golds' | 'sources' | 'indices' | 'us
 type SortDir = 'asc' | 'desc'
 type QuestionSortCol = 'rating' | 'has_gold' | 'author' | 'timestamp'
 type GoldSortCol = 'included' | 'question' | 'author' | 'timestamp'
-type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
+type FeedbackSortCol = 'rating' | 'has_gold' | 'author' | 'timestamp'
 type SourceSortCol = 'included' | 'domain' | 'path' | 'size_bytes' | 'modified_at'
 type UserSortCol = 'label' | 'role' | 'lastSeen' | 'questions' | 'golds' | 'weeklyTokens'
 
@@ -1165,8 +1165,8 @@ export default function ActivityApp() {
   const sortedFeedback = feedback?.slice().sort((a, b) => {
     const { col, dir } = feedbackSort
     const mult = dir === 'asc' ? 1 : -1
-    const av = col === 'has_gold' ? Number(a.has_gold) : a[col]
-    const bv = col === 'has_gold' ? Number(b.has_gold) : b[col]
+    const av = col === 'has_gold' ? Number(a.has_gold) : (a[col] ?? '')
+    const bv = col === 'has_gold' ? Number(b.has_gold) : (b[col] ?? '')
     if (av < bv) return -1 * mult
     if (av > bv) return 1 * mult
     return 0
@@ -1664,6 +1664,15 @@ export default function ActivityApp() {
                 <tr>
                   <th className="px-3 py-2">question / note</th>
                   <th className="px-3 py-2">domains</th>
+                  <th className="w-28 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackSort((s) => nextSort(s, 'author'))}
+                      className="uppercase hover:text-foreground"
+                    >
+                      rated by{sortIndicator(feedbackSort.col === 'author', feedbackSort.dir)}
+                    </button>
+                  </th>
                   <th className="w-16 px-3 py-2 text-center">
                     <button
                       type="button"
@@ -1714,11 +1723,13 @@ export default function ActivityApp() {
                         )}
                         <div className="mt-1 font-mono text-[10px] text-muted-foreground">
                           {f.qa_id.slice(0, 8)}
-                          {!f.is_own && <span> · by {f.author ?? 'unknown'}</span>}
                         </div>
                       </td>
                       <td className="px-3 py-2">
                         <DomainChips domains={rowDomains(f)} />
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">
+                        {f.author ?? (f.is_own ? 'you' : '—')}
                       </td>
                       <td className="px-3 py-2 text-center">
                         <span
@@ -1779,7 +1790,7 @@ export default function ActivityApp() {
                     </tr>
                     {editing && (
                       <tr className="bg-muted/30">
-                        <td colSpan={6} className="px-3 py-3">
+                        <td colSpan={7} className="px-3 py-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-xs font-medium text-muted-foreground">Rating</span>
                             {[1, 2, 3, 4, 5].map((n) => (
