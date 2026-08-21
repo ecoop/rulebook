@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Eric Cooper. -->
 # Rules sources — point-and-download
 
-_Last updated: 2026-08-19_
+_Last updated: 2026-08-20_
 
 The rules text under `rules/<domain>/` is built into the vector index by
 [`scripts/build_index.py`](../scripts/build_index.py) (the directory name is the
@@ -50,6 +50,25 @@ the index without the binaries living in git.
   - Optional companions (not the core rules): *Competition Policy & Procedure
     Manual (19 Aug 2025)* for competition procedures; *Rules of Curling Showing
     Changes (2025)* is just a diff — don't ingest it.
+
+### hearts — Hearts  _(#142)_
+- **Hearts — Rules**, an original compilation of the standard four-player game
+  (a public-domain folk card game), written for this project. → `rules/hearts/hearts-rules.md`
+  - **Committed to git** — unlike the governing-body PDFs above, this is original
+    text (not copied from a copyrighted rulebook), so it lives in the repo.
+  - Cross-checked against widely-used references (USPC/Bicycle; Pagat) for
+    accuracy; no third-party prose is reproduced.
+
+### backgammon — Backgammon  _(#142)_
+- **Backgammon — Rules**, an original compilation of the standard game
+  (public-domain), written for this project. → `rules/backgammon/backgammon-rules.md`
+  - **Committed to git** — original text; see the note under Hearts.
+  - Cross-checked against widely-used references (USBGF; Backgammon Galore).
+
+> **Two kinds of source, two policies.** Governing-body rulebooks (ultimate,
+> goaltimate, badminton, curling, and the forthcoming Catan) are **copyrighted**
+> — point-and-download, never committed. Original compilations of public-domain
+> games (hearts, backgammon) are **committed** as `.md` here.
 
 ## Adding a domain (runbook)
 
