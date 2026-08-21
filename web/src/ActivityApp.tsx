@@ -321,6 +321,33 @@ function formatWhen(iso: string): string {
   })
 }
 
+// Resolve a row's domains: v4+ rows carry the full `domains` list; older rows
+// only the single `domain`. Empty when neither is set.
+function rowDomains(row: { domains?: string[] | null; domain?: string | null }): string[] {
+  if (row.domains?.length) return row.domains
+  return row.domain ? [row.domain] : []
+}
+
+// The shared "domains" column across the record tabs (Questions, Feedback,
+// Golds, Sources). Chips are ALPHABETIZED — not registry order — so the set
+// reads the same everywhere and scales as domains are added.
+function DomainChips({ domains }: { domains: string[] }) {
+  const ds = [...domains].sort()
+  if (ds.length === 0) return <span className="text-xs italic text-muted-foreground">—</span>
+  return (
+    <div className="flex flex-wrap gap-1">
+      {ds.map((d) => (
+        <span
+          key={d}
+          className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground"
+        >
+          {d}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export default function ActivityApp() {
   const [rows, setRows] = useState<AdminGoldRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -1262,10 +1289,10 @@ export default function ActivityApp() {
         )}
         {activeTab === 'questions' && questions !== null && questions.length > 0 && (() => {
           const domainOptions = Array.from(
-            new Set(questions.flatMap((q) => q.domains ?? [])),
+            new Set(questions.flatMap((q) => rowDomains(q))),
           ).sort()
           const shown = questionDomain
-            ? questions.filter((q) => (q.domains ?? []).includes(questionDomain))
+            ? questions.filter((q) => rowDomains(q).includes(questionDomain))
             : questions
           return (
           <section className="overflow-x-auto">
@@ -1302,15 +1329,16 @@ export default function ActivityApp() {
               </div>
             )}
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
-                  <th className="px-3 py-2 font-medium">Question</th>
+              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Question</th>
+                  <th className="px-3 py-2">Domains</th>
                   {can('questions.view.all') && (
-                    <th className="px-3 py-2 font-medium">Asked by</th>
+                    <th className="px-3 py-2">Asked by</th>
                   )}
-                  <th className="px-3 py-2 text-center font-medium">Rating</th>
-                  <th className="px-3 py-2 text-center font-medium">Gold</th>
-                  <th className="px-3 py-2 font-medium">When</th>
+                  <th className="px-3 py-2 text-center">Rating</th>
+                  <th className="px-3 py-2 text-center">Gold</th>
+                  <th className="px-3 py-2">When</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -1335,13 +1363,10 @@ export default function ActivityApp() {
                           </button>
                           <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                             {q.qa_id.slice(0, 8)}
-                            {(() => {
-                              // v4+ rows carry the full domain list; older rows
-                              // only the single `domain`.
-                              const rs = q.domains?.length ? q.domains.join(', ') : q.domain
-                              return rs ? ` · ${rs}` : ''
-                            })()}
                           </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <DomainChips domains={rowDomains(q)} />
                         </td>
                         {can('questions.view.all') && (
                           <td className="px-3 py-2 text-sm text-muted-foreground">
@@ -1379,7 +1404,7 @@ export default function ActivityApp() {
                       </tr>
                       {open && (
                         <tr className="bg-muted/30">
-                          <td colSpan={can('questions.view.all') ? 5 : 4} className="px-3 py-3">
+                          <td colSpan={can('questions.view.all') ? 6 : 5} className="px-3 py-3">
                             <div className="whitespace-pre-wrap text-sm text-foreground">
                               {q.answer || (
                                 <span className="italic text-muted-foreground">(no stored answer)</span>
@@ -1534,6 +1559,8 @@ export default function ActivityApp() {
             <table className="w-full text-sm">
               <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
+                  <th className="px-3 py-2">question / note</th>
+                  <th className="px-3 py-2">domains</th>
                   <th className="w-16 px-3 py-2 text-center">
                     <button
                       type="button"
@@ -1552,7 +1579,6 @@ export default function ActivityApp() {
                       gold{sortIndicator(feedbackSort.col === 'has_gold', feedbackSort.dir)}
                     </button>
                   </th>
-                  <th className="px-3 py-2">question / note</th>
                   <th className="w-40 px-3 py-2">tags</th>
                   <th className="w-40 px-3 py-2">
                     <button
@@ -1574,6 +1600,23 @@ export default function ActivityApp() {
                     <tr
                       className={needsAttention ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-accent'}
                     >
+                      <td className="px-3 py-2">
+                        <div className="text-sm text-foreground">
+                          {f.question || <span className="italic text-muted-foreground">(no qa_log entry)</span>}
+                        </div>
+                        {f.comment && (
+                          <div className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
+                            {f.comment}
+                          </div>
+                        )}
+                        <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+                          {f.qa_id.slice(0, 8)}
+                          {!f.is_own && <span> · by {f.author ?? 'unknown'}</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <DomainChips domains={rowDomains(f)} />
+                      </td>
                       <td className="px-3 py-2 text-center">
                         <span
                           className={
@@ -1601,21 +1644,6 @@ export default function ActivityApp() {
                         ) : (
                           <span title="No gold yet" className="text-muted-foreground/50">·</span>
                         )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="text-sm text-foreground">
-                          {f.question || <span className="italic text-muted-foreground">(no qa_log entry)</span>}
-                        </div>
-                        {f.comment && (
-                          <div className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
-                            {f.comment}
-                          </div>
-                        )}
-                        <div className="mt-1 font-mono text-[10px] text-muted-foreground">
-                          {f.qa_id.slice(0, 8)}
-                          {f.domains?.length ? ` · ${f.domains.join(', ')}` : ''}
-                          {!f.is_own && <span> · by {f.author ?? 'unknown'}</span>}
-                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-1">
@@ -1648,7 +1676,7 @@ export default function ActivityApp() {
                     </tr>
                     {editing && (
                       <tr className="bg-muted/30">
-                        <td colSpan={5} className="px-3 py-3">
+                        <td colSpan={6} className="px-3 py-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-xs font-medium text-muted-foreground">Rating</span>
                             {[1, 2, 3, 4, 5].map((n) => (
@@ -1782,20 +1810,7 @@ export default function ActivityApp() {
                           </button>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="flex flex-wrap gap-1">
-                            {r.domains.length === 0 ? (
-                              <span className="text-xs italic text-muted-foreground">—</span>
-                            ) : (
-                              r.domains.map((d) => (
-                                <span
-                                  key={d}
-                                  className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground"
-                                >
-                                  {d}
-                                </span>
-                              ))
-                            )}
-                          </div>
+                          <DomainChips domains={r.domains} />
                         </td>
                         <td className="px-3 py-2 text-xs text-muted-foreground">
                           {r.author ?? '—'}
