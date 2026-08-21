@@ -2388,7 +2388,8 @@ export default function ActivityApp() {
                           </td>
                           <td className="px-3 py-2 align-top">
                             {editingDomainsToken === u.token ? (
-                              <div className="flex max-w-[24rem] flex-wrap items-center gap-1.5">
+                              <div className="flex max-w-[24rem] flex-col gap-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
                                 {allDomains.map((s) => {
                                   const on = editDomains.has(s)
                                   return (
@@ -2417,6 +2418,8 @@ export default function ActivityApp() {
                                     </button>
                                   )
                                 })}
+                                </div>
+                                <div className="flex items-center gap-1.5">
                                 <button
                                   type="button"
                                   disabled={busy}
@@ -2433,6 +2436,7 @@ export default function ActivityApp() {
                                 >
                                   Cancel
                                 </button>
+                                </div>
                               </div>
                             ) : (
                               <div className="flex max-w-[20rem] flex-wrap items-center gap-1">
