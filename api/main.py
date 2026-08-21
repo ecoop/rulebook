@@ -361,7 +361,11 @@ class IndexBuildRow(BaseModel):
 
 
 class IndexBuildsResponse(BaseModel):
-    active_build_id: str | None = None
+    active_build_ids: list[str] = Field(
+        default_factory=list,
+        description="build_ids currently serving — one per built domain (#128). "
+        "Each domain's index is live independently, so several builds are active at once.",
+    )
     builds: list[IndexBuildRow] = Field(default_factory=list)
 
 
@@ -1633,6 +1637,8 @@ def admin_index_builds() -> IndexBuildsResponse:
             golds=d.get("golds", []),
         )
 
+    from rulebook.store import domain_index_path, read_manifest
+
     info = admin_index_info()
     rows = [_row(b) for b in read_index_builds(limit=50)]
     if info.build_id and not any(r.build_id == info.build_id for r in rows):
@@ -1651,7 +1657,15 @@ def admin_index_builds() -> IndexBuildsResponse:
                 golds=info.golds,
             ),
         )
-    return IndexBuildsResponse(active_build_id=info.build_id, builds=rows)
+    # Every built domain serves its own index (#128), so the "active" set is the
+    # current on-disk build_id per domain — not a single live build.
+    root = settings.resolved_index_path
+    active_build_ids = [
+        bid
+        for dom in list_domains(root)
+        if (bid := read_manifest(domain_index_path(root, dom)).get("build_id"))
+    ]
+    return IndexBuildsResponse(active_build_ids=active_build_ids, builds=rows)
 
 
 @app.get(
