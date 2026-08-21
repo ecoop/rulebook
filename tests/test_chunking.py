@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from rulebook.chunking import (
+    _detect_markdown_heading_anchors,
     _detect_numbered_title_anchors,
     _normalize_ws,
     chunk_pages,
@@ -63,3 +64,46 @@ def test_chunk_pages_anchors_r_number_rules():
     # the free-guard-zone text is attributed to R6, not lumped into a preamble
     fgz = [c for c in chunks if "free guard zone" in c.text.lower()]
     assert fgz and all(c.rule_id == "R6" for c in fgz)
+
+
+# --- markdown-heading anchors (authored prose rules: hearts, backgammon) -----
+
+
+def test_markdown_headings_detected_as_anchors():
+    text = "# Hearts\nIntro.\n## The Deal\nDeal 13 each.\n### Passing\nPass three.\n## Scoring\nHearts are 1 point."
+    ids = [rid for _off, rid in _detect_markdown_heading_anchors(text)]
+    assert ids == ["Hearts", "The Deal", "Passing", "Scoring"]
+
+
+def test_chunk_pages_splits_markdown_by_section():
+    # A prose doc with no rule-numbering scheme should chunk per ## section,
+    # with the heading text as the rule_id (section-based citation).
+    md = (
+        "# Backgammon\nBackgammon is a two-player race game combining dice and "
+        "strategy; each player moves fifteen checkers around and off the board.\n\n"
+        "## The Setup\nEach player has fifteen checkers in the starting position.\n\n"
+        "## Bearing Off\nOnce all checkers are home, remove them by dice roll.\n\n"
+        "## The Doubling Cube\nEither player may propose to double the stakes.\n"
+    )
+    chunks = chunk_pages([PageText(page_number=1, text=md)], source="bg.md", domain="backgammon")
+    ids = [c.rule_id for c in chunks]
+    assert ids == ["Backgammon", "The Setup", "Bearing Off", "The Doubling Cube"]
+    bearing = [c for c in chunks if c.rule_id == "Bearing Off"]
+    assert bearing and "dice roll" in bearing[0].text
+
+
+def test_markdown_headings_ignored_when_numbering_present():
+    # A numbered rulebook that also contains a markdown-ish '#' line must still
+    # chunk by its rule numbers — heading detection is a fallback only.
+    body = (
+        "# Title line that should not become an anchor "
+        " R1. SHEET The playing surface is rectangular as specified in these rules. "
+        " R2. STONES Each stone is of the specified weight and approved material used in play. "
+        " R3. TEAMS A team is four players, each delivering two stones per end in sequence. "
+        " R4. POSITION Players stand as directed by these rules while a stone is delivered. "
+        " R5. DELIVERY A stone must be released from the hand before it reaches the hog line. "
+    )
+    chunks = chunk_pages([PageText(page_number=1, text=body)], source="c.pdf", domain="curling")
+    ids = {c.rule_id for c in chunks}
+    assert {"R1", "R2", "R3", "R4", "R5"} <= ids
+    assert not any("Title line" == c.rule_id for c in chunks)

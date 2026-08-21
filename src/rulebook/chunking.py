@@ -133,7 +133,12 @@ def chunk_pages(pages: list[PageText], *, source: str, domain: str) -> list[Chun
     anchors = _detect_anchors(joined)
 
     if not anchors:
-        # No rule-numbering detected — degrade gracefully to per-page chunks.
+        # No rule-numbering scheme — try markdown headings (authored prose rules
+        # like the card/board games use ## sections, not clause numbers).
+        anchors = _detect_markdown_heading_anchors(joined)
+
+    if not anchors:
+        # Nothing structural detected — degrade gracefully to per-page chunks.
         return _fallback_per_page(pages, source=source, domain=domain)
 
     chunks: list[Chunk] = []
@@ -260,6 +265,26 @@ def _detect_numbered_title_anchors(text: str) -> list[tuple[int, str]]:
     for m in _NUMBERED_TITLE.finditer(text):
         seen_last[m.group(1)] = m.start()
     return sorted(((off, rid) for rid, off in seen_last.items()), key=lambda x: x[0])
+
+
+_MD_HEADING = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$", re.M)
+
+
+def _detect_markdown_heading_anchors(text: str) -> list[tuple[int, str]]:
+    """Split an ATX-markdown document at its headings; the heading text is the
+    chunk's rule_id (section-based citation for prose-organized rules).
+
+    Deliberately called only after every rule-numbering strategy comes up empty,
+    so it never perturbs numbered rulebooks that happen to contain a stray '#'.
+    Used by the authored public-domain game rules (hearts, backgammon), whose
+    sections are named ("The Deal", "Bearing Off") rather than numbered.
+    """
+    out: list[tuple[int, str]] = []
+    for m in _MD_HEADING.finditer(text):
+        title = m.group(1).strip()
+        if title:
+            out.append((m.start(), title))
+    return out
 
 
 def _detect_hierarchical_anchors(text: str) -> list[tuple[int, str]]:
