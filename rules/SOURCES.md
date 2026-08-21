@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Eric Cooper. -->
 # Rules sources — point-and-download
 
-_Last updated: 2026-08-19_
+_Last updated: 2026-08-20_
 
 The rules text under `rules/<domain>/` is built into the vector index by
 [`scripts/build_index.py`](../scripts/build_index.py) (the directory name is the
@@ -50,6 +50,38 @@ the index without the binaries living in git.
   - Optional companions (not the core rules): *Competition Policy & Procedure
     Manual (19 Aug 2025)* for competition procedures; *Rules of Curling Showing
     Changes (2025)* is just a diff — don't ingest it.
+
+### hearts — Hearts  _(#142)_
+- **Hearts rules** — Wikibooks, "Card Games/Hearts/Rules" (en.wikibooks.org),
+  **CC BY-SA 4.0**. Kept **untracked** in `rules/hearts/` for consistency with the
+  other sources. → `rules/hearts/rules-for-hearts.pdf`
+  - Ingestion reads a cleaned transcription sibling
+    `rules-for-hearts.extracted.md` (also untracked): the PDF's multi-column print
+    scrambled the layout (section headings detached from their bodies; the
+    player-count comparison table flattened to number-soup), so the extraction was
+    reordered back onto its headings, the table rebuilt as markdown, wiki chrome
+    (retrieval URL, floating labels) dropped, and ligatures normalized.
+  - CC BY-SA permits committing *with attribution* if we ever want to; left
+    untracked for now to match the rest.
+
+### backgammon — Backgammon (USBGF)  _(#142)_
+- **Backgammon rules** — U.S. Backgammon Federation, "Backgammon Basics: How To
+  Play" (usbgf.org). **Copyrighted** — download into `rules/backgammon/` and keep
+  it **untracked** (like the sport rulebooks). → `rules/backgammon/backgammon-rules.pdf`
+  - Ingestion reads a cleaned transcription sibling
+    `backgammon-rules.extracted.md` (also **untracked**): the FAQ ("Common
+    Questions") onward trimmed off; print-capture cruft (language-link sidebar,
+    a browser-extension ad) and figure captions removed; PDF ligatures
+    normalized; the document's own section headings kept as `##` for
+    section-based chunking. The `.extracted.md` makes ingestion skip the `.pdf`
+    automatically (`<stem>.pdf` + `<stem>.extracted.md` → pdf skipped).
+
+> **Source policy.** Governing-body / publisher rulebooks (ultimate, goaltimate,
+> badminton, curling, backgammon, and the forthcoming Catan) are **copyrighted**
+> — point-and-download, never committed; a cleaned `.extracted.md` transcription
+> (also untracked) is what ingestion reads. Hearts uses a CC BY-SA Wikibooks
+> source, likewise kept untracked for consistency. Both game domains began as
+> committed original drafts, then were swapped for sourced text for fidelity.
 
 ## Adding a domain (runbook)
 
