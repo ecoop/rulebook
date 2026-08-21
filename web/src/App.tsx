@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Info } from 'lucide-react'
 import {
   FloatingWidgetStack,
@@ -185,7 +185,7 @@ export default function App() {
     if (widgetsHidden && usageSig(usage) !== hideUsageSigRef.current) markWidgetsNew()
   }, [usage, widgetsHidden, markWidgetsNew])
 
-  useEffect(() => {
+  const refreshMeta = useCallback(() => {
     fetch('/meta')
       .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
       .then(setMeta)
@@ -193,9 +193,30 @@ export default function App() {
         // Non-fatal — the app is still usable, we just won't populate the
         // domain dropdown from the server's view.
       })
+  }, [])
+
+  useEffect(() => {
+    refreshMeta()
     void refreshMe()
     void refreshWidgetData()
-  }, [])
+  }, [refreshMeta])
+
+  // #149: the Ask view stays mounted (display:none) while the admin view is
+  // shown, so a domain granted/built in the admin view won't appear in the
+  // picker until /meta is re-fetched. Refresh it when the user returns to this
+  // view (hash leaves #/activity) or refocuses the tab.
+  useEffect(() => {
+    const onFocus = () => refreshMeta()
+    const onHashChange = () => {
+      if (window.location.hash !== '#/activity') refreshMeta()
+    }
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('hashchange', onHashChange)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('hashchange', onHashChange)
+    }
+  }, [refreshMeta])
 
   async function refreshMe() {
     // /me is gated at novice, so a 403 means the guest is suspended — render
