@@ -329,7 +329,7 @@ export default function ActivityApp() {
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildResult, setRebuildResult] = useState<RebuildResult | null>(null)
   const [indexBuilds, setIndexBuilds] = useState<IndexBuild[] | null>(null)
-  const [activeBuildId, setActiveBuildId] = useState<string | null>(null)
+  const [activeBuildIds, setActiveBuildIds] = useState<string[]>([])
   const [expandedBuild, setExpandedBuild] = useState<string | null>(null)
   // Single-editor policy: only one row's gold_answer can be edited at a
   // time. Clicking "Edit" on another row discards the in-flight buffer.
@@ -847,9 +847,9 @@ export default function ActivityApp() {
     try {
       const resp = await fetch('/advanced/index-builds')
       if (resp.ok) {
-        const data = (await resp.json()) as { active_build_id: string | null; builds: IndexBuild[] }
+        const data = (await resp.json()) as { active_build_ids: string[]; builds: IndexBuild[] }
         setIndexBuilds(data.builds)
-        setActiveBuildId(data.active_build_id)
+        setActiveBuildIds(data.active_build_ids ?? [])
       }
     } catch {
       /* non-fatal — the list just won't populate */
@@ -1738,6 +1738,7 @@ export default function ActivityApp() {
                     <th className="w-16 px-3 py-2">incl.</th>
                     <th className="px-3 py-2">question</th>
                     <th className="px-3 py-2">domains</th>
+                    <th className="w-32 px-3 py-2">author</th>
                     <th className="w-40 px-3 py-2">saved</th>
                     <th className="w-24 px-3 py-2">qa_id</th>
                   </tr>
@@ -1797,6 +1798,9 @@ export default function ActivityApp() {
                           </div>
                         </td>
                         <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {r.author ?? '—'}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
                           {formatWhen(r.timestamp)}
                         </td>
                         <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
@@ -1806,7 +1810,7 @@ export default function ActivityApp() {
                       {expanded.has(r.qa_id) && (
                         <tr className="bg-muted">
                           <td />
-                          <td colSpan={4} className="px-3 py-3">
+                          <td colSpan={5} className="px-3 py-3">
                             {editingQaId === r.qa_id ? (
                               <div className="space-y-2">
                                 <textarea
@@ -2452,7 +2456,7 @@ export default function ActivityApp() {
               <span className="text-xs text-muted-foreground">
                 {indexBuilds === null
                   ? 'Loading…'
-                  : `${indexBuilds.length} build${indexBuilds.length === 1 ? '' : 's'} recorded · newest first`}
+                  : `${indexBuilds.length} ${indexBuilds.length === 1 ? 'index' : 'indices'} · newest first`}
               </span>
               <button
                 type="button"
@@ -2467,15 +2471,15 @@ export default function ActivityApp() {
 
             {/* Per-domain indices (#128): status + a targeted Build per domain. */}
             {domainStatus !== null && domainStatus.length > 0 && (
-              <section className="overflow-x-auto rounded-md border border-border bg-card shadow-sm">
-                <div className="border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <section className="overflow-x-auto rounded-md border border-border border-l-2 border-l-emerald-400/60 bg-card shadow-sm">
+                <div className="border-b border-border bg-emerald-50/50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300">
                   domains — build each independently
                 </div>
                 <table className="w-full text-sm">
                   <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
+                      <th className="px-3 py-2">title</th>
                       <th className="px-3 py-2">domain</th>
-                      <th className="px-3 py-2">status</th>
                       <th className="px-3 py-2 text-right">chunks</th>
                       <th className="px-3 py-2 text-right">sources</th>
                       <th className="px-3 py-2 text-right">built</th>
@@ -2484,20 +2488,12 @@ export default function ActivityApp() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {domainStatus.map((d) => (
-                      <tr key={d.slug} className="hover:bg-accent/30">
-                        <td className="whitespace-nowrap px-3 py-2 text-foreground">
-                          {d.display_name}
-                          <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{d.slug}</span>
-                        </td>
-                        <td className="px-3 py-2">
-                          {!d.enabled ? (
-                            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">disabled</span>
-                          ) : d.built ? (
-                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">built</span>
-                          ) : d.source_files > 0 ? (
-                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">not built</span>
-                          ) : (
-                            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">no sources</span>
+                      <tr key={d.slug} className={'hover:bg-accent/30' + (d.enabled ? '' : ' opacity-50')}>
+                        <td className="whitespace-nowrap px-3 py-2 text-foreground">{d.display_name}</td>
+                        <td className="whitespace-nowrap px-3 py-2">
+                          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">{d.slug}</span>
+                          {!d.enabled && (
+                            <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">disabled</span>
                           )}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{d.built ? d.chunks : '—'}</td>
@@ -2527,27 +2523,30 @@ export default function ActivityApp() {
 
             {indexBuilds !== null && indexBuilds.length === 0 && (
               <div className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
-                No index builds recorded yet — click Rebuild index.
+                No indices built yet — click Rebuild all, or Build a domain above.
               </div>
             )}
             {indexBuilds !== null && indexBuilds.length > 0 && (
-              <section className="overflow-x-auto rounded-md border border-border bg-card shadow-sm">
+              <section className="overflow-x-auto rounded-md border border-border border-l-2 border-l-sky-400/60 bg-card shadow-sm">
+                <div className="border-b border-border bg-sky-50/50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-sky-800 dark:bg-sky-950/20 dark:text-sky-300">
+                  indices — one row per build, newest first
+                </div>
                 <table className="w-full text-sm">
                   <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="w-6 px-2 py-2"></th>
-                      <th className="px-3 py-2">built</th>
-                      <th className="px-3 py-2">build</th>
-                      <th className="px-3 py-2">domain(s)</th>
+                      <th className="px-3 py-2">index</th>
+                      <th className="px-3 py-2">when</th>
                       <th className="px-3 py-2 text-right">chunks</th>
                       <th className="px-3 py-2 text-right">sources</th>
                       <th className="px-3 py-2 text-right">golds</th>
+                      <th className="px-3 py-2">built by</th>
                       <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {indexBuilds.map((b, i) => {
-                      const active = b.build_id != null && b.build_id === activeBuildId
+                      const active = b.build_id != null && activeBuildIds.includes(b.build_id)
                       const expanded = b.build_id != null && b.build_id === expandedBuild
                       return (
                         <Fragment key={b.build_id ?? i}>
@@ -2557,22 +2556,26 @@ export default function ActivityApp() {
                             className={'cursor-pointer ' + (active ? 'bg-accent/40' : 'hover:bg-accent/30')}
                           >
                             <td className="px-2 py-2 text-[10px] text-muted-foreground">{expanded ? '▼' : '▶'}</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-foreground">
-                              {b.built_at ? new Date(b.built_at).toLocaleString() : '—'}
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
-                              {b.build_num} ({b.git_sha})
-                            </td>
                             <td className="px-3 py-2">
                               <div className="flex flex-wrap gap-1">
-                                {(b.domains ?? []).map((d) => (
-                                  <span key={d} className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">{d}</span>
-                                ))}
+                                {(b.domains ?? []).length === 0 ? (
+                                  <span className="text-xs italic text-muted-foreground">all</span>
+                                ) : (
+                                  (b.domains ?? []).map((d) => (
+                                    <span key={d} className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">{d}</span>
+                                  ))
+                                )}
                               </div>
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
+                              {b.built_at ? new Date(b.built_at).toLocaleString() : '—'}
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums">{b.count}</td>
                             <td className="px-3 py-2 text-right tabular-nums">{b.sources.length}</td>
                             <td className="px-3 py-2 text-right tabular-nums">{b.gold_answers}</td>
+                            <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
+                              {b.build_num} ({b.git_sha})
+                            </td>
                             <td className="px-3 py-2">
                               {active && (
                                 <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
