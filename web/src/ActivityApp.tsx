@@ -216,6 +216,8 @@ interface UserRow {
 type AdminTab = 'questions' | 'feedback' | 'golds' | 'sources' | 'indices' | 'users' | 'audit'
 
 type SortDir = 'asc' | 'desc'
+type QuestionSortCol = 'rating' | 'has_gold' | 'author' | 'timestamp'
+type GoldSortCol = 'included' | 'question' | 'author' | 'timestamp'
 type FeedbackSortCol = 'rating' | 'has_gold' | 'timestamp'
 type SourceSortCol = 'included' | 'domain' | 'path' | 'size_bytes' | 'modified_at'
 type UserSortCol = 'label' | 'role' | 'lastSeen' | 'questions' | 'golds' | 'weeklyTokens'
@@ -348,6 +350,40 @@ function DomainChips({ domains }: { domains: string[] }) {
   )
 }
 
+// The shared domain "includes" filter — a chip row above a record table. A row
+// matches when its domains include the selected one (multi-domain rows appear
+// under each of their domains). Options are ALPHABETIZED, mirroring DomainChips.
+// Hidden when there's nothing to filter (0 or 1 domain in view).
+function DomainFilter({
+  options,
+  value,
+  onChange,
+}: {
+  options: string[]
+  value: string | null
+  onChange: (d: string | null) => void
+}) {
+  if (options.length <= 1) return null
+  const chip = (active: boolean) =>
+    'rounded-full border px-2.5 py-0.5 font-medium transition-colors ' +
+    (active
+      ? 'border-foreground bg-foreground text-background'
+      : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+      <span className="text-muted-foreground">Domain:</span>
+      <button type="button" onClick={() => onChange(null)} className={chip(value === null)}>
+        All
+      </button>
+      {options.map((d) => (
+        <button key={d} type="button" onClick={() => onChange(d)} className={chip(value === d)}>
+          {d}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function ActivityApp() {
   const [rows, setRows] = useState<AdminGoldRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -370,6 +406,8 @@ export default function ActivityApp() {
   const [sourcePending, setSourcePending] = useState<Set<string>>(() => new Set())
   const [questions, setQuestions] = useState<AdminQuestionRow[] | null>(null)
   const [questionDomain, setQuestionDomain] = useState<string | null>(null)  // null = all
+  const [feedbackDomain, setFeedbackDomain] = useState<string | null>(null)
+  const [goldDomain, setGoldDomain] = useState<string | null>(null)
   const [expandedQ, setExpandedQ] = useState<Set<string>>(() => new Set())
   // Add a gold to a past question (#51): the promotion payoff — reuses POST /gold.
   const [addGoldQa, setAddGoldQa] = useState<string | null>(null)
@@ -396,6 +434,14 @@ export default function ActivityApp() {
   const [audit, setAudit] = useState<AuditRow[] | null>(null)
   // Sort state per table. Defaults chosen to match the backend's natural
   // return order so a first render doesn't reshuffle.
+  const [questionSort, setQuestionSort] = useState<{ col: QuestionSortCol; dir: SortDir }>({
+    col: 'timestamp',
+    dir: 'desc',
+  })
+  const [goldSort, setGoldSort] = useState<{ col: GoldSortCol; dir: SortDir }>({
+    col: 'timestamp',
+    dir: 'desc',
+  })
   const [feedbackSort, setFeedbackSort] = useState<{ col: FeedbackSortCol; dir: SortDir }>({
     col: 'timestamp',
     dir: 'desc',
@@ -1120,6 +1166,30 @@ export default function ActivityApp() {
     return 0
   })
 
+  // pt.2 — domain includes-filter + column sort for the remaining record tabs.
+  const feedbackDomainOptions = Array.from(
+    new Set((feedback ?? []).flatMap(rowDomains)),
+  ).sort()
+  const shownFeedback = sortedFeedback?.filter(
+    (f) => !feedbackDomain || rowDomains(f).includes(feedbackDomain),
+  )
+
+  const goldDomainOptions = Array.from(
+    new Set((rows ?? []).flatMap(rowDomains)),
+  ).sort()
+  const shownGolds = (rows ?? [])
+    .filter((r) => !goldDomain || rowDomains(r).includes(goldDomain))
+    .slice()
+    .sort((a, b) => {
+      const { col, dir } = goldSort
+      const mult = dir === 'asc' ? 1 : -1
+      const av = col === 'included' ? Number(a.included) : (a[col] ?? '')
+      const bv = col === 'included' ? Number(b.included) : (b[col] ?? '')
+      if (av < bv) return -1 * mult
+      if (av > bv) return 1 * mult
+      return 0
+    })
+
   // Users tab: join the allowlist (who can log in) with role assignments,
   // keyed by token. Base rows on the allowlist — a role without an invite
   // entry can't sign in, so it isn't a "user" here.
@@ -1291,54 +1361,69 @@ export default function ActivityApp() {
           const domainOptions = Array.from(
             new Set(questions.flatMap((q) => rowDomains(q))),
           ).sort()
-          const shown = questionDomain
+          const shown = (questionDomain
             ? questions.filter((q) => rowDomains(q).includes(questionDomain))
-            : questions
+            : questions)
+            .slice()
+            .sort((a, b) => {
+              const { col, dir } = questionSort
+              const mult = dir === 'asc' ? 1 : -1
+              const av = col === 'has_gold' ? Number(a.has_gold)
+                : col === 'rating' ? (a.rating ?? -1)
+                  : (a[col] ?? '')
+              const bv = col === 'has_gold' ? Number(b.has_gold)
+                : col === 'rating' ? (b.rating ?? -1)
+                  : (b[col] ?? '')
+              if (av < bv) return -1 * mult
+              if (av > bv) return 1 * mult
+              return 0
+            })
           return (
           <section className="overflow-x-auto">
-            {domainOptions.length > 1 && (
-              <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="text-muted-foreground">Domain:</span>
-                <button
-                  type="button"
-                  onClick={() => setQuestionDomain(null)}
-                  className={
-                    'rounded-full border px-2.5 py-0.5 font-medium transition-colors ' +
-                    (questionDomain === null
-                      ? 'border-foreground bg-foreground text-background'
-                      : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
-                  }
-                >
-                  All
-                </button>
-                {domainOptions.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setQuestionDomain(d)}
-                    className={
-                      'rounded-full border px-2.5 py-0.5 font-medium transition-colors ' +
-                      (questionDomain === d
-                        ? 'border-foreground bg-foreground text-background'
-                        : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
-                    }
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            )}
+            <DomainFilter options={domainOptions} value={questionDomain} onChange={setQuestionDomain} />
             <table className="w-full text-sm">
               <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Question</th>
                   <th className="px-3 py-2">Domains</th>
                   {can('questions.view.all') && (
-                    <th className="px-3 py-2">Asked by</th>
+                    <th className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setQuestionSort((s) => nextSort(s, 'author'))}
+                        className="hover:text-foreground"
+                      >
+                        Asked by{sortIndicator(questionSort.col === 'author', questionSort.dir)}
+                      </button>
+                    </th>
                   )}
-                  <th className="px-3 py-2 text-center">Rating</th>
-                  <th className="px-3 py-2 text-center">Gold</th>
-                  <th className="px-3 py-2">When</th>
+                  <th className="px-3 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setQuestionSort((s) => nextSort(s, 'rating'))}
+                      className="hover:text-foreground"
+                    >
+                      Rating{sortIndicator(questionSort.col === 'rating', questionSort.dir)}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setQuestionSort((s) => nextSort(s, 'has_gold'))}
+                      className="hover:text-foreground"
+                    >
+                      Gold{sortIndicator(questionSort.col === 'has_gold', questionSort.dir)}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setQuestionSort((s) => nextSort(s, 'timestamp'))}
+                      className="hover:text-foreground"
+                    >
+                      When{sortIndicator(questionSort.col === 'timestamp', questionSort.dir)}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -1555,6 +1640,8 @@ export default function ActivityApp() {
           </div>
         )}
         {activeTab === 'feedback' && feedback !== null && feedback.length > 0 && (
+          <>
+            <DomainFilter options={feedbackDomainOptions} value={feedbackDomain} onChange={setFeedbackDomain} />
           <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -1592,7 +1679,7 @@ export default function ActivityApp() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {sortedFeedback!.map((f) => {
+                {shownFeedback!.map((f) => {
                   const needsAttention = f.rating <= 3 && !f.has_gold
                   const editing = editingFb === f.qa_id
                   return (
@@ -1747,6 +1834,7 @@ export default function ActivityApp() {
               </tbody>
             </table>
           </section>
+          </>
         )}
 
         {activeTab === 'golds' && rows === null && !error && (
@@ -1759,20 +1847,45 @@ export default function ActivityApp() {
         )}
         {activeTab === 'golds' && rows !== null && rows.length > 0 && (
           <>
+            <DomainFilter options={goldDomainOptions} value={goldDomain} onChange={setGoldDomain} />
             <section className="overflow-hidden rounded-md border border-border bg-card shadow-sm">
               <table className="w-full text-sm">
                 <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className="w-16 px-3 py-2">incl.</th>
+                    <th className="w-16 px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setGoldSort((s) => nextSort(s, 'included'))}
+                        className="hover:text-foreground"
+                      >
+                        incl.{sortIndicator(goldSort.col === 'included', goldSort.dir)}
+                      </button>
+                    </th>
                     <th className="px-3 py-2">question</th>
                     <th className="px-3 py-2">domains</th>
-                    <th className="w-32 px-3 py-2">author</th>
-                    <th className="w-40 px-3 py-2">saved</th>
+                    <th className="w-32 px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setGoldSort((s) => nextSort(s, 'author'))}
+                        className="hover:text-foreground"
+                      >
+                        author{sortIndicator(goldSort.col === 'author', goldSort.dir)}
+                      </button>
+                    </th>
+                    <th className="w-40 px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setGoldSort((s) => nextSort(s, 'timestamp'))}
+                        className="hover:text-foreground"
+                      >
+                        saved{sortIndicator(goldSort.col === 'timestamp', goldSort.dir)}
+                      </button>
+                    </th>
                     <th className="w-24 px-3 py-2">qa_id</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {rows.map((r) => (
+                  {shownGolds.map((r) => (
                     <Fragment key={r.qa_id}>
                       <tr className="hover:bg-accent">
                         <td className="px-3 py-2">
