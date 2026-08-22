@@ -1437,7 +1437,7 @@ export default function ActivityApp() {
                       onClick={() => setQuestionSort((s) => nextSort(s, 'timestamp'))}
                       className="uppercase hover:text-foreground"
                     >
-                      When{sortIndicator(questionSort.col === 'timestamp', questionSort.dir)}
+                      Asked{sortIndicator(questionSort.col === 'timestamp', questionSort.dir)}
                     </button>
                   </th>
                 </tr>
@@ -1698,7 +1698,7 @@ export default function ActivityApp() {
                       onClick={() => setFeedbackSort((s) => nextSort(s, 'timestamp'))}
                       className="uppercase hover:text-foreground"
                     >
-                      when{sortIndicator(feedbackSort.col === 'timestamp', feedbackSort.dir)}
+                      rated{sortIndicator(feedbackSort.col === 'timestamp', feedbackSort.dir)}
                     </button>
                   </th>
                 </tr>
