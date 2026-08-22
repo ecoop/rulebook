@@ -1266,6 +1266,47 @@ def _view_scope(view_all_cap: str) -> tuple[bool, str | None]:
     return False, (guest.recipient if guest else None)
 
 
+# Domain scoping for admin views & actions (#156). Admin (level7) and Superuser
+# (level8) are omnipotent across every domain; Reviewer (level5) / Director
+# (level6) are confined to their allowed_domains. An unrestricted ("*") allowlist
+# also resolves to "all", so an ungranted admin keeps today's see-everything
+# behavior — scoping only bites once a concrete allowlist is set.
+_UNSCOPED_ROLE_LEVEL = 7
+
+
+def _admin_domain_scope() -> set[str] | None:
+    """Domains the caller may see/act on in admin views; None = all domains."""
+    guest = get_current_guest()
+    role = resolve_role(guest.token if guest else None)
+    if level_number(role) >= _UNSCOPED_ROLE_LEVEL:
+        return None
+    allowed = resolve_allowed_domains(guest.token if guest else None)
+    return None if allowed is None else set(allowed)
+
+
+def _in_scope(scope: set[str] | None, domains: list[str]) -> bool:
+    """Visible when unscoped (None) or the row intersects the caller's scope —
+    a multi-domain row shows if ANY of its domains is in scope."""
+    return scope is None or any(d in scope for d in domains)
+
+
+def _require_domain_in_scope(scope: set[str] | None, domain: str) -> None:
+    """403 if a scoped caller tries to act on a domain outside their scope."""
+    if scope is not None and domain not in scope:
+        raise HTTPException(
+            status_code=403,
+            detail=f"domain '{domain}' is outside your assigned domains.",
+        )
+
+
+def _gold_row_domains(g: dict) -> list[str]:
+    """Effective domains of a raw gold row — same resolution the golds list uses
+    (persisted `domains` ▸ headings ▸ qa row ▸ legacy), for scope guards (#156)."""
+    qa_index = {r["qa_id"]: r for r in read_qa_entries()}
+    known = set(list_domains(settings.resolved_index_path)) | set(settings.gold_legacy_domains)
+    return gold_target_domains(g, qa_index, legacy=settings.gold_legacy_domains, known=known)
+
+
 def _audit(action: str, *, target: str | None = None, detail: dict | None = None) -> None:
     """Record a shared-state mutation to the audit trail (§5). Call AFTER the
     write succeeds so only committed actions are logged."""
@@ -1316,12 +1357,21 @@ def admin_list_golds() -> AdminGoldListResponse:
         )
         for g in golds
     ]
+    scope = _admin_domain_scope()  # #156: Reviewer/Director see only their domains
+    rows = [r for r in rows if _in_scope(scope, r.domains)]
     return AdminGoldListResponse(golds=rows)
 
 
 @app.post("/advanced/gold-curation", response_model=GoldCurationResponse, dependencies=[Depends(require_capability(CAP_GOLDS_CURATE))])
 def admin_set_gold_curation(req: GoldCurationRequest) -> GoldCurationResponse:
     """Toggle whether a specific gold is included in the next index rebuild."""
+    scope = _admin_domain_scope()  # #156: only curate golds in your domains
+    if scope is not None:
+        g = next((x for x in read_latest_golds() if x["gold_id"] == req.gold_id), None)
+        if g is None:
+            raise HTTPException(status_code=404, detail="gold not found.")
+        if not _in_scope(scope, _gold_row_domains(g)):
+            raise HTTPException(status_code=403, detail="this gold is outside your assigned domains.")
     log_gold_curation(req.gold_id, included=req.included)
     _audit(CAP_GOLDS_CURATE, target=req.gold_id, detail={"included": req.included})
     return GoldCurationResponse()
@@ -1343,6 +1393,9 @@ def admin_clone_gold(gold_id: str) -> CloneGoldResponse:
     src = next((g for g in read_latest_golds() if g["gold_id"] == gold_id), None)
     if src is None:
         raise HTTPException(status_code=404, detail="gold not found.")
+    scope = _admin_domain_scope()  # #156: only clone golds in your domains
+    if not _in_scope(scope, _gold_row_domains(src)):
+        raise HTTPException(status_code=403, detail="this gold is outside your assigned domains.")
     guest = get_current_guest()
     new_id = uuid.uuid4().hex
     log_gold(
@@ -1417,9 +1470,13 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
     # view-all reader still only gets Edit on the rows they authored.
     guest = get_current_guest()
     me_author = guest.recipient if guest else None
+    scope = _admin_domain_scope()  # #156
     rows: list[AdminFeedbackRow] = []
     for r in read_latest_feedback():
         if not see_all and r.get("author") != author:
+            continue
+        domains = _effective_domains(qa_index.get(r["qa_id"]), legacy)
+        if not _in_scope(scope, domains):
             continue
         rows.append(
             AdminFeedbackRow(
@@ -1428,7 +1485,7 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
                 rating=int(r["rating"]),
                 tags=list(r.get("tags") or []),
                 comment=r.get("comment"),
-                domains=_effective_domains(qa_index.get(r["qa_id"]), legacy),
+                domains=domains,
                 question=questions.get(r["qa_id"], ""),
                 has_gold=r["qa_id"] in gold_qa_ids,
                 is_own=r.get("author") == me_author,
@@ -1461,6 +1518,7 @@ def admin_list_questions() -> AdminQuestionListResponse:
     }
     my_golds = {g["qa_id"] for g in read_latest_golds() if g.get("author") == me_author}
     legacy = settings.gold_legacy_domains  # what an old, unrecorded "all" meant
+    scope = _admin_domain_scope()  # #156
     rows = [
         AdminQuestionRow(
             qa_id=r["qa_id"],
@@ -1475,7 +1533,8 @@ def admin_list_questions() -> AdminQuestionListResponse:
             author=r.get("author"),
         )
         for r in read_qa_entries()
-        if see_all or r.get("author") == me_author
+        if (see_all or r.get("author") == me_author)
+        and _in_scope(scope, _effective_domains(r, legacy))
     ]
     return AdminQuestionListResponse(questions=rows)
 
@@ -1494,9 +1553,12 @@ def admin_list_sources() -> AdminSourceListResponse:
 
     rules_root = settings.rules_dir
     curation = read_latest_source_curation()
+    scope = _admin_domain_scope()  # #156
 
     rows: list[AdminSourceRow] = []
     for src in discover_sources(rules_root, apply_curation=False):
+        if not _in_scope(scope, [src.domain]):
+            continue
         # Identity is "rules/<domain>/<file>" — kept stable (independent of
         # where rules_dir resolves) so source-curation keys keep matching.
         rel = (Path("rules") / src.path.relative_to(rules_root)).as_posix()
@@ -1516,6 +1578,10 @@ def admin_list_sources() -> AdminSourceListResponse:
 @app.post("/advanced/source-curation", response_model=SourceCurationResponse, dependencies=[Depends(require_capability(CAP_SOURCES_CURATE))])
 def admin_set_source_curation(req: SourceCurationRequest) -> SourceCurationResponse:
     """Toggle whether a source file is included in the next index rebuild."""
+    scope = _admin_domain_scope()  # #156: path is "rules/<domain>/<file>"
+    if scope is not None:
+        parts = req.path.split("/")
+        _require_domain_in_scope(scope, parts[1] if len(parts) > 2 and parts[0] == "rules" else "")
     log_source_curation(req.path, included=req.included)
     _audit(CAP_SOURCES_CURATE, target=req.path, detail={"included": req.included})
     return SourceCurationResponse()
@@ -1540,6 +1606,14 @@ def admin_rebuild_index(domain: str | None = None) -> RebuildIndexResponse:
     is vanishingly unlikely — noted as a real concern only if this
     ever goes multi-user.
     """
+    scope = _admin_domain_scope()  # #156
+    if scope is not None:
+        if domain is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Rebuilding all domains requires an unscoped role; specify a domain within your assigned set.",
+            )
+        _require_domain_in_scope(scope, domain)
     started = time.monotonic()
     # api/main.py lives at <root>/api/main.py in both the repo and the /app
     # image, so derive the app root from __file__. settings.repo_root can't be
@@ -1660,11 +1734,14 @@ def admin_index_builds() -> IndexBuildsResponse:
     # Every built domain serves its own index (#128), so the "active" set is the
     # current on-disk build_id per domain — not a single live build.
     root = settings.resolved_index_path
+    scope = _admin_domain_scope()  # #156
     active_build_ids = [
         bid
         for dom in list_domains(root)
-        if (bid := read_manifest(domain_index_path(root, dom)).get("build_id"))
+        if _in_scope(scope, [dom])
+        and (bid := read_manifest(domain_index_path(root, dom)).get("build_id"))
     ]
+    rows = [r for r in rows if _in_scope(scope, r.domains)]
     return IndexBuildsResponse(active_build_ids=active_build_ids, builds=rows)
 
 
@@ -1689,8 +1766,11 @@ def admin_domains() -> DomainsResponse:
     src_counts = Counter(
         s.domain for s in discover_sources(settings.rules_dir, apply_curation=False)
     )
+    scope = _admin_domain_scope()  # #156
     rows: list[DomainStatus] = []
     for slug in available_domains():
+        if not _in_scope(scope, [slug]):
+            continue
         info = domain_info(slug)
         manifest = read_manifest(domain_index_path(root, slug)) if slug in built else {}
         rows.append(
