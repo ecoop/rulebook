@@ -1606,43 +1606,52 @@ def admin_rebuild_index(domain: str | None = None) -> RebuildIndexResponse:
     is vanishingly unlikely — noted as a real concern only if this
     ever goes multi-user.
     """
-    scope = _admin_domain_scope()  # #156
-    if scope is not None:
-        if domain is None:
-            raise HTTPException(
-                status_code=403,
-                detail="Rebuilding all domains requires an unscoped role; specify a domain within your assigned set.",
-            )
+    # #156: a specific domain must be in the caller's scope; "rebuild all" (no
+    # domain) means the whole corpus for an unscoped caller (Admin/Superuser),
+    # or just the caller's in-scope domains for a scoped Reviewer/Director — so
+    # "all" reads as "all of *your* domains", never everything and never a 403.
+    scope = _admin_domain_scope()
+    if domain is not None:
         _require_domain_in_scope(scope, domain)
-    started = time.monotonic()
+        targets: list[str] | None = [domain]
+    elif scope is None:
+        targets = None  # unscoped: a single build over every domain
+    else:
+        targets = sorted(d for d in available_domains() if d in scope)
+        if not targets:
+            raise HTTPException(status_code=400, detail="No domains in your assigned set to rebuild.")
+
     # api/main.py lives at <root>/api/main.py in both the repo and the /app
     # image, so derive the app root from __file__. settings.repo_root can't be
     # used here: once rulebook is pip-installed it resolves to a site-packages
     # ancestor (/opt/venv/…), where scripts/ doesn't exist — the rebuild button
     # failed with "can't open …/scripts/build_index.py".
     app_root = Path(__file__).resolve().parent.parent
-    cmd = [sys.executable, str(app_root / "scripts" / "build_index.py")]
-    if domain:
-        cmd += ["--domain", domain]
-    proc = subprocess.run(
-        cmd,
-        cwd=str(app_root),
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
-    elapsed = time.monotonic() - started
+    script = str(app_root / "scripts" / "build_index.py")
+
+    def _run(cmd: list[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(cmd, cwd=str(app_root), capture_output=True, text=True, timeout=300)
 
     def _tail(s: str, lines: int = 20) -> str:
         return "\n".join(s.strip().splitlines()[-lines:])
 
-    ok = proc.returncode == 0
-    _audit(CAP_INDEX_REBUILD, detail={"ok": ok, "duration_seconds": round(elapsed, 2)})
+    started = time.monotonic()
+    if targets is None:
+        procs = [_run([sys.executable, script])]
+    else:
+        procs = [_run([sys.executable, script, "--domain", d]) for d in targets]
+    elapsed = time.monotonic() - started
+
+    ok = all(p.returncode == 0 for p in procs)
+    _audit(
+        CAP_INDEX_REBUILD,
+        detail={"ok": ok, "duration_seconds": round(elapsed, 2), "domains": targets},
+    )
     return RebuildIndexResponse(
         ok=ok,
         duration_seconds=round(elapsed, 2),
-        stdout_tail=_tail(proc.stdout),
-        stderr_tail=_tail(proc.stderr) if proc.returncode != 0 else "",
+        stdout_tail="\n".join(_tail(p.stdout) for p in procs),
+        stderr_tail="\n".join(_tail(p.stderr) for p in procs if p.returncode != 0),
     )
 
 
