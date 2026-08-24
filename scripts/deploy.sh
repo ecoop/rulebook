@@ -25,8 +25,12 @@ NUM="$(git rev-list --count HEAD)"
 test -n "$SHA" || { echo "error: empty git SHA" >&2; exit 1; }
 test -n "$NUM" || { echo "error: empty build number" >&2; exit 1; }
 
-if [ -n "$(git status --porcelain)" ]; then
-    echo "warning: working tree is dirty — the stamp ($SHA) will not match what is deployed" >&2
+# Warn only on uncommitted *tracked* changes — those would make the stamp ($SHA)
+# misrepresent the deployed code. Untracked files are expected here: the
+# copyrighted rules/ source docs intentionally ride along via `--source .` (they
+# stay out of git), and they don't affect the code stamp.
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    echo "warning: uncommitted tracked changes — the stamp ($SHA) will not match the deployed code" >&2
 fi
 
 echo "Deploying $SERVICE to $PROJECT ($REGION) — build $NUM ($SHA)"
