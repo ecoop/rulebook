@@ -159,8 +159,8 @@ ROLE_LEVELS: dict[str, dict[str, object]] = {
     "level2": {"level": 2, "name": "Annotator", "color": "#E5B80B", "description": "Comment on answers"},
     "level3": {"level": 3, "name": "Contributor", "color": "#E07A20", "description": "Suggest and revisit your own golds"},
     "level4": {"level": 4, "name": "Builder", "color": "#3A8C3A", "description": "See the passages and sources behind answers"},
-    "level5": {"level": 5, "name": "Reviewer", "color": "#2C64B4", "description": "Review everyone's work"},
-    "level6": {"level": 6, "name": "Director", "color": "#7A4A2B", "description": "Curate & clone golds, rebuild index, audit"},
+    "level5": {"level": 5, "name": "Reviewer", "color": "#2C64B4", "description": "Review everyone's work in their domains"},
+    "level6": {"level": 6, "name": "Director", "color": "#7A4A2B", "description": "Curate & clone golds, rebuild, audit — in their domains"},
     "level7": {"level": 7, "name": "Admin", "color": "#1A1A1A", "description": "Users tab; change roles"},
     "level8": {"level": 8, "name": "Superuser", "color": "#C4272E", "description": "Remove/rename users; RBAC config"},
 }

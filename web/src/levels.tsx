@@ -44,14 +44,14 @@ export const LEVELS: readonly LevelInfo[] = [
   {
     name: 'Reviewer',
     color: '#2C64B4',
-    description: "Review everyone's work",
-    unlocks: "See everyone's feedback and golds, not just your own.",
+    description: "Review everyone's work in their domains",
+    unlocks: "See everyone's feedback and golds within your assigned domains.",
   },
   {
     name: 'Director',
     color: '#7A4A2B',
-    description: 'Curate & clone golds, rebuild index, audit',
-    unlocks: 'Curate golds and sources, rebuild the index, and see who wrote what.',
+    description: 'Curate & clone golds, rebuild, audit — in their domains',
+    unlocks: 'Curate golds and sources, rebuild, and see who wrote what — within your assigned domains.',
   },
   {
     name: 'Admin',
