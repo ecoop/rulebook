@@ -2641,7 +2641,7 @@ export default function ActivityApp() {
                       <th className="px-3 py-2">domain</th>
                       <th className="px-3 py-2 text-right">chunks</th>
                       <th className="px-3 py-2 text-right">sources</th>
-                      <th className="px-3 py-2 text-right">built</th>
+                      <th className="px-3 py-2 text-right">updated</th>
                       <th className="px-3 py-2 text-right">action</th>
                     </tr>
                   </thead>
@@ -2695,10 +2695,10 @@ export default function ActivityApp() {
                     <tr>
                       <th className="w-6 px-2 py-2"></th>
                       <th className="px-3 py-2">index</th>
-                      <th className="px-3 py-2">when</th>
                       <th className="px-3 py-2 text-right">chunks</th>
                       <th className="px-3 py-2 text-right">sources</th>
                       <th className="px-3 py-2 text-right">golds</th>
+                      <th className="px-3 py-2">built</th>
                       <th className="px-3 py-2">built by</th>
                       <th className="px-3 py-2"></th>
                     </tr>
@@ -2726,12 +2726,12 @@ export default function ActivityApp() {
                                 )}
                               </div>
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
-                              {b.built_at ? new Date(b.built_at).toLocaleString() : '—'}
-                            </td>
                             <td className="px-3 py-2 text-right tabular-nums">{b.count}</td>
                             <td className="px-3 py-2 text-right tabular-nums">{b.sources.length}</td>
                             <td className="px-3 py-2 text-right tabular-nums">{b.gold_answers}</td>
+                            <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
+                              {b.built_at ? new Date(b.built_at).toLocaleString() : '—'}
+                            </td>
                             <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
                               {b.build_num} ({b.git_sha})
                             </td>
