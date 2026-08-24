@@ -121,12 +121,47 @@ def test_director_clone_guarded_by_domain(client, monkeypatch):
     assert client.post("/advanced/golds/gb/clone").status_code == 403
 
 
-def test_director_rebuild_guarded_by_domain(client, monkeypatch):
-    # An out-of-scope domain and "rebuild all" (no domain) are both refused for a
-    # scoped Director; the actual in-scope build isn't exercised here (subprocess).
+def test_rebuild_scoped_all_targets_only_caller_domains(client, monkeypatch):
+    import api.main as main
+
+    calls: list[list[str]] = []
+
+    class _Proc:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        return _Proc()
+
+    monkeypatch.setattr(main.subprocess, "run", fake_run)
+    monkeypatch.setattr(main, "log_audit", lambda **k: None)
+    monkeypatch.setattr(main, "available_domains", lambda: ["ultimate", "goaltimate", "badminton"])
+
+    def _domains(cmds):
+        return [c[c.index("--domain") + 1] for c in cmds if "--domain" in c]
+
+    # Director scoped to ultimate.
     _as(client, "tok_dir")
+    # Out-of-scope specific domain → 403, and no build runs.
+    calls.clear()
     assert client.post("/advanced/rebuild-index", params={"domain": "badminton"}).status_code == 403
-    assert client.post("/advanced/rebuild-index").status_code == 403
+    assert calls == []
+    # In-scope specific domain → builds just that one.
+    calls.clear()
+    assert client.post("/advanced/rebuild-index", params={"domain": "ultimate"}).status_code == 200
+    assert _domains(calls) == ["ultimate"]
+    # "Rebuild all" for a scoped caller → ONLY their in-scope domains, never badminton/all.
+    calls.clear()
+    assert client.post("/advanced/rebuild-index").status_code == 200
+    assert _domains(calls) == ["ultimate"]
+
+    # Admin is unscoped → "rebuild all" is one build over the whole corpus (no --domain).
+    _as(client, "tok_admin")
+    calls.clear()
+    assert client.post("/advanced/rebuild-index").status_code == 200
+    assert len(calls) == 1 and "--domain" not in calls[0]
 
 
 def test_director_source_curation_guarded_by_domain(client, monkeypatch):
