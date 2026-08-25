@@ -241,6 +241,24 @@ function loadUserSort(): { col: UserSortCol; dir: SortDir } {
   return { col: 'label', dir: 'asc' }
 }
 
+const ACTIVITY_TAB_KEY = 'rulebook.activityTab'
+const ACTIVITY_TABS: readonly AdminTab[] = [
+  'questions', 'feedback', 'golds', 'sources', 'indices', 'users', 'audit',
+]
+
+// Restore the last-viewed Activity tab so a reload lands you back where you
+// were, rather than snapping to Questions. Validated against the known set (a
+// stale value or private-mode read error falls back to Questions).
+function loadActivityTab(): AdminTab {
+  try {
+    const v = localStorage.getItem(ACTIVITY_TAB_KEY)
+    if (v && (ACTIVITY_TABS as readonly string[]).includes(v)) return v as AdminTab
+  } catch {
+    /* no/invalid stored value — use the default */
+  }
+  return 'questions'
+}
+
 // Compact "3d ago" style for the Users tab's last-seen column.
 function fmtRelative(iso: string | null): string {
   if (!iso) return '—'
@@ -417,7 +435,7 @@ export default function ActivityApp() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   // Sources tab state
-  const [activeTab, setActiveTab] = useState<AdminTab>('questions')
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => loadActivityTab())
   const [sources, setSources] = useState<AdminSourceRow[] | null>(null)
   const [sourcePending, setSourcePending] = useState<Set<string>>(() => new Set())
   const [questions, setQuestions] = useState<AdminQuestionRow[] | null>(null)
@@ -522,6 +540,32 @@ export default function ActivityApp() {
   useEffect(() => {
     void refreshMe()
   }, [])
+
+  // Remember the active tab across reloads.
+  useEffect(() => {
+    try {
+      localStorage.setItem(ACTIVITY_TAB_KEY, activeTab)
+    } catch {
+      /* private mode — non-fatal */
+    }
+  }, [activeTab])
+
+  // If the restored tab isn't one this caller can see (e.g. a role change since
+  // last visit), fall back to the first visible tab. Guarded on a non-empty set
+  // so it doesn't fire before /me's capabilities load.
+  useEffect(() => {
+    const has = (c: string) => caps.includes(c)
+    const visible: AdminTab[] = [
+      ...(has('activity.view') ? (['questions'] as AdminTab[]) : []),
+      ...(has('feedback.view') ? (['feedback'] as AdminTab[]) : []),
+      ...(has('golds.view') ? (['golds'] as AdminTab[]) : []),
+      ...(has('sources.view') ? (['sources'] as AdminTab[]) : []),
+      ...(has('users.view') ? (['users'] as AdminTab[]) : []),
+      ...(has('index.rebuild') ? (['indices'] as AdminTab[]) : []),
+      ...(has('attribution.view') ? (['audit'] as AdminTab[]) : []),
+    ]
+    if (visible.length > 0 && !visible.includes(activeTab)) setActiveTab(visible[0])
+  }, [caps, activeTab])
 
   // Pre-check the add-invite domain selector to the default, until the creator
   // touches it (re-seeds after each successful add, when touched resets).
