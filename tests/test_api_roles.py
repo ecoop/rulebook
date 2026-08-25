@@ -228,6 +228,29 @@ def test_mutation_is_audited_and_audit_is_gated(client, monkeypatch):
     assert client.get("/advanced/audit").status_code == 403
 
 
+def test_reload_logs_gated_and_returns_counts(client, monkeypatch):
+    import api.main as main
+
+    calls: list = []
+    monkeypatch.setattr(main, "sync_logs_from_gcs", lambda: calls.append("synced"))
+    monkeypatch.setattr(main, "read_qa_entries", lambda: [{}, {}])
+    monkeypatch.setattr(main, "read_latest_feedback", lambda: [{}])
+    monkeypatch.setattr(main, "read_latest_golds", lambda: [{}, {}, {}])
+    monkeypatch.setattr(main, "log_audit", lambda **k: None)
+
+    # index.rebuild is level6+; admin (level7) holds it → re-syncs + reports counts.
+    _as(client, "tok_admin")
+    r = client.post("/advanced/reload-logs")
+    assert r.status_code == 200
+    assert r.json() == {"questions": 2, "feedback": 1, "golds": 3}
+    assert calls == ["synced"]
+
+    # a novice lacks index.rebuild → 403, and the sync is not called again.
+    _as(client, "tok_nov")
+    assert client.post("/advanced/reload-logs").status_code == 403
+    assert calls == ["synced"]
+
+
 def test_invite_tokens_superuser_only(client):
     _as(client, "tok_nov")
     assert client.get("/advanced/invite-tokens").status_code == 403
