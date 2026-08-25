@@ -137,7 +137,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AskResponse | null>(null)
   const [meta, setMeta] = useState<Meta | null>(null)
-  const [sourcesOpen, setSourcesOpen] = useState(true)
+  // Start collapsed — the answer is the headline; passages are opt-in detail.
+  const [sourcesOpen, setSourcesOpen] = useState(false)
   // Rating + tags + comment state is scoped to the *current* result — clearing
   // on new submissions so a prior vote never bleeds onto a new answer.
   const [rating, setRating] = useState<Rating | null>(null)
@@ -770,10 +771,17 @@ export default function App() {
                 </span>
               </button>
               {sourcesOpen && (
-                <div className="divide-y divide-border border-t border-border">
-                  {result.chunks.map((c, i) => (
-                    <ChunkRow key={i} chunk={c} />
-                  ))}
+                <div className="border-t border-border">
+                  <p className="border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+                    <span className="font-mono text-foreground">d</span> = each passage's{' '}
+                    <span className="font-medium text-foreground">distance</span> from your question
+                    in meaning — lower is closer (0 = identical).
+                  </p>
+                  <div className="divide-y divide-border">
+                    {result.chunks.map((c, i) => (
+                      <ChunkRow key={i} chunk={c} />
+                    ))}
+                  </div>
                 </div>
               )}
             </section>
@@ -816,7 +824,7 @@ function ChunkRow({ chunk }: { chunk: Chunk }) {
         </span>
         <span className="font-mono text-foreground">{chunk.rule_id}</span>
         <span className="text-muted-foreground">{pages}</span>
-        <span className="ml-auto font-mono text-muted-foreground" title="L2 distance on unit vectors; lower = more similar">
+        <span className="ml-auto font-mono text-muted-foreground">
           d={chunk.distance.toFixed(3)}
         </span>
       </div>
