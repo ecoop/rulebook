@@ -80,13 +80,33 @@ def sync_logs_from_gcs() -> None:
 
 
 def persist_log(filename: str) -> None:
-    """Upload one log file to GCS after an append. Best-effort no-op off GCS."""
+    """Upload one log file to GCS after an append. Best-effort no-op off GCS.
+
+    Clobber guard (#165): these logs are append-only, so a correctly-synced
+    local file only ever grows — it should never be smaller than the remote. If
+    it is, this instance's copy is stale (e.g. a backfill ran elsewhere and
+    grew the remote), and uploading would overwrite those newer rows. Refuse and
+    log instead of shrinking the durable log. (Recover by re-syncing this
+    instance — ``sync_logs_from_gcs`` / the reload-logs admin action.)
+    """
     if not _enabled():
         return
     path = settings.data_dir / "logs" / filename
+    if not path.exists():
+        return
     try:
-        if path.exists():
-            _bucket().blob(f"{_GCS_PREFIX}{filename}").upload_from_filename(str(path))
+        bucket = _bucket()
+        remote = bucket.get_blob(f"{_GCS_PREFIX}{filename}")  # None if absent; carries .size
+        local_size = path.stat().st_size
+        if remote is not None and (remote.size or 0) > local_size:
+            log.warning(
+                "log sync: refusing to shrink %s (local %d B < remote %d B) — this "
+                "copy looks stale; skipping upload to avoid clobbering newer rows. "
+                "Re-sync this instance (reload-logs) to recover.",
+                filename, local_size, remote.size or 0,
+            )
+            return
+        bucket.blob(f"{_GCS_PREFIX}{filename}").upload_from_filename(str(path))
     except Exception:  # noqa: BLE001 — a request must survive a bad bucket write
         log.exception(
             "log sync: failed uploading %s to GCS; next append will re-sync", filename
