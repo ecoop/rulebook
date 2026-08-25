@@ -1,6 +1,15 @@
 # Deploy runbook — flip rulebook.cooper.nu to a gated demo
 
-_Last updated: 2026-08-11_
+_Last updated: 2026-08-25_
+
+> **⚠️ SUPERSEDED — historical.** This runbook targets the original
+> `<SRC_PROJECT>` project and its `<SRC_BUCKET>` bucket, which were
+> **decommissioned** (see [migrate-to-<PROJECT>.md](migrate-to-<PROJECT>.md),
+> Phase 8). Rulebook now runs in its own **`<PROJECT>`** project with the
+> **`<STATE_BUCKET>`** bucket; deploy with `./scripts/deploy.sh`. The
+> commands below still point at the dead project/bucket — for any live CLI state
+> op use `GCS_STATE_BUCKET=<STATE_BUCKET> --project <PROJECT>`. Kept for
+> the conceptual walkthrough (gating flip, cost caps, invite management) only.
 
 Operator runbook for turning the **already-deployed** rulebook service into an invite-only, cost-capped demo. Conceptual background is in [demo-mode.md](demo-mode.md); roles are in [roles.md](roles.md). Every command here is **outward/human-executed** — run them yourself; don't hand them to an agent.
 

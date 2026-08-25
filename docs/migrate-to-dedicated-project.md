@@ -1,11 +1,16 @@
 # Migrate rulebook → its own `<PROJECT>` project
 
-_Last updated: 2026-08-11_
+_Last updated: 2026-08-25_
 
 > **Executed 2026-08-11.** Phases 1–6 done and verified — `rulebook.cooper.nu` now serves
-> from `<PROJECT>` (401 gate, Coop=superuser). **Only Phase 8 (decommission) is
-> pending** — the old bits in `<SRC_PROJECT>` are left as rollback insurance. This
-> doc doubles as the template for the same another app / a sibling app moves.
+> from `<PROJECT>` (401 gate, Coop=superuser). This doc doubles as the template for
+> the same another app / a sibling app moves.
+>
+> **Phase 8 (decommission) in progress — 2026-08-25.** The stale `rulebook` service and
+> `<SRC_BUCKET>` bucket still linger in `<SRC_PROJECT>`; retiring them now. A full
+> pre-delete backup of `gs://<SRC_BUCKET>` (21 objects, 4.4 MB) was pulled to
+> `~/rulebook-decommission-backup-2026-08-25/` on 2026-08-25. Run the Phase 8 commands
+> below to complete; the shared `anthropic-api-key` / `voyage-api-key` secrets stay.
 
 rulebook was launched inside the shared **`<SRC_PROJECT>`** project by mistake.
 This runbook relocates it to a dedicated **`<PROJECT>`** project (one project
