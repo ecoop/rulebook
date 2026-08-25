@@ -51,6 +51,7 @@ def _known() -> set[str]:
 
 def cmd_backfill(args: argparse.Namespace) -> None:
     _require_gcs()
+    print(f"gold_domains: target bucket = gs://{os.environ['GCS_STATE_BUCKET']}/logs/  (verify this is prod's bucket)")
     sync_logs_from_gcs()  # pull the live gold.jsonl + qa_log.jsonl locally first
 
     golds = read_latest_golds()
