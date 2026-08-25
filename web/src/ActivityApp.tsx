@@ -425,6 +425,8 @@ export default function ActivityApp() {
   const [pending, setPending] = useState<Set<string>>(() => new Set())
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildResult, setRebuildResult] = useState<RebuildResult | null>(null)
+  const [reloadingLogs, setReloadingLogs] = useState(false)
+  const [logsReloadMsg, setLogsReloadMsg] = useState<string | null>(null)
   const [indexBuilds, setIndexBuilds] = useState<IndexBuild[] | null>(null)
   const [activeBuildIds, setActiveBuildIds] = useState<string[]>([])
   const [expandedBuild, setExpandedBuild] = useState<string | null>(null)
@@ -1045,6 +1047,29 @@ export default function ActivityApp() {
       })
     } finally {
       setRebuilding(false)
+    }
+  }
+
+  // #165: re-pull the interaction logs from GCS into the running instance (e.g.
+  // after an out-of-band backfill), then refresh the log-derived tabs — so it
+  // shows without waiting for a redeploy.
+  async function reloadLogs() {
+    if (reloadingLogs) return
+    setReloadingLogs(true)
+    setLogsReloadMsg(null)
+    try {
+      const resp = await fetch('/advanced/reload-logs', { method: 'POST' })
+      if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`)
+      const d = (await resp.json()) as { questions: number; feedback: number; golds: number }
+      setLogsReloadMsg(`Reloaded ${d.questions} questions · ${d.feedback} feedback · ${d.golds} golds`)
+      void refresh()
+      void refreshFeedback()
+      void refreshQuestions()
+      void refreshUsers()
+    } catch (err) {
+      setLogsReloadMsg(err instanceof Error ? err.message : String(err))
+    } finally {
+      setReloadingLogs(false)
     }
   }
 
@@ -2661,15 +2686,27 @@ export default function ActivityApp() {
                   ? 'Loading…'
                   : `${indexBuilds.length} ${indexBuilds.length === 1 ? 'index' : 'indices'} · newest first`}
               </span>
-              <button
-                type="button"
-                onClick={rebuildIndex}
-                disabled={rebuilding || buildingDomain !== null}
-                title="Rebuilds every domain — re-embeds the whole corpus (slower). Use a per-domain Build below for a single-domain change."
-                className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-              >
-                {rebuilding ? 'Rebuilding all…' : 'Rebuild all'}
-              </button>
+              <div className="flex items-center gap-2">
+                {logsReloadMsg && <span className="text-xs text-muted-foreground">{logsReloadMsg}</span>}
+                <button
+                  type="button"
+                  onClick={reloadLogs}
+                  disabled={reloadingLogs}
+                  title="Re-pull the interaction logs (questions / feedback / golds) from GCS into the running instance — use after an out-of-band backfill so it shows without a redeploy."
+                  className="rounded-md border border-input bg-card px-3 py-1 text-xs font-medium text-foreground shadow-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {reloadingLogs ? 'Reloading…' : 'Reload logs'}
+                </button>
+                <button
+                  type="button"
+                  onClick={rebuildIndex}
+                  disabled={rebuilding || buildingDomain !== null}
+                  title="Rebuilds every domain — re-embeds the whole corpus (slower). Use a per-domain Build below for a single-domain change."
+                  className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                >
+                  {rebuilding ? 'Rebuilding all…' : 'Rebuild all'}
+                </button>
+              </div>
             </div>
 
             {/* Per-domain indices (#128): status + a targeted Build per domain. */}

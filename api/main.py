@@ -330,6 +330,13 @@ class RebuildIndexResponse(BaseModel):
     stderr_tail: str = Field(..., description="Last few lines of stderr if the build failed; empty on success.")
 
 
+class ReloadLogsResponse(BaseModel):
+    """Post-reload counts, so the caller can see the re-pull took effect (#165)."""
+    questions: int
+    feedback: int
+    golds: int
+
+
 class IndexInfoResponse(BaseModel):
     """Provenance of the live index, read from its manifest (all null before a
     stamped build exists)."""
@@ -1653,6 +1660,29 @@ def admin_rebuild_index(domain: str | None = None) -> RebuildIndexResponse:
         stdout_tail="\n".join(_tail(p.stdout) for p in procs),
         stderr_tail="\n".join(_tail(p.stderr) for p in procs if p.returncode != 0),
     )
+
+
+@app.post(
+    "/advanced/reload-logs",
+    response_model=ReloadLogsResponse,
+    dependencies=[Depends(require_capability(CAP_INDEX_REBUILD))],
+)
+def admin_reload_logs() -> ReloadLogsResponse:
+    """Re-pull the interaction logs from GCS into this instance (#165).
+
+    Logs are otherwise synced only at startup, so an out-of-band backfill (e.g.
+    the author retag) doesn't show until a redeploy. This refreshes the running
+    instance on demand instead. Safe under the single-writer model: it overwrites
+    the local copy with GCS, which already holds this instance's own writes.
+    """
+    sync_logs_from_gcs()
+    counts = {
+        "questions": len(read_qa_entries()),
+        "feedback": len(read_latest_feedback()),
+        "golds": len(read_latest_golds()),
+    }
+    _audit("logs.reload", detail=counts)
+    return ReloadLogsResponse(**counts)
 
 
 @app.get(

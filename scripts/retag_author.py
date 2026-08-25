@@ -40,6 +40,7 @@ def cmd_backfill(args: argparse.Namespace) -> None:
         sys.exit("retag_author: --author must be a non-empty label.")
 
     _require_gcs()
+    print(f"retag_author: target bucket = gs://{os.environ['GCS_STATE_BUCKET']}/logs/  (verify this is prod's bucket)")
     sync_logs_from_gcs()  # pull the live gold.jsonl locally first
 
     golds = read_latest_golds()
