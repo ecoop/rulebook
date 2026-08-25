@@ -1,11 +1,16 @@
 # Migrate rulebook → its own `rulebook-prod` project
 
-_Last updated: 2026-08-11_
+_Last updated: 2026-08-25_
 
 > **Executed 2026-08-11.** Phases 1–6 done and verified — `rulebook.cooper.nu` now serves
-> from `rulebook-prod` (401 gate, Coop=superuser). **Only Phase 8 (decommission) is
-> pending** — the old bits in `pitchcraft-demo` are left as rollback insurance. This
-> doc doubles as the template for the same jobscout / pitchcraft moves.
+> from `rulebook-prod` (401 gate, Coop=superuser). This doc doubles as the template for
+> the same jobscout / pitchcraft moves.
+>
+> **Phase 8 (decommission) in progress — 2026-08-25.** The stale `rulebook` service and
+> `rulebook-state` bucket still linger in `pitchcraft-demo`; retiring them now. A full
+> pre-delete backup of `gs://rulebook-state` (21 objects, 4.4 MB) was pulled to
+> `~/rulebook-decommission-backup-2026-08-25/` on 2026-08-25. Run the Phase 8 commands
+> below to complete; the shared `anthropic-api-key` / `voyage-api-key` secrets stay.
 
 rulebook was launched inside the shared **`pitchcraft-demo`** project by mistake.
 This runbook relocates it to a dedicated **`rulebook-prod`** project (one project

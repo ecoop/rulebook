@@ -45,14 +45,14 @@ def test_noop_when_gcs_but_no_bucket(monkeypatch):
 
 
 def test_sync_failure_is_swallowed(monkeypatch, tmp_path):
-    _make_settings(monkeypatch, kind="gcs", bucket="rulebook-state", data_root=tmp_path)
+    _make_settings(monkeypatch, kind="gcs", bucket="test-state-bucket", data_root=tmp_path)
     _boom_storage(monkeypatch)
     # A GCS failure at boot must not propagate.
     log_sync.sync_logs_from_gcs()
 
 
 def test_persist_failure_is_swallowed(monkeypatch, tmp_path):
-    _make_settings(monkeypatch, kind="gcs", bucket="rulebook-state", data_root=tmp_path)
+    _make_settings(monkeypatch, kind="gcs", bucket="test-state-bucket", data_root=tmp_path)
     logs = tmp_path / "logs"
     logs.mkdir(parents=True)
     (logs / "gold.jsonl").write_text('{"qa_id":"x"}\n')
