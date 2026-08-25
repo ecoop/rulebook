@@ -91,10 +91,11 @@ export function HowItWorks({ onClose }: { onClose: () => void }) {
           </Section>
 
           <Section n="—" title="Is it “agentic”?">
-            Honestly, barely. This is a straightforward retrieve-then-generate pipeline, not a system
-            of autonomous agents making plans and calling tools. The interesting engineering lives in
-            retrieval quality and the human-in-the-loop, not in agent orchestration — and it felt
-            right to be upfront about that.
+            Yes and no. This is a straightforward retrieve-then-generate pipeline, not a system of
+            autonomous agents making plans and calling tools. The interesting engineering lives in
+            retrieval quality and the human-in-the-loop, not in agent orchestration. There are agents
+            in it — Claude transcribes the image-only pages and writes each answer — but they run in a
+            fixed, deterministic order rather than one they choose.
           </Section>
         </div>
 
