@@ -44,6 +44,7 @@ interface AskResponse {
   output_tokens: number
   model: string
   stop_reason: string
+  unverified_citations?: string[]
 }
 
 type Rating = 1 | 2 | 3 | 4 | 5
@@ -618,6 +619,20 @@ export default function App() {
               <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                 {result.answer}
               </div>
+              {result.unverified_citations && result.unverified_citations.length > 0 && (
+                <div
+                  className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                  title="These citations don't match any retrieved passage — the model may have cited a rule it wasn't given."
+                >
+                  <span className="font-medium">
+                    {result.unverified_citations.length} unverified citation
+                    {result.unverified_citations.length > 1 ? 's' : ''}
+                  </span>{' '}
+                  — not found in the retrieved passages below:{' '}
+                  <span className="font-mono">{result.unverified_citations.join(', ')}</span>.
+                  Treat {result.unverified_citations.length > 1 ? 'these' : 'this'} with skepticism.
+                </div>
+              )}
               <div className="mt-3 text-xs text-muted-foreground">
                 {result.input_tokens.toLocaleString()} in ·{' '}
                 {result.output_tokens.toLocaleString()} out tokens
