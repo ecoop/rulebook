@@ -49,6 +49,7 @@ from rulebook.gold_domains import gold_target_domains  # noqa: E402
 from rulebook.gold_domains import qa_domains as _qa_domains  # noqa: E402
 from rulebook.index_sync import sync_index_from_gcs
 from rulebook.log_sync import sync_logs_from_gcs
+from rulebook.rules_sync import sync_rules_from_gcs
 
 app_state.initialize(settings)
 
@@ -61,6 +62,12 @@ sync_index_from_gcs()
 # /tmp, so pull prior feedback/gold/qa rows in at boot. Each append then
 # writes through to GCS (interaction_log._append). No-op in local dev.
 sync_logs_from_gcs()
+
+# #170: the source rule PDFs no longer ride in the image — pull them from the
+# bucket's rules/ prefix into the writable rules_dir so the source-listing /
+# diagnostics views populate. /ask doesn't need them (it reads the index); a
+# rebuild re-syncs for freshness. Best-effort; no-op in local dev.
+sync_rules_from_gcs()
 
 from jsonl_log import utc_now_iso  # noqa: E402
 
@@ -1660,6 +1667,12 @@ def admin_rebuild_index(domain: str | None = None) -> RebuildIndexResponse:
 
     def _tail(s: str, lines: int = 20) -> str:
         return "\n".join(s.strip().splitlines()[-lines:])
+
+    # #170: the rebuild subprocess reads the PDFs from settings.rules_dir, which
+    # on a hosted deploy is a writable dir populated from GCS (not baked into
+    # the image). Re-sync first so the rebuild uses the current corpus. No-op in
+    # local dev, where rules_dir already points at the repo's rules/.
+    sync_rules_from_gcs()
 
     started = time.monotonic()
     if targets is None:

@@ -44,8 +44,11 @@ data/
 .vscode/
 .idea/
 
-# Docs / rules — rules/*.pdf must ride along for index rebuilds.
-# The rules/ dir is source content, not local-only state; keep it.
+# Source rule PDFs no longer ride in the image (#170): they live in the GCS
+# state bucket under rules/ and are synced into a writable dir at runtime
+# (rules_sync). Excluding them keeps the image — and every deploy's push —
+# small and independent of corpus size.
+rules/
 
 # Notebooks — instructional but not runtime.
 notebooks/
