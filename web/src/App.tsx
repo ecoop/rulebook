@@ -50,6 +50,30 @@ interface AskResponse {
 
 type Rating = 1 | 2 | 3 | 4 | 5
 
+// #176 follow-on: the whole "answer session" — the answer plus the user's
+// in-progress scoring (rating/tags/comment/gold) — persisted to localStorage so
+// a reload (a version update, an accidental refresh, a browser restart) doesn't
+// drop scoring work. The question box is persisted separately (usePersistentDraft).
+const ASK_SESSION_KEY = 'rulebook.session.ask'
+
+interface AskSession {
+  result: AskResponse
+  rating: Rating | null
+  tags: IssueTag[]
+  comment: string
+  savedComment: string
+  gold: string
+  savedGold: string
+}
+
+function loadAskSession(): Partial<AskSession> {
+  try {
+    return JSON.parse(localStorage.getItem(ASK_SESSION_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+
 const RATING_LABELS: Record<Rating, string> = {
   1: 'very wrong',
   2: 'mostly wrong',
@@ -134,29 +158,32 @@ export default function App() {
   // #176: persist the question box so a reload (a version update, an accidental
   // refresh, a browser restart) doesn't drop what you were typing.
   const [question, setQuestion] = usePersistentDraft('question')
+  // #176 follow-on: the answer session persisted last time, read once so the
+  // state initializers below can rehydrate the answer + in-progress scoring.
+  const [restoredSession] = useState(loadAskSession)
   // Empty set = "All" (compare across every domain). Any non-empty subset
   // restricts retrieval to exactly those domains.
   const [selectedDomains, setSelectedDomains] = useState<Set<string>>(() => new Set())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<AskResponse | null>(null)
+  const [result, setResult] = useState<AskResponse | null>(restoredSession.result ?? null)
   const [meta, setMeta] = useState<Meta | null>(null)
   // Start collapsed — the answer is the headline; passages are opt-in detail.
   const [sourcesOpen, setSourcesOpen] = useState(false)
   // Rating + tags + comment state is scoped to the *current* result — clearing
   // on new submissions so a prior vote never bleeds onto a new answer.
-  const [rating, setRating] = useState<Rating | null>(null)
-  const [tags, setTags] = useState<Set<IssueTag>>(() => new Set())
-  const [comment, setComment] = useState('')
+  const [rating, setRating] = useState<Rating | null>(restoredSession.rating ?? null)
+  const [tags, setTags] = useState<Set<IssueTag>>(() => new Set(restoredSession.tags ?? []))
+  const [comment, setComment] = useState(restoredSession.comment ?? '')
   // The comment "state" we last successfully sent. Used to compute whether
   // there are unsent edits so the Save-note button can hide when there's
   // nothing to save.
-  const [savedComment, setSavedComment] = useState('')
+  const [savedComment, setSavedComment] = useState(restoredSession.savedComment ?? '')
   const [ratingError, setRatingError] = useState<string | null>(null)
   // Gold answer state — pre-populated with the model's original answer, so
   // the user's task is "edit what's wrong" rather than "author from scratch".
-  const [gold, setGold] = useState('')
-  const [savedGold, setSavedGold] = useState('')
+  const [gold, setGold] = useState(restoredSession.gold ?? '')
+  const [savedGold, setSavedGold] = useState(restoredSession.savedGold ?? '')
   const [goldError, setGoldError] = useState<string | null>(null)
   const [goldSaving, setGoldSaving] = useState(false)
   // Widget snapshots. Fetched on mount, refreshed after every /ask so
@@ -222,6 +249,31 @@ export default function App() {
       window.removeEventListener('hashchange', onHashChange)
     }
   }, [refreshMeta])
+
+  // #176 follow-on: persist the answer session (answer + in-progress scoring) so
+  // a reload doesn't drop it. Written only while there's an answer; cleared
+  // otherwise (a fresh state, or the moment before a new answer arrives). The
+  // server already holds anything submitted; this just keeps the UI in sync.
+  useEffect(() => {
+    try {
+      if (result) {
+        const session: AskSession = {
+          result,
+          rating,
+          tags: Array.from(tags),
+          comment,
+          savedComment,
+          gold,
+          savedGold,
+        }
+        localStorage.setItem(ASK_SESSION_KEY, JSON.stringify(session))
+      } else {
+        localStorage.removeItem(ASK_SESSION_KEY)
+      }
+    } catch {
+      // best-effort — private mode / quota
+    }
+  }, [result, rating, tags, comment, savedComment, gold, savedGold])
 
   async function refreshMe() {
     // /me is gated at novice, so a 403 means the guest is suspended — render
