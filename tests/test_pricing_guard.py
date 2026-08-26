@@ -47,3 +47,31 @@ def test_unpriced_model_only_warns_when_guardrails_off():
     # Local dev has no caps to under-enforce — warn, never crash.
     s = _settings(claude=_UNPRICED, embedding="voyage-4", guardrails=False)
     _assert_models_priceable(s)  # must not raise
+
+
+# --- role guard (lcg 0.4.0 capability catalog) ----------------------------
+
+from rulebook.app_state import _assert_model_roles  # noqa: E402
+
+
+def test_shipped_models_have_correct_roles():
+    _assert_model_roles(_settings(claude="claude-sonnet-5", embedding="voyage-4", guardrails=True))
+
+
+def test_embedding_id_in_chat_slot_fails_closed():
+    # voyage-4 is priced (>$0) so the price guard passes it — but it's the wrong
+    # KIND for CLAUDE_MODEL. The role guard is what catches the swap.
+    s = _settings(claude="voyage-4", embedding="voyage-4", guardrails=True)
+    with pytest.raises(RuntimeError, match="not a chat model"):
+        _assert_model_roles(s)
+
+
+def test_chat_id_in_embedding_slot_fails_closed():
+    s = _settings(claude="claude-sonnet-5", embedding="claude-sonnet-5", guardrails=True)
+    with pytest.raises(RuntimeError, match="not an embedding model"):
+        _assert_model_roles(s)
+
+
+def test_role_mismatch_only_warns_when_guardrails_off():
+    s = _settings(claude="voyage-4", embedding="voyage-4", guardrails=False)
+    _assert_model_roles(s)  # must not raise
