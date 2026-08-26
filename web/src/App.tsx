@@ -7,6 +7,7 @@ import {
   type WidgetDef,
 } from '@nobadeer/floating-widgets'
 import { WidgetControls } from './WidgetControls'
+import { usePersistentDraft } from './useDraft'
 import { useWidgetVisibility } from './widgetVisibility'
 
 import { UsageBody, UsageSummaryLine, type UsageSnapshot } from './widgets/Usage'
@@ -130,7 +131,9 @@ function formatStartedAt(iso: string): string {
 // -----------------------------------------------------------------------------
 
 export default function App() {
-  const [question, setQuestion] = useState('')
+  // #176: persist the question box so a reload (a version update, an accidental
+  // refresh, a browser restart) doesn't drop what you were typing.
+  const [question, setQuestion] = usePersistentDraft('question')
   // Empty set = "All" (compare across every domain). Any non-empty subset
   // restricts retrieval to exactly those domains.
   const [selectedDomains, setSelectedDomains] = useState<Set<string>>(() => new Set())
