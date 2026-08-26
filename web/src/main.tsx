@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { LayoutProvider } from '@nobadeer/floating-widgets'
 import ActivityApp from './ActivityApp'
 import App from './App'
+import NewVersionBanner from './NewVersionBanner'
 import { WidgetVisibilityProvider } from './widgetVisibility'
 import './index.css'
 
@@ -34,6 +35,9 @@ function Root() {
   return (
     <LayoutProvider dockBelow={1024}>
       <WidgetVisibilityProvider>
+        {/* #175: shown above both views so a pending update is visible whether
+            the user is on Ask or Activity. */}
+        <NewVersionBanner />
         <div style={{ display: showActivity ? 'none' : undefined }}>
           <App />
         </div>
