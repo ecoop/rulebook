@@ -29,6 +29,7 @@ FASTAPI INIT-ORDER GOTCHA
 
 from __future__ import annotations
 
+import logging
 from typing import Callable, Optional
 
 from fastapi import Request
@@ -41,6 +42,54 @@ from llm_cost_governor.ratelimit import IPRateLimiter
 from llm_cost_governor.state import StateBackend, get_backend
 
 from .config import Settings
+
+log = logging.getLogger(__name__)
+
+
+def _assert_models_priceable(settings: Settings) -> None:
+    """Fail-closed guard: a model llm-cost-governor can't price bills $0, so it
+    contributes nothing to the rolling cost windows and ``WindowedCapHook``
+    never trips for it — the caps silently under-enforce (lcg#10). Refuse to
+    boot when guardrails are on and any configured model prices at zero.
+
+    Off (warn only) when guardrails are disabled — local dev has no caps to
+    under-enforce. Resilient to an lcg pricing-API move: if the pricing symbol
+    is gone we log and skip rather than crash boot for a non-config reason.
+    """
+    try:
+        from llm_cost_governor.pricing import _cost
+    except Exception:  # noqa: BLE001 — pricing API moved; don't crash boot over it
+        log.warning(
+            "cost governance: llm-cost-governor pricing API unavailable; "
+            "skipping the configured-model price guard"
+        )
+        return
+
+    configured = {
+        "claude_model": settings.claude_model,
+        "embedding_model": settings.embedding_model,
+    }
+    unpriced = []
+    for field, model in configured.items():
+        try:
+            price = _cost(model, 1_000_000, 0)
+        except Exception:  # noqa: BLE001 — an unknown/unpriceable model id
+            price = 0.0
+        if price <= 0:
+            unpriced.append(f"{field}={model!r}")
+
+    if not unpriced:
+        return
+    msg = (
+        "cost governance: configured model(s) price at $0 in "
+        f"llm-cost-governor — {', '.join(unpriced)}. Their spend would be "
+        "invisible and the cost caps would under-enforce. Use a bare model "
+        "alias lcg prices (no dated suffix)."
+    )
+    if settings.guardrails_enabled:
+        raise RuntimeError(msg)
+    log.warning(msg)
+
 
 # Module-level singletons, populated by initialize().
 cost_counter: Optional[CostCounter] = None
@@ -77,6 +126,10 @@ def initialize(settings: Settings) -> None:
     """Construct the guardrail singletons. Call once, before any router loads."""
     global cost_counter, token_counter, ip_rate_limiter, state_backend, _enforce_ip_rate_limit_impl
     global provider_totals, provider_totals_hook
+
+    # Fail fast if a configured model can't be priced — an unpriced model makes
+    # the cost caps silently under-enforce (see the guard's docstring).
+    _assert_models_priceable(settings)
 
     state_backend = get_backend(
         kind=settings.state_backend_kind,
