@@ -91,6 +91,39 @@ def _assert_models_priceable(settings: Settings) -> None:
     log.warning(msg)
 
 
+def _assert_model_roles(settings: Settings) -> None:
+    """Capability guard (lcg 0.4.0): assert each configured model is the RIGHT
+    KIND — the chat model is a chat model, the embedding model an embedding
+    model — so a swapped config (e.g. an embedding id left in CLAUDE_MODEL)
+    fails at boot instead of surfacing as a confusing runtime error mid-request.
+    This catches a swap the price guard can't: a wrong-role model can still be
+    priced (> $0) yet be the wrong kind.
+
+    No-op if the installed lcg predates the capability catalog (< 0.4.0). The
+    vocabulary is open — ``catalog`` of an unknown capability returns ``[]``,
+    never raises — so this only fires on a genuine role mismatch.
+    """
+    try:
+        from llm_cost_governor.pricing import CHAT, EMBEDDING, catalog
+    except Exception:  # noqa: BLE001 — pre-0.4.0: no capability catalog to check
+        return
+
+    chat_ids = {m.id for m in catalog(CHAT)}
+    embed_ids = {m.id for m in catalog(EMBEDDING)}
+    problems = []
+    if settings.claude_model not in chat_ids:
+        problems.append(f"claude_model={settings.claude_model!r} is not a chat model")
+    if settings.embedding_model not in embed_ids:
+        problems.append(f"embedding_model={settings.embedding_model!r} is not an embedding model")
+
+    if not problems:
+        return
+    msg = "cost governance: model role mismatch — " + "; ".join(problems) + "."
+    if settings.guardrails_enabled:
+        raise RuntimeError(msg)
+    log.warning(msg)
+
+
 # Module-level singletons, populated by initialize().
 cost_counter: Optional[CostCounter] = None
 # Per-token engagement tally: weekly token count + last_seen, keyed by invite
@@ -128,8 +161,10 @@ def initialize(settings: Settings) -> None:
     global provider_totals, provider_totals_hook
 
     # Fail fast if a configured model can't be priced — an unpriced model makes
-    # the cost caps silently under-enforce (see the guard's docstring).
+    # the cost caps silently under-enforce (see the guard's docstring) — or is
+    # the wrong kind (an embedding id in the chat slot, etc.).
     _assert_models_priceable(settings)
+    _assert_model_roles(settings)
 
     state_backend = get_backend(
         kind=settings.state_backend_kind,
