@@ -14,6 +14,7 @@ by more metadata, do it there, not here.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 import time
@@ -129,6 +130,8 @@ from rulebook.tokens import (  # noqa: E402
 
 app = FastAPI(title="rulebook", description="RAG over disc-domain rules.")
 
+log = logging.getLogger(__name__)
+
 # CORS — the Vite dev server runs on 5173 by default. In production you'd
 # lock this down; for a local demo `*` is fine.
 app.add_middleware(
@@ -184,6 +187,10 @@ class AskResponse(BaseModel):
     output_tokens: int
     model: str
     stop_reason: str = Field(..., description='"end_turn" if the model finished, "max_tokens" if truncated, etc.')
+    unverified_citations: list[str] = Field(
+        default_factory=list,
+        description="Inline [domain rule_id] citations in the answer that match no retrieved chunk (#172) — surfaced so a hallucinated citation can't pass as verified.",
+    )
 
 
 class FeedbackRequest(BaseModel):
@@ -761,6 +768,17 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
             result.input_tokens + result.output_tokens, token=guest.token
         )
 
+    # #172: a citation that matches no retrieved chunk means the model cited a
+    # passage it wasn't given (the goaltimate/poker hallucination). Surface it
+    # rather than let it pass as verified; log for observability.
+    if result.unverified_citations:
+        log.warning(
+            "ask %s: %d unverified citation(s) — %s",
+            qa_id,
+            len(result.unverified_citations),
+            result.unverified_citations,
+        )
+
     return AskResponse(
         qa_id=qa_id,
         question=result.question,
@@ -770,6 +788,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
         output_tokens=result.output_tokens,
         model=settings.claude_model,
         stop_reason=result.stop_reason,
+        unverified_citations=result.unverified_citations,
     )
 
 
