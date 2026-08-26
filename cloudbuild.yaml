@@ -1,0 +1,33 @@
+# Copyright (c) 2026 Eric Cooper.
+#
+# Cached image build for rulebook (#181). By default `gcloud run deploy
+# --source .` rebuilds every layer cold, so `npm ci` + `pip install` re-run on
+# every deploy even when only app code changed. Kaniko caches each layer in a
+# dedicated cache repo and reuses it across builds — including the intermediate
+# multi-stage layers (web-builder's npm ci, py-builder's pip install) that a
+# squashed final image can't restore. A deploy that changes only app code then
+# skips those installs entirely.
+#
+# Invoked by scripts/deploy.sh: `gcloud builds submit --config cloudbuild.yaml`
+# builds + pushes the image; scripts/deploy.sh then `gcloud run deploy --image`.
+# Fallback if this ever misbehaves: `scripts/deploy.sh --no-cache` (the original
+# uncached `--source .` path).
+steps:
+  - name: gcr.io/kaniko-project/executor:latest
+    args:
+      - --context=dir:///workspace
+      - --dockerfile=Dockerfile
+      - --destination=${_IMAGE}:${_SHA}
+      - --destination=${_IMAGE}:latest
+      - --cache=true
+      - --cache-repo=${_IMAGE}/cache
+      - --cache-ttl=168h
+      - --cache-copy-layers=true
+      # Baked into the image ENV so the footer is right even without the runtime
+      # override; scripts/deploy.sh also sets them at deploy time.
+      - --build-arg=GIT_SHA=${_SHA}
+      - --build-arg=BUILD_NUM=${_NUM}
+# Kaniko pushes via --destination, so no top-level `images:` is needed.
+# CLOUD_LOGGING_ONLY avoids requiring a user-owned logs bucket.
+options:
+  logging: CLOUD_LOGGING_ONLY
