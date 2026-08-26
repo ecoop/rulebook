@@ -29,12 +29,11 @@ RUN npm run build
 # ─── 2. Python deps builder: pip install into an isolated venv ────────────────
 FROM python:3.13-slim AS py-builder
 
-# Build-time system deps for any wheels that need compilation. Rulebook's
-# deps are pure-Python or ship wheels; keeping build-essential here as a
-# safety net for future additions.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# No build toolchain: every runtime dependency ships a manylinux wheel
+# (numpy, pydantic-core, anthropic, google-cloud-storage, …), so pip never
+# compiles. Installing build-essential added ~150MB of download + apt work to
+# every image build for nothing. If a future dep needs to compile, add exactly
+# what it needs back here (and prefer a wheel).
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
