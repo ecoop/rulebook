@@ -19,6 +19,7 @@ model might overweight. Iterate here when you have real failure modes to
 respond to — not in advance.
 """
 
+import re
 from dataclasses import dataclass
 
 from anthropic import Anthropic
@@ -101,6 +102,38 @@ def format_context(chunks: list[RetrievedChunk]) -> str:
             header = f"[{c.domain} {c.rule_id} — {pages}]"
         blocks.append(f"{header}\n{c.text}")
     return "\n\n---\n\n".join(blocks)
+
+
+# An inline citation the model is told to emit: [<domain-slug> <rule_id>].
+# Domain slugs are lowercase; rule_ids may be multi-word ("Object of the Game").
+_CITATION_RE = re.compile(r"\[([a-z][a-z0-9_-]*)\s+([^\]]+)\]")
+
+
+def find_unverified_citations(answer: str, chunks: list[RetrievedChunk]) -> list[str]:
+    """Return the answer's [domain rule_id] citations that match no retrieved
+    chunk — i.e. passages the model cited but was never given (#172).
+
+    A pure membership check (no LLM call): a citation is verified iff some
+    retrieved chunk has the same domain AND rule_id. Catches both a real domain
+    the caller didn't retrieve (e.g. goaltimate for a user without it) and an
+    entirely fabricated one (e.g. poker, not a domain at all). Advisory: callers
+    flag, never strip, so a rare non-citation bracket is harmless. Markdown links
+    (``[text](url)``) are ignored. Deduped, in first-seen order.
+    """
+    valid = {(c.domain, c.rule_id.strip()) for c in chunks}
+    flagged: list[str] = []
+    for m in _CITATION_RE.finditer(answer):
+        # Skip markdown links: a `]` immediately followed by `(`.
+        if m.end() < len(answer) and answer[m.end()] == "(":
+            continue
+        domain = m.group(1)
+        # Drop a trailing page suffix the model may copy from the context header
+        # (" — p.3" / " — pp.3-4"); citations key on the bare rule_id.
+        rule_id = m.group(2).strip().split(" — ")[0].strip()
+        label = f"{domain} {rule_id}"
+        if (domain, rule_id) not in valid and label not in flagged:
+            flagged.append(label)
+    return flagged
 
 
 def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAnswer:
