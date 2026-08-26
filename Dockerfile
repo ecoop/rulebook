@@ -23,6 +23,14 @@ RUN npm ci --no-audit --no-fund
 
 # Build the production bundle into /web/dist/.
 COPY web/ ./
+# Bake the build stamp into the bundle (VITE_* → import.meta.env) so the client
+# knows its OWN build, not just the server's via /meta (#175). Passed as
+# --build-arg by scripts/deploy.sh's cached path; "?" on the --no-cache/--source
+# fallback, which can't forward build-args.
+ARG GIT_SHA=?
+ARG BUILD_NUM=?
+ENV VITE_GIT_SHA=$GIT_SHA \
+    VITE_BUILD_NUM=$BUILD_NUM
 RUN npm run build
 
 
