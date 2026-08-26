@@ -45,7 +45,7 @@ dependencies = [
     # factory; [gcs] pulls the GCS StateBackend (google-cloud-storage) now
     # that we host on Cloud Run — cost-counter state persists in a bucket.
     # Published to PyPI, so a plain version pin rather than a git URL.
-    "llm-cost-governor[fastapi,gcs]>=0.3.3",
+    "llm-cost-governor[fastapi,gcs]>=0.4.0",
 
     # GCS access for the vector index and (Track B) the invite-token
     # allowlist. index_sync.py pulls the index into a writable path at
