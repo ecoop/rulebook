@@ -232,12 +232,15 @@ class Settings(BaseSettings):
     def rules_dir(self) -> Path:
         """Source rulebooks (rules/<domain>/…), read by diagnostics + admin.
 
-        ``repo_root/rules`` in local dev. In an installed-package container
-        ``repo_root`` points into an unwritable site-packages ancestor with
-        no ``rules/``; the image ships the sources under ``WORKDIR=/app``,
-        so fall back to the CWD-relative ``rules/`` — same trick main.py
-        uses for ``web/dist``.
+        Hosted (gcs) deploys no longer bake the sources into the image (#170) —
+        they sync from the bucket's ``rules/`` prefix into a writable path under
+        ``data_dir`` (see ``rules_sync``). Local dev reads the repo's ``rules/``
+        directly (``repo_root/rules``, or the CWD-relative fallback for an
+        installed-package layout where ``repo_root`` is an unwritable
+        site-packages ancestor).
         """
+        if self.state_backend_kind == "gcs":
+            return self.data_dir / "rules"
         candidate = self.repo_root / "rules"
         return candidate if candidate.is_dir() else Path("rules").resolve()
 
