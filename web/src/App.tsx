@@ -538,7 +538,7 @@ export default function App() {
                     </div>
                   )}
                   <div>
-                    {CLIENT_BUILD_KNOWN ? 'server ' : 'build '}
+                    {CLIENT_BUILD_KNOWN ? 'latest ' : 'build '}
                     {meta.build_num && `${meta.build_num} (`}
                     <span
                       title={
