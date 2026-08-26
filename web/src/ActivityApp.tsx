@@ -592,6 +592,28 @@ export default function ActivityApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canUseActivity, caps.join(',')])
 
+  // #164: keep the Users tab's last-seen / weekly-usage current without a manual
+  // reload. Only while it's the active tab (to spare the GCS-backed endpoints):
+  // refetch when you switch to it, when the window regains focus, and on a light
+  // poll — skipping the poll while the tab is hidden. refreshUsers() self-heals
+  // errors, so a background tick can't throw. Leaving the tab tears it all down.
+  useEffect(() => {
+    if (!canUseActivity || activeTab !== 'users' || !can('users.view')) return
+    void refreshUsers()
+    const onFocus = () => {
+      if (!document.hidden) void refreshUsers()
+    }
+    window.addEventListener('focus', onFocus)
+    const id = window.setInterval(() => {
+      if (!document.hidden) void refreshUsers()
+    }, 45_000)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.clearInterval(id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUseActivity, activeTab, caps.join(',')])
+
   async function refresh() {
     setError(null)
     try {
