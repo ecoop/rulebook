@@ -1,0 +1,52 @@
+# Copyright (c) 2026 Eric Cooper.
+#
+# Controls what `gcloud builds submit` / `gcloud run deploy --source .` uploads
+# as build context. Without this file gcloud falls back to .gitignore, which
+# uploaded the whole rules/ corpus (~16 MB) even though the image no longer
+# bakes it in (#170). Excluding rules/ here shrinks the upload to match the
+# image; the PDFs reach the container via the GCS rules/ prefix (rules_sync),
+# not the build. Mirrors .dockerignore.
+
+# Source rule PDFs — served from GCS at runtime, not the build (#170).
+rules/
+
+# VCS / CI — build_info reads RULEBOOK_GIT_SHA / RULEBOOK_BUILD_NUM from a
+# build-arg (set by scripts/deploy.sh), never from git at build time.
+.git/
+.gitignore
+.gcloudignore
+.github/
+
+# Secrets — never upload keys.
+.env
+.env.*
+secrets/
+
+# Python local state.
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node / frontend build artifacts — the image builds web/dist/ from source.
+node_modules/
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Local runtime state — prebuilt index, JSONL logs, cost counter (from GCS).
+data/
+
+# Agent worktrees & local session/editor config.
+.claude/
+
+# Notebooks — instructional, not needed to build the image.
+notebooks/
+
+# IDE / OS noise.
+.DS_Store
+.vscode/
+.idea/
