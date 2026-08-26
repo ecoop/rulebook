@@ -5,10 +5,10 @@ single-domain or cross-domain question?" dispatch behind a single function
 so callers don't have to make that decision themselves.
 """
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .generate import generate_answer
+from .generate import find_unverified_citations, generate_answer
 from .retrieve import RetrievedChunk, retrieve, retrieve_across_domains
 
 # Cold-start bootstrap ONLY. The domain set is otherwise derived from DATA:
@@ -27,6 +27,8 @@ class AskResult:
     input_tokens: int
     output_tokens: int
     stop_reason: str
+    # [domain rule_id] citations in `answer` that match no retrieved chunk (#172).
+    unverified_citations: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -36,6 +38,7 @@ class AskResult:
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "stop_reason": self.stop_reason,
+            "unverified_citations": self.unverified_citations,
         }
 
 
@@ -69,4 +72,5 @@ def ask(
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         stop_reason=result.stop_reason,
+        unverified_citations=find_unverified_citations(result.answer, chunks),
     )
