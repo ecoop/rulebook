@@ -6,6 +6,7 @@ import {
   type FloatingWidgetStackHandle,
   type WidgetDef,
 } from '@nobadeer/floating-widgets'
+import { CLIENT_BUILD, CLIENT_BUILD_KNOWN, CLIENT_SHA } from './buildInfo'
 import { WidgetControls } from './WidgetControls'
 import { usePersistentDraft } from './useDraft'
 import { useWidgetVisibility } from './widgetVisibility'
@@ -525,8 +526,19 @@ export default function App() {
               </div>
               {showVersion && meta && (
                 <div className="mt-2 space-y-0.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 font-mono text-xs text-muted-foreground">
+                  {CLIENT_BUILD_KNOWN && (
+                    <div>
+                      running {CLIENT_BUILD}
+                      {CLIENT_SHA && ` (${CLIENT_SHA})`}
+                      {meta.build_num && meta.build_num !== CLIENT_BUILD && (
+                        <span className="text-amber-700 dark:text-amber-300">
+                          {' · update available — reload'}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div>
-                    build{' '}
+                    {CLIENT_BUILD_KNOWN ? 'server ' : 'build '}
                     {meta.build_num && `${meta.build_num} (`}
                     <span
                       title={
