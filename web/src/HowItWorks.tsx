@@ -19,7 +19,23 @@ function Section({ n, title, children }: { n: string; title: string; children: R
   )
 }
 
-export function HowItWorks({ onClose }: { onClose: () => void }) {
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
+export function HowItWorks({
+  onClose,
+  sources,
+  labels,
+}: {
+  onClose: () => void
+  sources?: Record<string, string[]>
+  labels?: Record<string, string>
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -97,6 +113,37 @@ export function HowItWorks({ onClose }: { onClose: () => void }) {
             in it — Claude transcribes the image-only pages and writes each answer — but they run in a
             fixed, deterministic order rather than one they choose.
           </Section>
+
+          {sources && Object.values(sources).some((u) => u.length > 0) && (
+            <Section n="—" title="Sources">
+              Answers are built from these official rule documents — go straight to the
+              authoritative text (Rulebook hosts none of it):
+              <ul className="mt-2 space-y-1">
+                {Object.entries(sources)
+                  .filter(([, urls]) => urls.length > 0)
+                  .sort(([a], [b]) => (labels?.[a] ?? a).localeCompare(labels?.[b] ?? b))
+                  .map(([slug, urls]) => (
+                    <li key={slug}>
+                      <span className="font-medium text-foreground">{labels?.[slug] ?? slug}</span>
+                      {' — '}
+                      {urls.map((u, i) => (
+                        <span key={u}>
+                          {i > 0 && ', '}
+                          <a
+                            href={u}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+                          >
+                            {hostOf(u)}
+                          </a>
+                        </span>
+                      ))}
+                    </li>
+                  ))}
+              </ul>
+            </Section>
+          )}
         </div>
 
         <p className="mt-6 border-t border-border pt-4 text-xs text-muted-foreground">
