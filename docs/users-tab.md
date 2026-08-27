@@ -1,63 +1,49 @@
-# Users tab — frontend build spec
+# Users tab — reference
 
-_Last updated: 2026-08-10_
+_Last updated: 2026-08-27_
 
-Backend for the superuser **Users** tab is implemented and deployed (see
-[roles.md](roles.md), `rulebook.tokens`, `rulebook.roles`). This is the
-handoff spec for the **frontend** piece, which lands in `web/src/AdminApp.tsx`
-and must be built on top of the Pitchcraft-parity restyle (PR #19) — not on
-`main` — so it inherits the new tab chrome and semantic tokens.
+The **Users** tab (in the "Your activity" view, `web/src/ActivityApp.tsx`)
+manages invitees, their roles, and their domain access. **Shipped** — this is
+the as-built reference (the earlier frontend build-spec is superseded).
 
-## Where it slots
+## Three concepts (don't conflate)
 
-`AdminApp.tsx` already has an `activeTab` model (`feedback | golds | sources`)
-with a `refresh<Tab>()` fetch per tab. Add a `roles` / `users` tab the same
-way: one more `AdminTab` value, one `refreshUsers()`, one table + a small
-"Add user" form. Match the existing fetch/error/pending-set patterns.
+- **Allowlist** = *who can log in* (invite tokens) → `/advanced/invite-tokens`.
+- **Role** = *what a logged-in user may do* (a bundle of capabilities) → `/advanced/roles`.
+- **Domain scope** = *which domains they may ask against* → `/advanced/allowed-domains`
+  (#112/#156). Admin/Superuser (level ≥ 7) are unscoped.
 
-## Two backend concepts (don't conflate)
+Creating a user = add to the allowlist (+ optionally set a role and domains).
+Removing access: **suspend** (reversible — set role `level0`, keeps audit) vs
+**remove** (hard delete from the allowlist).
 
-- **Allowlist** = *who can log in* (invite tokens). `/admin/invite-tokens`.
-- **Role** = *what a logged-in user may do*. `/admin/roles`.
+## API
 
-Creating a user = add to the allowlist (+ optionally set a role). Removing
-access has two flavors: **suspend** (reversible, keeps audit — set role
-`suspended`) vs **remove** (hard delete from the allowlist).
+Capability-gated (403 otherwise; 400 if the deploy isn't GCS-backed). `/me`
+returns the caller's `{recipient, role, level, fingerprint, capabilities,
+allowed_domains, demo_mode}`; the UI gates on **capabilities** (e.g.
+`users.view`), not a role name.
 
-## API (all superuser-gated; 403 otherwise, 400 if the deploy isn't GCS-backed)
+| Method | Path | Capability |
+|---|---|---|
+| GET | `/advanced/invite-tokens` | `users.view` |
+| POST | `/advanced/invite-tokens` | `users.add` |
+| PATCH | `/advanced/invite-tokens/{token}` | `users.rename` |
+| DELETE | `/advanced/invite-tokens/{token}` | `users.remove` |
+| GET | `/advanced/roles` | `users.view` |
+| POST | `/advanced/roles` | `users.change_role` |
+| POST | `/advanced/roles/{token}/reset` | `users.change_role` |
+| GET | `/advanced/allowed-domains` | `users.view` |
+| POST | `/advanced/allowed-domains` | `users.change_role` |
+| POST | `/advanced/allowed-domains/{token}/reset` | `users.change_role` |
 
-| Method | Path | Body | Returns |
-|---|---|---|---|
-| GET | `/me` | — | `{recipient, role, demo_mode}` — gate the whole tab on `role === "superuser"` |
-| GET | `/admin/invite-tokens` | — | `{tokens: [{token, label}]}` |
-| POST | `/admin/invite-tokens` | `{label, token?}` | `{token, label}` — mints if `token` omitted |
-| DELETE | `/admin/invite-tokens/{token}` | — | `{ok, token, label}` |
-| GET | `/admin/roles` | — | `{roles: [{token, role, source}], ladder}` |
-| POST | `/admin/roles` | `{token, role, note?}` | `{ok, token, role}` |
-| POST | `/admin/roles/{token}/reset` | — | `{ok, token, role}` — clears override → seed/novice |
-
-`ladder` (low→high): `["suspended","novice","evaluator","admin","superuser"]`.
-409 on adding a duplicate token; 404 removing an unknown one.
-
-## Suggested UX
-
-1. **Table** — join `/admin/invite-tokens` (label, token) with `/admin/roles`
-   (role, source) keyed by token. Columns: Label · Token (truncated, click to
-   copy) · Role (a `<select>` of `ladder`) · Source (seed/override) · actions.
-2. **Add user** — text field (label) + "Add". On success, show the invite
-   link `https://<host>/?token=<token>` with a copy button (that URL exchanges
-   the token for the session cookie).
-3. **Role change** — the `<select>` calls `POST /admin/roles`; a "Reset"
-   action calls the reset route; "Suspend" is just setting role `suspended`.
-4. **Remove** — a destructive "Remove" that calls DELETE; confirm first, and
-   nudge toward Suspend for reversible blocks.
-5. Non-superusers never see the tab (`/me`). Show a friendly note if
-   `demo_mode` is false (management needs the gated deploy).
+`ladder` (from `/advanced/roles`, low→high): `["level0", …, "level8"]`
+(level0 = suspended, level8 = superuser). Reset clears an override → default
+`level1`. 409 on a duplicate token; 404 removing an unknown one.
 
 ## Gotchas
 
-- Changes propagate within the source TTL (~30s) across instances; immediate
-  on the instance that served the write.
+- Changes propagate within the source TTL (~30s) across instances; immediate on
+  the instance that served the write.
 - Minted tokens are opaque (`tok_…`); the label is the human identity.
-- Don't build user creation on `/admin/roles` alone — a role with no
-  allowlist entry can't log in.
+- A role (or domain grant) with no allowlist entry can't log in — manage both.

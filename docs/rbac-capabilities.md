@@ -1,23 +1,26 @@
 # RBAC — capabilities and the eight rungs
 
-_Last updated: 2026-08-15_
+_Last updated: 2026-08-27_
 
-> **Status: bundles match the eight rungs (numbered levels); behaviours follow.** The
-> capability *mechanism* **and** the eight-rung *bundles* ship in `roles.py` +
-> `api/main.py`: every endpoint gates on a capability, `/me` returns the caller's
-> `role` (a level id, `level0`…`level8`), numeric `level`, and capability bundle.
-> `ROLE_CAPABILITIES` is keyed by level; `ROLE_LEVELS` carries each level's color +
-> description for the badge. **The old names (`superuser`, `novice`, …) are gone** — no
-> aliases; the seed and any `roles.jsonl` are migrated to level ids (a one-time step at
-> deploy — see below). What's still ahead is **behaviour**, not vocabulary: self→all
-> filtering, the clone flow (golds as owned entities), the attribution wall, the audit
-> log, the level badge, and the rest of the frontend — sequenced in §9. Extends
-> [`roles.md`](roles.md) (the original ladder; still used for role ordering).
+> **Status: shipped.** The capability mechanism and the eight-rung bundles are live
+> in `roles.py` + `api/main.py`: every endpoint gates on a capability, and `/me`
+> returns the caller's `role` (a level id, `level0`…`level8`), numeric `level`,
+> capability bundle, and `allowed_domains`. `ROLE_CAPABILITIES` is keyed by level;
+> `ROLE_LEVELS` carries each level's name/color/description for the badge. The old
+> names (`superuser`, `novice`, …) are gone — no aliases. The behaviours sequenced
+> in §9 (self→all filtering, clone flow, attribution wall, audit log, level badge,
+> frontend gating) have all shipped.
 >
-> **Deploy migration (one-time).** Since aliases are gone, the seed secret must use
-> level ids before this deploys, or `superuser` resolves to nothing and Coop loses
-> access. Map `novice`→`level1`, `evaluator`→`level3`, `admin`→`level7`,
-> `superuser`→`level8` in `RULEBOOK_INITIAL_ROLES` (and any `roles.jsonl` rows).
+> **A second axis — domain scoping (#156/#157).** On top of capabilities, each user
+> has an `allowed_domains` set: role = *what* you can do, `allowed_domains` = *which
+> domains* you can do it in. Admin/Superuser (level ≥ 7) are unscoped; scoped
+> Reviewers/Directors see and act only within their domains. Stored/managed
+> separately (see [`../src/rulebook/allowed_domains.py`], the Users tab, and
+> `_admin_domain_scope`/`_in_scope` in `api/main.py`). Extends [`roles.md`](roles.md).
+>
+> **Deploy migration (done).** The old-name seeds were migrated to level ids
+> (`novice`→`level1`, `evaluator`→`level3`, `admin`→`level7`, `superuser`→`level8`)
+> in `RULEBOOK_INITIAL_ROLES` and `roles.jsonl` at the level-ids deploy.
 
 ## 1. The ladder wasn't wrong — it was too coarse
 
@@ -198,7 +201,7 @@ read naturally. Noted so the model leaves room for it; assignment today is manua
 Four things aren't single-endpoint gates; they're patterns the rungs above lean on.
 
 **Self vs. all (the `.all` capabilities).** The Advanced list endpoints
-(`/admin/{golds,feedback,sources}`) take an **owner filter**. Without `*.view.all`, they
+(`/advanced/{golds,feedback,sources}`) take an **owner filter**. Without `*.view.all`, they
 return only rows authored by the caller and the tab count reflects that subset ("your
 X"). With `*.view.all`, they return everyone's and count the global total. One filter,
 two capabilities — no separate "own" vs "all" endpoints.
@@ -216,7 +219,7 @@ picks which feed the index.
 > to `gold_id == qa_id`, so nothing needs migrating. `POST /gold` upserts the caller's
 > *own* gold for a qa_id (reuses their id, mints one otherwise) — it can never touch
 > another author's gold, which *is* the `edit.own` enforcement.
-> `POST /admin/golds/{gold_id}/clone` (gated `golds.clone`) forks a gold into a new one
+> `POST /advanced/golds/{gold_id}/clone` (gated `golds.clone`) forks a gold into a new one
 > owned by the caller. Curation and the index builder are keyed by `gold_id`. The
 > Golds-tab **Edit vs Clone** buttons (driven by the new `is_own` flag on each row) land
 > with the frontend-gating slice.
@@ -238,7 +241,7 @@ action that touches something other than your own, which is exactly rung #6.
 > **Landed.** `log_audit(actor, action, target, detail)` writes to `audit.jsonl`; every
 > shared-state endpoint calls it after the write commits (`golds.curate`, `golds.clone`,
 > `sources.curate`, `index.rebuild`, `users.change_role`/`add`/`remove`/`rename`).
-> `GET /admin/audit` returns the trail newest-first, gated on `attribution.view` (level
+> `GET /advanced/audit` returns the trail newest-first, gated on `attribution.view` (level
 > 6+) — seeing who did what is the same trust tier as the attribution wall. An Audit
 > *tab* is a frontend follow-up; the record exists now.
 
@@ -262,7 +265,7 @@ Design decisions captured here so they aren't lost; they land in the frontend an
 build-side slices, not the RBAC backend.
 
 - **Retrieved passages panel.** One row per passage; a **scannable metadata line**
-  (`sport · document · § section · page`, with the match `d` right-aligned) and the
+  (`domain · document · § section · page`, with the match `d` right-aligned) and the
   passage text **collapsed** behind a disclosure. Header carries a one-line gloss:
   *"d = distance from your question — lower is a closer match."* Golds retrieved as
   passages get a `gold` badge and (per `golds.view` scope) a reference/link to the gold.
@@ -306,16 +309,16 @@ The mechanism has landed; the rest is slices. The frontend ones edit
    `has_capability`, `/me` carries `capabilities` + numbered levels + the badge.
 2. ✅ **Realign bundles to the eight rungs** — tag/comment split, `passages.view`,
    `.all` capabilities, clone/attribution capabilities; numbered-level names.
-3. ✅ **Self→all filtering** — `GET /admin/golds` and `/admin/feedback` return only the
+3. ✅ **Self→all filtering** — `GET /advanced/golds` and `/advanced/feedback` return only the
    caller's own rows without `*.view.all` (matched on the `author` label). Behaviour-
    preserving today (only level7/8 reach those tabs, and they hold `.all`); the "your X"
    count labels land with the frontend-gating slice.
 4. ✅ **Golds as owned entities + clone** — `gold_id` (`v3`), `POST /gold` upserts the
-   caller's own gold, `POST /admin/golds/{gold_id}/clone`, curation + index keyed by
+   caller's own gold, `POST /advanced/golds/{gold_id}/clone`, curation + index keyed by
    `gold_id`. The Golds-tab Edit-vs-Clone buttons (via `is_own`) ride with the frontend
    slice.
 5. ✅ **Audit log** — `audit.jsonl` + a write on every shared-state mutation;
-   `GET /admin/audit` (attribution.view). The Audit tab rides with the frontend slice.
+   `GET /advanced/audit` (attribution.view). The Audit tab rides with the frontend slice.
 6. ✅ **Frontend capability-gating** — `AdminApp` renders tabs/controls off
    `/me`'s `capabilities` (page at `advanced.view`, each tab by its cap, Rebuild /
    Incl. / source-toggle / role-picker / add / remove / rename each behind its cap),
