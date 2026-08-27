@@ -13,8 +13,15 @@
 # Modeled on a sibling app's Dockerfile; kept in lockstep so improvements
 # on one side port easily to the other.
 
+# Base images are pinned by digest (not just the floating :tag) so the kaniko
+# layer cache isn't silently busted when Docker Hub publishes a new patch of
+# node:22-alpine / python:3.13-slim — that drift was re-running npm ci / pip
+# install on otherwise-cached builds. To bump: `docker pull <image>:<tag>` then
+# `docker inspect <image>:<tag> --format '{{index .RepoDigests 0}}'` and paste
+# the new digest here. Both python stages share one digest.
+
 # ─── 1. Web builder: build the React SPA ──────────────────────────────────────
-FROM node:22-alpine AS web-builder
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS web-builder
 
 WORKDIR /web
 # Install deps first for better layer caching when only source changes.
@@ -35,7 +42,7 @@ RUN npm run build
 
 
 # ─── 2. Python deps builder: pip install into an isolated venv ────────────────
-FROM python:3.13-slim AS py-builder
+FROM python:3.13-slim@sha256:7e3a6aca9d74f93cca21a91d86a8dad8c34749afd5b4a98ee481c9c47b9f5ed4 AS py-builder
 
 # No build toolchain: every runtime dependency ships a manylinux wheel
 # (numpy, pydantic-core, anthropic, google-cloud-storage, …), so pip never
@@ -63,7 +70,7 @@ RUN pip install --upgrade pip && pip install .
 
 
 # ─── 3. Runtime: slim image, non-root, app + venv + web bundle ────────────────
-FROM python:3.13-slim AS runtime
+FROM python:3.13-slim@sha256:7e3a6aca9d74f93cca21a91d86a8dad8c34749afd5b4a98ee481c9c47b9f5ed4 AS runtime
 
 # Build-time identity. Pass via `--build-arg GIT_SHA=... BUILD_NUM=...` so
 # the startup banner shows which commit built this image (otherwise the
@@ -94,8 +101,8 @@ COPY --from=py-builder /opt/venv /opt/venv
 COPY --from=web-builder /web/dist /app/web/dist
 
 # Application source. .dockerignore filters out caches, secrets, local
-# runtime data, and node_modules; the rules/ directory rides along
-# because it's source content the index build reads.
+# runtime data, node_modules, AND rules/ — the rule PDFs no longer ride in the
+# image; they sync from the GCS bucket at runtime (rules_sync, #170).
 COPY --chown=app:app . /app
 
 # Drop privileges before the runtime starts.
