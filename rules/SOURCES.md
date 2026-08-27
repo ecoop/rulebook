@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Eric Cooper. -->
 # Rules sources — point-and-download
 
-_Last updated: 2026-08-20_
+_Last updated: 2026-08-27_
 
 The rules text under `rules/<domain>/` is built into the vector index by
 [`scripts/build_index.py`](../scripts/build_index.py) (the directory name is the
@@ -20,15 +20,18 @@ the index without the binaries living in git.
 
 ### ultimate — Ultimate (USA Ultimate)
 - **Official Rules of Ultimate**, USA Ultimate. → `rules/ultimate/2026-27-Official-Rules-of-Ultimate.pdf`
-  URL: https://usaultimate.org/rules/ ‹confirm exact PDF link for the 2026-27 edition›
+  URL: https://usaultimate.org/rules/ (HTML + PDF hub); direct PDF:
+  https://usaultimate.org/wp-content/uploads/2025/12/2026-27-Official-Rules-of-Ultimate.pdf
 - **10 Simple Rules**, USA Ultimate. → `rules/ultimate/10SimpleRules.pdf`
-  URL: https://usaultimate.org/ ‹confirm exact link›
+  URL: https://usaultimate.org/rules/ (linked from the Rules hub)
 
 ### goaltimate — Goaltimate (USAG)
 - **Goaltimate field setup / regulations (2017)**. → `rules/goaltimate/goaltimate-field-setupregulation2017.pdf`
-  (+ `…​.extracted.md` transcription) — URL: ‹confirm official USAG source›
-- **USAG rules v2.1.3**. → `rules/goaltimate/usag-rule-v-2-1-3.pdf` — URL: ‹confirm›
-- **USAG field diagram**. → `rules/goaltimate/usag-field-diagram.pdf` (+ `.extracted.md`) — URL: ‹confirm›
+  (+ `…​.extracted.md` transcription) — URL: https://www.usagoaltimate.org/rules (Rules hub)
+- **USAG rules v2.1.3**. → `rules/goaltimate/usag-rule-v-2-1-3.pdf` — direct PDF:
+  https://d36m266ykvepgv.cloudfront.net/uploads/media/XhCa3uWktp/o/usag-rule-v-2-1-3.pdf
+  (linked from https://www.usagoaltimate.org/rules)
+- **USAG field diagram**. → `rules/goaltimate/usag-field-diagram.pdf` (+ `.extracted.md`) — URL: https://www.usagoaltimate.org/rules
 
 ### badminton — Badminton (BWF)  _(#114 — pending download)_
 - **Laws of Badminton** — BWF Statutes, Section 4.1. **Version 4.0, in force
@@ -52,9 +55,10 @@ the index without the binaries living in git.
     Changes (2025)* is just a diff — don't ingest it.
 
 ### hearts — Hearts  _(#142)_
-- **Hearts rules** — Wikibooks, "Card Games/Hearts/Rules" (en.wikibooks.org),
-  **CC BY-SA 4.0**. Kept **untracked** in `rules/hearts/` for consistency with the
-  other sources. → `rules/hearts/rules-for-hearts.pdf`
+- **Hearts rules** — Wikibooks, "Card Games/Hearts/Rules"
+  (https://en.wikibooks.org/wiki/Card_Games/Hearts/Rules), **CC BY-SA 4.0**. Kept
+  **untracked** in `rules/hearts/` for consistency with the other sources.
+  → `rules/hearts/rules-for-hearts.pdf`
   - Ingestion reads a cleaned transcription sibling
     `rules-for-hearts.extracted.md` (also untracked): the PDF's multi-column print
     scrambled the layout (section headings detached from their bodies; the
@@ -66,8 +70,9 @@ the index without the binaries living in git.
 
 ### backgammon — Backgammon (USBGF)  _(#142)_
 - **Backgammon rules** — U.S. Backgammon Federation, "Backgammon Basics: How To
-  Play" (usbgf.org). **Copyrighted** — download into `rules/backgammon/` and keep
-  it **untracked** (like the sport rulebooks). → `rules/backgammon/backgammon-rules.pdf`
+  Play" (https://usbgf.org/backgammon-basics-how-to-play/). **Copyrighted** —
+  download into `rules/backgammon/` and keep it **untracked** (like the sport
+  rulebooks). → `rules/backgammon/backgammon-rules.pdf`
   - Ingestion reads a cleaned transcription sibling
     `backgammon-rules.extracted.md` (also **untracked**): the FAQ ("Common
     Questions") onward trimmed off; print-capture cruft (language-link sidebar,
