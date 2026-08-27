@@ -96,6 +96,7 @@ interface WidgetCtx {
 interface Meta {
   domains: string[]
   domain_labels?: Record<string, string>
+  domain_sources?: Record<string, string[]>
   embedding_provider: string
   embedding_model: string
   claude_model: string
@@ -573,7 +574,13 @@ export default function App() {
           </div>
         </header>
 
-      {showHowItWorks && <HowItWorks onClose={() => setShowHowItWorks(false)} />}
+      {showHowItWorks && (
+        <HowItWorks
+          onClose={() => setShowHowItWorks(false)}
+          sources={meta?.domain_sources}
+          labels={meta?.domain_labels}
+        />
+      )}
 
       {showRoles && me && (
         <HowRolesWork currentLevel={me.level} onClose={() => setShowRoles(false)} />

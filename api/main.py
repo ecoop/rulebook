@@ -90,7 +90,7 @@ from rulebook.interaction_log import (  # noqa: E402
     read_qa_questions,
 )
 from rulebook.pipeline import DEFAULT_DOMAINS, ask  # noqa: E402
-from rulebook.registry import display_labels, visible_domains  # noqa: E402
+from rulebook.registry import display_labels, domain_sources, visible_domains  # noqa: E402
 from rulebook.roles import (  # noqa: E402
     CAP_ACTIVITY_VIEW,
     CAP_ASK,
@@ -539,6 +539,10 @@ class MetaResponse(BaseModel):
         default_factory=dict,
         description="Registry display names {slug: label} for the domains above (#113).",
     )
+    domain_sources: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Registry source URLs {slug: [url, …]} — the authoritative documents each domain is built from, so the UI can link users to the real rules (#162). Empty list = none recorded.",
+    )
     embedding_provider: str
     embedding_model: str
     claude_model: str
@@ -609,6 +613,7 @@ def meta() -> MetaResponse:
     return MetaResponse(
         domains=domains,
         domain_labels=display_labels(domains),
+        domain_sources=domain_sources(domains),
         embedding_provider=settings.embedding_provider,
         embedding_model=settings.embedding_model,
         claude_model=settings.claude_model,

@@ -101,6 +101,15 @@ def display_labels(index_domains: Iterable[str]) -> dict[str, str]:
     return {s: domain_info(s, declared).display_name for s in index_domains}
 
 
+def domain_sources(index_domains: Iterable[str]) -> dict[str, list[str]]:
+    """{slug: [source url, …]} for the given domains — the authoritative documents
+    each domain's index is built from (#162). Empty list when none recorded; the
+    UI just shows no "official source" link for that domain.
+    """
+    declared = _declared_registry()
+    return {s: list(domain_info(s, declared).sources) for s in index_domains}
+
+
 def declared_domains() -> list[str]:
     """Slugs the registry declares (seed ⊕ GCS object) — for the grant menu."""
     return sorted(_declared_registry())
