@@ -1,6 +1,6 @@
 # Roles as permission-sets — design note + plan
 
-_Last updated: 2026-08-12_
+_Last updated: 2026-08-27_
 
 > **Status: design note, not scheduled.** Deepens the "define/edit permissions from the
 > UI" sketch in [`rbac-capabilities.md`](rbac-capabilities.md) §7–§8 with a concrete
@@ -70,9 +70,8 @@ coincide (`level4`). The plan makes them fully independent, then data-driven.
   **audit row** (`actor_fingerprint` — records the actor's powers at the time; audit schema
   → v2). So "did this role's permissions change?" / "with what powers did they act?" are
   answerable by comparing 8 chars.
-- *(Deferred, rides with the badge/title work:)* making the display **label** an explicit
-  `ROLE_LEVELS[id].name` field. The ids are already opaque and stable — the levels/badge
-  just still show the number, pending final titles.
+- *(Done.)* the display **label** is an explicit `ROLE_LEVELS[id].name` field (roles.py),
+  shown in the badge and the Users-tab picker; ids stay opaque and stable.
 
 **Phase 2 — roles become data** *(the §7 move)*
 - Move `ROLE_CAPABILITIES` from a code literal to a GCS object (`role_defs.json`), same

@@ -1,6 +1,6 @@
 # Adding sources from the UI — scoping
 
-_Last updated: 2026-08-12_
+_Last updated: 2026-08-27_
 
 > **Status: scoping, not scheduled.** Answers "what would it take to add Sources from
 > the UI?" This is a **new feature**, not a permission tweak — the Sources tab today
@@ -9,41 +9,43 @@ _Last updated: 2026-08-12_
 
 ## How sources work today
 
-- Sources are files under `rules/<sport>/` — `.pdf`, `.md`, `.txt`
+- Sources are files under `rules/<domain>/` — `.pdf`, `.md`, `.txt`
   (`scripts/build_index.py:_SOURCE_SUFFIXES`).
 - `discover_sources(rules_root)` walks that tree at **build time**; every file becomes
   a `Source`, minus anything the admin excluded via `source_curation.jsonl`.
-  `settings.rules_dir` resolves to `repo_root/rules` in dev, CWD-relative `rules/` in
-  the container.
-- The Sources tab (`GET /admin/sources`) lists those files and lets an admin toggle
+  `settings.rules_dir` resolves to `repo_root/rules` in dev; on a hosted (gcs)
+  deploy it's a writable dir under `data_dir` that `rules_sync` populates from the
+  bucket's `rules/` prefix at runtime (#170) — the image no longer bakes `rules/` in.
+- The Sources tab (`GET /advanced/sources`) lists those files and lets an admin toggle
   *Incl.* It **cannot add a file** — new sources appear only by dropping a file into
-  `rules/<sport>/` in the repo and rebuilding.
+  `rules/<domain>/` in the repo and rebuilding.
 - Rebuild reads sources from disk, embeds, writes the index (to GCS on the hosted
   deploy via `index_sync`).
 
 ## The core obstacle: the hosted filesystem is read-only + ephemeral
 
-On Cloud Run the image ships `rules/` baked in under `/app`, and the writable area is
-`/tmp` (wiped per instance). So an upload endpoint **can't** just write into
-`rules/<sport>/` — there's nowhere durable to put it. Sources have to move to the same
-place the index and logs already live: **GCS**. That's the crux of the work.
+On Cloud Run the writable area is `/tmp` (wiped per instance), so an upload endpoint
+can't durably write into `rules_dir`. **Most of the durable home already exists:** as
+of #170 the rule docs live in `gs://<bucket>/rules/<domain>/…` and `rules_sync` pulls
+them into the writable `rules_dir` on boot and before a rebuild (mirroring `index_sync`
+/ `log_sync`). What's left for UI-added sources is the *write* path (an upload endpoint)
+plus surfacing it — the read/sync plumbing is done.
 
 ## What it takes
 
-1. **GCS-backed sources.** Introduce `gs://<bucket>/sources/<sport>/…` as the durable
-   home for uploaded files, alongside `index/` and `logs/`. On boot (and before a
-   rebuild), sync them into the writable `rules_dir` — mirror `index_sync` /
-   `log_sync`. Baked-in repo sources and GCS-uploaded sources then coexist; the union is
-   what `discover_sources` sees.
+1. **Write uploads to the existing GCS `rules/` prefix.** An upload endpoint writes the
+   bytes to `gs://<bucket>/rules/<domain>/<name>` — the same prefix `rules_sync` already
+   reads — so `discover_sources` picks them up on the next sync + rebuild. (No new
+   `sources/` prefix needed; reuse `rules/`.)
 
-2. **Upload endpoint** — `POST /admin/sources` (multipart: file + `sport`), gated by the
+2. **Upload endpoint** — `POST /advanced/sources` (multipart: file + `domain`), gated by the
    new `sources.add` capability. It must:
    - **validate type** against `_SOURCE_SUFFIXES` (`.pdf`/`.md`/`.txt` only — no
      arbitrary uploads),
    - **cap size** (say a few MB) and sanitize the filename (no path traversal; slug the
      stem),
-   - **reject or version duplicates** (same `sport/name`),
-   - write the bytes to `gs://…/sources/<sport>/<name>`,
+   - **reject or version duplicates** (same `domain/name`),
+   - write the bytes to `gs://…/sources/<domain>/<name>`,
    - return the new `AdminSourceRow` so the tab updates.
 
 3. **Rebuild reads the union.** `admin_rebuild_index` already shells `build_index.py`;
@@ -60,7 +62,7 @@ place the index and logs already live: **GCS**. That's the crux of the work.
    first" message. **Recommend: v1 accepts text-extractable PDFs + md/txt, and rejects
    image-only PDFs** rather than building the vision pipeline into the request path.
 
-5. **UI.** An upload control on the Sources tab (sport picker + drag-drop), shown only
+5. **UI.** An upload control on the Sources tab (domain picker + drag-drop), shown only
    with `sources.add`, plus a "rebuild needed to take effect" hint — uploading stages a
    file; the *Rebuild Index* button is still what puts it in the index.
 
