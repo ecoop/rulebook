@@ -1,6 +1,6 @@
 # User roles (RBAC)
 
-_Last updated: 2026-08-15_
+_Last updated: 2026-08-27_
 
 > **This is the overview.** The authoritative references are
 > [`rbac-capabilities.md`](rbac-capabilities.md) (the capability set and which
@@ -114,6 +114,14 @@ wrote/asked each row — authorship rides with the all-view tier, not a separate
 Curation and cloning key on `gold_id`; a user with `golds.clone` (level6) forks
 another's gold into a new one they own rather than editing it in place — there is no
 `golds.edit.any`.
+
+**Domain scoping (a second axis, #156/#157).** Separate from the self/all row
+scoping above, each user carries an `allowed_domains` set — *which domains* they may
+ask against and, for Reviewers/Directors, see/act on in the admin surfaces. Role
+answers *what* you can do; `allowed_domains` answers *where*. Admin/Superuser
+(level ≥ 7) are unscoped. Managed via the Users tab / `/advanced/allowed-domains`;
+see `src/rulebook/allowed_domains.py` and `_admin_domain_scope`/`_in_scope` in
+`api/main.py`.
 
 ## Audit trail
 
