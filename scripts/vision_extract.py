@@ -31,6 +31,7 @@ import sys
 from pathlib import Path
 
 from anthropic import Anthropic
+from llm_cost_governor.budget import RequirePricedModelHook
 from llm_cost_governor.counters import WindowedCapHook
 from llm_cost_governor.events import EventLogHook
 from llm_cost_governor.wrapper import guarded_call
@@ -72,6 +73,8 @@ def extract(pdf_path: Path, *, force: bool = False) -> Path:
 
     client = Anthropic(api_key=settings.anthropic_api_key)
     hooks = [
+        # Fail closed on an unpriced model before the caps accumulate (#lcg).
+        RequirePricedModelHook(),
         WindowedCapHook(app_state.cost_counter),
         EventLogHook(enabled=settings.guardrails_enabled),
     ]
