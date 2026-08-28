@@ -23,6 +23,7 @@ import re
 from dataclasses import dataclass
 
 from anthropic import Anthropic
+from llm_cost_governor.budget import RequirePricedModelHook
 from llm_cost_governor.counters import WindowedCapHook
 from llm_cost_governor.events import EventLogHook
 from llm_cost_governor.wrapper import guarded_call
@@ -153,6 +154,9 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
     labels = display_labels(domains)
     system_prompt = build_system_prompt([labels[d] for d in domains])
     hooks = [
+        # Fail closed on a model lcg can't price ($0 → invisible spend → the
+        # WindowedCapHook below never trips). Ordered first so it gates the call.
+        RequirePricedModelHook(),
         WindowedCapHook(app_state.cost_counter, identity_provider=app_state.current_guest_token),
         app_state.provider_totals_hook,
         EventLogHook(enabled=settings.guardrails_enabled),
