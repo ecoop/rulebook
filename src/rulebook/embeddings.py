@@ -34,6 +34,7 @@ INPUT TYPE
 
 from typing import Literal, Protocol
 
+from llm_cost_governor.budget import RequirePricedModelHook
 from llm_cost_governor.counters import WindowedCapHook
 from llm_cost_governor.events import EventLogHook
 from llm_cost_governor.wrapper import record_usage
@@ -66,6 +67,8 @@ def _record_embed_usage(
         input_tokens=tokens,
         output_tokens=0,
         hooks=[
+            # Fail closed on an unpriced model before the caps accumulate (#lcg).
+            RequirePricedModelHook(),
             WindowedCapHook(app_state.cost_counter, identity_provider=app_state.current_guest_token),
             app_state.provider_totals_hook,
             EventLogHook(enabled=settings.guardrails_enabled),
