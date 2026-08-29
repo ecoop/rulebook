@@ -26,7 +26,7 @@ that must be green before proceeding.
 ```
 PROJECT=<PROJECT>          REGION=us-central1        SERVICE=rulebook
 BUCKET=<STATE_BUCKET>     DOMAIN=rulebook.cooper.nu
-ORG=758999444712 (<ORG>)    BILLING=01316D-67C114-9BA54F
+ORG=<ORG_ID> (<ORG>)    BILLING=<BILLING_ACCOUNT>
 RUNTIME_SA=<RUNTIME_SA>
 # migrating FROM:
 SRC_PROJECT=<SRC_PROJECT>    SRC_BUCKET=<SRC_BUCKET>
@@ -61,8 +61,8 @@ the project **display name** can still be clean. This runbook uses **`<PROJECT>`
 
 ## Phase 1 — project + APIs  `[Eric]`  ✅ done for <PROJECT>
 ```bash
-gcloud projects create <PROJECT> --organization=758999444712
-gcloud billing projects link <PROJECT> --billing-account=01316D-67C114-9BA54F
+gcloud projects create <PROJECT> --organization=<ORG_ID>
+gcloud billing projects link <PROJECT> --billing-account=<BILLING_ACCOUNT>
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
   artifactregistry.googleapis.com secretmanager.googleapis.com storage.googleapis.com \
   --project=<PROJECT>
