@@ -26,7 +26,7 @@ that must be green before proceeding.
 ```
 PROJECT=rulebook-prod          REGION=us-central1        SERVICE=rulebook
 BUCKET=rulebook-prod-state     DOMAIN=rulebook.cooper.nu
-ORG=758999444712 (eric-org)    BILLING=01316D-67C114-9BA54F
+ORG=<ORG_ID> (eric-org)    BILLING=<BILLING_ACCOUNT>
 RUNTIME_SA=rulebook-runtime@rulebook-prod.iam.gserviceaccount.com
 # migrating FROM:
 SRC_PROJECT=pitchcraft-demo    SRC_BUCKET=rulebook-state
@@ -61,8 +61,8 @@ the project **display name** can still be clean. This runbook uses **`rulebook-p
 
 ## Phase 1 — project + APIs  `[Eric]`  ✅ done for rulebook-prod
 ```bash
-gcloud projects create rulebook-prod --organization=758999444712
-gcloud billing projects link rulebook-prod --billing-account=01316D-67C114-9BA54F
+gcloud projects create rulebook-prod --organization=<ORG_ID>
+gcloud billing projects link rulebook-prod --billing-account=<BILLING_ACCOUNT>
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
   artifactregistry.googleapis.com secretmanager.googleapis.com storage.googleapis.com \
   --project=rulebook-prod

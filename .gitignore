@@ -52,3 +52,8 @@ web/.vite/
 
 # Claude Code local session/editor state (launch.json, settings.local.json, …)
 .claude/
+
+# Copyrighted rule sources — never commit (see rules/SOURCES.md). The running
+# service syncs them from GCS at runtime (rules_sync); local copies stay local.
+rules/**/*.pdf
+rules/**/*.extracted.md

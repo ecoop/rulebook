@@ -105,4 +105,7 @@ Reranking (baseline top-_k_ only), hybrid/BM25 retrieval, streaming answers, and
 
 ## License
 
-TBD.
+MIT — see [LICENSE](LICENSE). This covers the **code** only. The rule documents
+each domain is built from are third-party works published by their governing
+bodies (see [`rules/SOURCES.md`](rules/SOURCES.md)); they are not included in this
+repository, nor licensed by this project.
