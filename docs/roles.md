@@ -2,12 +2,10 @@
 
 _Last updated: 2026-08-27_
 
-> **This is the overview.** The authoritative references are
+> **This is the overview.** The authoritative reference is
 > [`rbac-capabilities.md`](rbac-capabilities.md) (the capability set and which
-> level holds what) and [`rbac-data-driven-roles.md`](rbac-data-driven-roles.md)
-> (capability-set fingerprints + the roadmap to editable, data-driven roles).
-> [`users-tab.md`](users-tab.md) covers the admin UI. This file is the "what the
-> role model is, and why" summary that ties them together.
+> level holds what); [`users-tab.md`](users-tab.md) covers the admin UI. This
+> file is the "what the role model is, and why" summary that ties them together.
 
 Rulebook layers authorization on top of `guest-auth`: `guest-auth` answers *who
 is this?*, rulebook answers *what may they do?*. Feedback, gold authoring, the
@@ -49,8 +47,7 @@ Each role's capability set has an 8-hex **fingerprint** —
 `sha256(",".join(sorted(caps)))[:8]` — an order-independent content address of
 *what the role can do*, used for dedup / versioning / audit. It is **not** the
 assignment key: assignments key on the stable `levelN` id, so relabeling or
-re-tuning a level never orphans who is assigned to it. Details and roadmap:
-[`rbac-data-driven-roles.md`](rbac-data-driven-roles.md).
+re-tuning a level never orphans who is assigned to it.
 
 ## Role resolution — two sources
 
