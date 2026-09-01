@@ -35,9 +35,8 @@ mkdir -p rules/ultimate rules/goaltimate rules/badminton rules/curling
 uv run python scripts/build_index.py    # discovers rules/<domain>/, builds data/index/
 ```
 
-Downloads are **manual by design**: you accept each publisher's terms, and some
-sites (e.g. BWF) block automated fetchers. No downloader/scraper ships with this
-repo.
+Downloads are **manual by design** — you accept each publisher's terms (and some
+sites, e.g. BWF, block automated fetchers).
 
 ## Domains
 
