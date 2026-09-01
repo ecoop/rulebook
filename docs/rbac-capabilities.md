@@ -3,9 +3,8 @@
 _Last updated: 2026-08-31_
 
 Authorization is **capability-based**: every endpoint gates on a named capability
-(`require_capability(cap)`), and a role is a bundle of capabilities. The rungs are
-the *policy* (who gets which bundle); capabilities are the *mechanism*. `/me`
-returns the caller's `role` (a level id, `level0`…`level8`), numeric `level`, the
+(`require_capability(cap)`), and a role is a bundle of capabilities. `/me` returns
+the caller's `role` (a level id, `level0`…`level8`), numeric `level`, the
 capability bundle, and `allowed_domains`. `ROLE_CAPABILITIES` is keyed by level;
 `ROLE_LEVELS` carries each level's name/color/description for the badge. See
 [`roles.md`](roles.md) for the overview and [`users-tab.md`](users-tab.md) for the
