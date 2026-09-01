@@ -59,7 +59,7 @@ mint a fresh token and suspend the old one (set role `level0`) instead.
   instances under-count caps.
 - Keep seed roles/tokens in **Secret Manager → env** (`--set-secrets`), never
   baked into the image. HTTPS (for `Secure` cookies) is provided by Cloud Run.
-- Deploy with `./scripts/deploy.sh` (targets the `rulebook-prod` project).
+- Deploy with `./scripts/deploy.sh` (targets your own Cloud Run project via `RULEBOOK_PROJECT`).
 
 ## Host
 

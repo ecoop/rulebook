@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     state_backend_kind: str = Field(default="local", pattern="^(local|gcs)$")
     gcs_state_bucket: str | None = None
 
-    # Rolling-window cost caps in USD. Defaults match pitchcraft's.
+    # Rolling-window cost caps in USD.
     # A single call over any cap raises; alert fires. Tune per audience
     # once we know real usage patterns.
     cap_hourly_usd: float = 0.50
