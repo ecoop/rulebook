@@ -1,20 +1,42 @@
 <!-- Copyright (c) 2026 Eric Cooper. -->
 # Rules sources — point-and-download
 
-_Last updated: 2026-08-27_
+_Last updated: 2026-08-31_
 
 The rules text under `rules/<domain>/` is built into the vector index by
 [`scripts/build_index.py`](../scripts/build_index.py) (the directory name is the
-domain slug; discovery is data-driven — no code change to add a domain). Each
-source document is published by its sport's governing body and is **copyrighted**;
-this file records **where to download each one** so a fresh checkout can rebuild
-the index without the binaries living in git.
+domain slug; discovery is data-driven — no code change to add a domain). This
+file records **where to download each source document** so a fresh checkout can
+rebuild the index.
 
-> **Do not commit copyrighted source PDFs.** Download them into the domain's
-> directory locally, build the index, and publish the built index to GCS. The
-> `.extracted.md` transcriptions and the built index — not the source PDFs — are
-> what the running service needs. (Existing committed PDFs are being migrated to
-> this model; see the go-public cleanup.)
+> **Copyright.** Each source document is a third-party work published by its
+> governing body or publisher and is **copyrighted**. This project **links to
+> the official sources and does not redistribute them** — download each one
+> yourself, for your own use, under the publisher's terms. Nothing copyrighted
+> lives in git: not the source PDFs, not the `.extracted.md` transcriptions, and
+> not the built index (`chunks.jsonl` holds verbatim rule text). All three are
+> gitignored and produced locally; a hosted instance syncs them privately from
+> its own storage.
+
+## Reproduce the shipped domains (quickstart)
+
+To rebuild the index for the four sport domains this project ships —
+**ultimate, goaltimate, badminton, curling** — download each document from its
+official source (linked per-domain under [Domains](#domains) below) into the
+matching `rules/<domain>/` directory, then build:
+
+```
+mkdir -p rules/ultimate rules/goaltimate rules/badminton rules/curling
+# Download each PDF from the official URLs below into its dir, e.g.
+#   rules/ultimate/2026-27-Official-Rules-of-Ultimate.pdf
+# (image-only PDFs — e.g. the goaltimate diagrams — transcribe first;
+#  see step 2 of "Adding a domain" below.)
+
+uv run python scripts/build_index.py    # discovers rules/<domain>/, builds data/index/
+```
+
+Downloads are **manual by design** — you accept each publisher's terms (and some
+sites, e.g. BWF, block automated fetchers).
 
 ## Domains
 
@@ -82,7 +104,7 @@ the index without the binaries living in git.
     automatically (`<stem>.pdf` + `<stem>.extracted.md` → pdf skipped).
 
 > **Source policy.** Governing-body / publisher rulebooks (ultimate, goaltimate,
-> badminton, curling, backgammon, and the forthcoming Catan) are **copyrighted**
+> badminton, curling, and backgammon) are **copyrighted**
 > — point-and-download, never committed; a cleaned `.extracted.md` transcription
 > (also untracked) is what ingestion reads. Hearts uses a CC BY-SA Wikibooks
 > source, likewise kept untracked for consistency. Both game domains began as
