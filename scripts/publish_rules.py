@@ -9,9 +9,9 @@ corpus changes.
 Needs STATE_BACKEND_KIND=gcs, GCS_STATE_BUCKET, and Application Default
 Credentials:
 
-    STATE_BACKEND_KIND=gcs GCS_STATE_BUCKET=rulebook-prod-state \
+    STATE_BACKEND_KIND=gcs GCS_STATE_BUCKET=<STATE_BUCKET> \
         uv run python -m scripts.publish_rules --dry-run
-    STATE_BACKEND_KIND=gcs GCS_STATE_BUCKET=rulebook-prod-state \
+    STATE_BACKEND_KIND=gcs GCS_STATE_BUCKET=<STATE_BUCKET> \
         uv run python -m scripts.publish_rules
 """
 

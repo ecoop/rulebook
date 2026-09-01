@@ -5,14 +5,14 @@
  * Design tokens — shadcn "neutral" palette in Tailwind v4's oklch space,
  * plus Geist Variable as the default typeface.
  *
- * These values are kept in sync with Pitchcraft (pitchcraft/web/src/index.css),
- * which is the reference "product" look shared across services that embed the
- * @nobadeer/floating-widgets HUD. The widget package styles its panel chrome
+ * These values follow the shared shadcn "neutral" product look used across
+ * services that embed the @nobadeer/floating-widgets HUD. The widget package
+ * styles its panel chrome
  * from the --card / --card-foreground / --border / --muted-foreground /
  * --foreground tokens; the rest of the app can consume the full set via
  * semantic Tailwind utilities (bg-background, text-muted-foreground, etc.).
  *
- * Theme switching is class-based (.dark), matching Pitchcraft. Light is the
+ * Theme switching is class-based (.dark). Light is the
  * default; add/remove `.dark` on a root element to flip.
  */
 

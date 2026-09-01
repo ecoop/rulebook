@@ -10,8 +10,7 @@
 # Designed for platforms that inject $PORT (Cloud Run, Fly.io, Render).
 # Defaults to 8000 — matches local dev — when $PORT is unset.
 #
-# Modeled on pitchcraft's Dockerfile; kept in lockstep so improvements
-# on one side port easily to the other.
+# A conventional multi-stage build for a Python API plus built web assets.
 
 # Base images are pinned by digest (not just the floating :tag) so the kaniko
 # layer cache isn't silently busted when Docker Hub publishes a new patch of

@@ -1,8 +1,8 @@
-# RBAC sharing — guest-auth, Rulebook, Pitchcraft, JobScout
+# RBAC sharing — guest-auth and consuming apps
 
-_Last updated: 2026-08-27_
+_Last updated: 2026-08-31_
 
-How authn/authz should layer across the sibling apps, and what (if anything) to extract.
+How authn/authz should layer across apps that build on guest-auth, and what (if anything) to extract.
 
 ## guest-auth — now
 - Authn: invite token → cookie session (`InviteAuthMiddleware`).
@@ -25,7 +25,7 @@ Add **claims** to the identity. guest-auth defines the *structure*, not the *mea
   sentinel → become the resolver guest-auth calls.
 - Scope meaning: "domains" = rulesets.
 
-## Replicate in Pitchcraft (port, don't share yet)
+## Replicate in a second app (port, don't share yet)
 - Same shapes, own policy:
   - own capability vocab (`deck.publish`, `billing.view`, …),
   - own role→caps bundles + ladder,
@@ -33,7 +33,7 @@ Add **claims** to the identity. guest-auth defines the *structure*, not the *mea
 - Same `require_capability` dep; same resolver feeding guest-auth's claims.
 - Reuse unchanged: guest-auth, llm-cost-governor, jsonl-log.
 
-## Extract — once Pitchcraft is the 2nd consumer (rule of three)
+## Extract — once a second app is the 2nd consumer (rule of three)
 - **Generic** (identical both sides): `require_capability` dep, `has_capability`, ladder
   ordering, the bundle *mechanism* (cumulative + reset sentinel), `in_scope(scope, resource)`.
 - **Never extracted** (app policy): capability vocab, role names, scope meaning.
