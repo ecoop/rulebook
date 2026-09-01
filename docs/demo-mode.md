@@ -59,7 +59,11 @@ mint a fresh token and suspend the old one (set role `level0`) instead.
   instances under-count caps.
 - Keep seed roles/tokens in **Secret Manager → env** (`--set-secrets`), never
   baked into the image. HTTPS (for `Secure` cookies) is provided by Cloud Run.
-- Deploy with `./scripts/deploy.sh` (targets your own Cloud Run project via `RULEBOOK_PROJECT`).
+- Deploy with `./scripts/deploy.sh` (targets your own Cloud Run project via
+  `RULEBOOK_PROJECT`). It runs a cached kaniko build (`cloudbuild.yaml`) then
+  `gcloud run deploy --image`; `--no-cache` falls back to a `--source .` build.
+  See the script header for details. Project/bucket layout and a "give the
+  service its own project" runbook: [`migrate-to-dedicated-project.md`](migrate-to-dedicated-project.md).
 
 ## Host
 

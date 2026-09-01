@@ -55,7 +55,7 @@ sites, e.g. BWF, block automated fetchers).
   (linked from https://www.usagoaltimate.org/rules)
 - **USAG field diagram**. → `rules/goaltimate/usag-field-diagram.pdf` (+ `.extracted.md`) — URL: https://www.usagoaltimate.org/rules
 
-### badminton — Badminton (BWF)  _(#114 — pending download)_
+### badminton — Badminton (BWF)
 - **Laws of Badminton** — BWF Statutes, Section 4.1. **Version 4.0, in force
   05/08/2024** (the edition governing play now). → download into
   `rules/badminton/` (suggested: `bwf-laws-of-badminton-v4.0-2024.pdf`).
@@ -67,7 +67,7 @@ sites, e.g. BWF, block automated fetchers).
   - **Do NOT ingest** BWF §4.1.4 *Alternative Laws of Badminton* (half-court and
     other variants) as default rules — variant handling is tracked in #120.
 
-### curling — Curling (World Curling)  _(#114 — pending download)_
+### curling — Curling (World Curling)
 - **The Rules of Curling (2025)** — World Curling, the current edition.
   → download into `rules/curling/` (suggested: `wcf-rules-of-curling-2025.pdf`).
   Listed at https://worldcurling.org/rules/ ; direct PDF:
