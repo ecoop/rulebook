@@ -14,8 +14,8 @@ Mapping from one of two backends:
 
 The seam here (`get_invite_tokens` + the read/write helpers) is kept
 deliberately app-agnostic — no rulebook config import, primitives in and
-out — so it can be lifted into `guest-auth` later and shared with
-a sibling app, per the "build in one app, prove it, then extract" pattern the
+out — so it can be lifted into `guest-auth` later and shared across
+apps, per the "build in one app, prove it, then extract" pattern the
 shared libs (jsonl-log, llm-cost-governor) already followed.
 """
 

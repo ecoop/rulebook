@@ -55,13 +55,13 @@ dependencies = [
 
     # Invite-token gate for pre-production demos. Opt-in via
     # RULEBOOK_DEMO_MODE=true; a pure pass-through when off, so local
-    # dev is unaffected. Also extracted from a sibling app.
+    # dev is unaffected.
     "guest-auth>=0.1.1",
 
     # Append-only JSONL event log (ULID + UTC-ISO + last-row-wins reads).
     # interaction_log.py consumes the free-function API — see
-    # docs/integration.md in that repo. Extracted from the duplicated log
-    # helpers that a sibling app and rulebook each carried.
+    # docs/integration.md in that repo. Extracted from the log helpers
+    # this app previously carried inline.
     "jsonl-log>=0.1.1",
 ]
 

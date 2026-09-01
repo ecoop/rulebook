@@ -86,7 +86,7 @@ Rulebook runs as an invite-only demo, using the [`guest-auth`](https://github.co
 - **Local / simple:** `RULEBOOK_DEMO_MODE=true` and inline tokens via `RULEBOOK_INVITE_TOKENS='{"tok_…":"label"}'`.
 - **Hosted:** tokens + roles + domain grants live in a GCS state bucket (not env), managed **live** from the **Users** tab — add/suspend/remove invitees and change roles without a redeploy. Roles are capability-based (level0 suspended … level8 superuser); see [`docs/roles.md`](docs/roles.md) and [`docs/rbac-capabilities.md`](docs/rbac-capabilities.md).
 
-Deploy is a single `./scripts/deploy.sh` to the `<PROJECT>` Cloud Run project; see [`docs/migrate-to-<PROJECT>.md`](docs/migrate-to-<PROJECT>.md) for the project layout.
+Deploy is a single `./scripts/deploy.sh` to your own Cloud Run project; see [`docs/migrate-to-dedicated-project.md`](docs/migrate-to-dedicated-project.md) for the project layout.
 
 ## Human-in-the-loop
 
@@ -96,7 +96,7 @@ By capability, signed-in users rate answers, tag issues, comment, and author "go
 
 - [`docs/roles.md`](docs/roles.md), [`docs/rbac-capabilities.md`](docs/rbac-capabilities.md) — the RBAC model (roles, capabilities, domain scoping).
 - [`docs/users-tab.md`](docs/users-tab.md) — managing invitees.
-- [`docs/migrate-to-<PROJECT>.md`](docs/migrate-to-<PROJECT>.md) — hosting / project layout.
+- [`docs/migrate-to-dedicated-project.md`](docs/migrate-to-dedicated-project.md) — hosting / project layout.
 - [`rules/SOURCES.md`](rules/SOURCES.md) — where each domain's rules come from + the copyright policy.
 
 ## Not done (yet)

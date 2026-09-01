@@ -3,10 +3,10 @@
 #
 # Deploy rulebook to its production Cloud Run service.
 #
-# The target is hardcoded so a deploy can never drift to a stale copy in
-# another project (there is a leftover `rulebook` service in <SRC_PROJECT>
-# that serves no domain — do not deploy there). The live site
-# rulebook.cooper.nu is a domain mapping onto the service below.
+# The target project/region/service come from env vars (RULEBOOK_PROJECT is
+# required; REGION and SERVICE default below), so this script carries no
+# baked-in infrastructure ids. The live site rulebook.cooper.nu is a domain
+# mapping onto the service.
 #
 # The build stamp (git SHA + monotonic commit count) is computed here and
 # passed as env vars, which build_info.py prefers over a git lookup — the
@@ -24,9 +24,9 @@
 #         scripts/deploy.sh --dry-run    # print the commands, don't run them
 set -euo pipefail
 
-PROJECT="<PROJECT>"
-REGION="us-central1"
-SERVICE="rulebook"
+PROJECT="${RULEBOOK_PROJECT:?set RULEBOOK_PROJECT to your GCP project id (e.g. export RULEBOOK_PROJECT=my-project)}"
+REGION="${RULEBOOK_REGION:-us-central1}"
+SERVICE="${RULEBOOK_SERVICE:-rulebook}"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/cloud-run-source-deploy/${SERVICE}"
 
 MODE="cached"

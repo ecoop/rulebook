@@ -17,8 +17,7 @@ Container builds
     ``.dockerignore`` excludes ``.git/`` to keep the image small, so
     the runtime git lookup would produce "unknown". Pass ``RULEBOOK_GIT_SHA``
     and ``RULEBOOK_BUILD_NUM`` as build args / env vars — when set, they
-    override the git lookup entirely. Same pattern a sibling app uses; see
-    Dockerfile ARG lines.
+    override the git lookup entirely. See the Dockerfile ARG lines.
 """
 
 from __future__ import annotations

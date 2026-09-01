@@ -6,11 +6,11 @@ from ``llm_cost_governor.*`` directly. Constructed once at server start
 via ``initialize()``; all module-level names become non-None after
 that call.
 
-a sibling app's integration guide places this file at the repo root; we
-put it inside the ``rulebook`` package so scripts and CLI entry points
-that run from any directory can import it without sys.path fiddling.
-Semantics are identical — one instance per process — and a sibling app's
-init-order pattern still applies.
+By convention this file often sits at the repo root; we put it inside
+the ``rulebook`` package so scripts and CLI entry points that run from
+any directory can import it without sys.path fiddling. Semantics are
+identical — one instance per process — and the same init-order pattern
+still applies.
 
 FASTAPI INIT-ORDER GOTCHA
 
