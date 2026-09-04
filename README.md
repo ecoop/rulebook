@@ -97,6 +97,7 @@ By capability, signed-in users rate answers, tag issues, comment, and author "go
 - [`docs/roles.md`](docs/roles.md), [`docs/rbac-capabilities.md`](docs/rbac-capabilities.md) — the RBAC model (roles, capabilities, domain scoping).
 - [`docs/users-tab.md`](docs/users-tab.md) — managing invitees.
 - [`docs/migrate-to-dedicated-project.md`](docs/migrate-to-dedicated-project.md) — hosting / project layout.
+- [`docs/defensive-by-design.md`](docs/defensive-by-design.md) — cost governance + output validation around the LLM calls.
 - [`rules/SOURCES.md`](rules/SOURCES.md) — where each domain's rules come from + the copyright policy.
 
 ## Not done (yet)
