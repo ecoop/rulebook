@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Eric Cooper.
-"""End-to-end gating: real InviteAuthMiddleware + require_role on the app.
+"""End-to-end gating: real InviteAuthMiddleware + require_capability on the app.
 
 Uses the local backend so `invite_tokens` = the seed and `/advanced/roles`
 needs no GCS. Proves the dependencies are actually wired to the routes,

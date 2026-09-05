@@ -95,6 +95,7 @@ from rulebook.roles import (  # noqa: E402
     CAP_ACTIVITY_VIEW,
     CAP_ASK,
     CAP_ATTRIBUTION_VIEW,
+    CAP_DOMAINS_UNSCOPED,
     CAP_FEEDBACK_COMMENT,
     CAP_FEEDBACK_TAG,
     CAP_FEEDBACK_VIEW,
@@ -1304,19 +1305,18 @@ def _view_scope(view_all_cap: str) -> tuple[bool, str | None]:
     return False, (guest.recipient if guest else None)
 
 
-# Domain scoping for admin views & actions (#156). Admin (level7) and Superuser
-# (level8) are omnipotent across every domain; Reviewer (level5) / Director
-# (level6) are confined to their allowed_domains. An unrestricted ("*") allowlist
-# also resolves to "all", so an ungranted admin keeps today's see-everything
-# behavior — scoping only bites once a concrete allowlist is set.
-_UNSCOPED_ROLE_LEVEL = 7
+# Domain scoping for admin views & actions (#156). Roles with CAP_DOMAINS_UNSCOPED
+# (Admin/Superuser) see/act across every domain; Reviewer/Director are confined to
+# their allowed_domains. An unrestricted ("*") allowlist also resolves to "all", so
+# an ungranted admin keeps today's see-everything behavior — scoping only bites once
+# a concrete allowlist is set.
 
 
 def _admin_domain_scope() -> set[str] | None:
     """Domains the caller may see/act on in admin views; None = all domains."""
     guest = get_current_guest()
     role = resolve_role(guest.token if guest else None)
-    if level_number(role) >= _UNSCOPED_ROLE_LEVEL:
+    if has_capability(role, CAP_DOMAINS_UNSCOPED):
         return None
     allowed = resolve_allowed_domains(guest.token if guest else None)
     return None if allowed is None else set(allowed)

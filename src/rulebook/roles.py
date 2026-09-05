@@ -21,8 +21,7 @@ your own gold but not others'". So authorization is *also* expressed as
 **capabilities** (see docs/rbac-capabilities.md): endpoints gate on a named
 capability via `require_capability`, and a role is a bundle of capabilities
 (`ROLE_CAPABILITIES`). The ladder is retained for role *ordering* (the Users-
-tab picker) and the legacy `require_role`; the capability map is the authority
-on what a role may *do*. Gating is a no-op when demo_mode is off (a public
+tab picker); the capability map is the authority on what a role may *do*. Gating is a no-op when demo_mode is off (a public
 deploy has no identities to authorize) — for both mechanisms it fails closed to
 the public tier.
 """
@@ -96,6 +95,7 @@ CAP_USERS_ADD = "users.add"                   # add an invitee
 CAP_USERS_REMOVE = "users.remove"             # hard-delete an invite
 CAP_USERS_RENAME = "users.rename"             # rename a user's label
 CAP_ROLES_MANAGE = "roles.manage"             # edit the RBAC config itself (no endpoint yet)
+CAP_DOMAINS_UNSCOPED = "domains.unscoped"     # see/act across ALL domains, bypassing allowed_domains scoping
 
 # The full closed set — every capability a role may be granted.
 CAPABILITIES: frozenset[str] = frozenset({
@@ -107,6 +107,7 @@ CAPABILITIES: frozenset[str] = frozenset({
     CAP_GOLDS_CURATE, CAP_SOURCES_VIEW, CAP_SOURCES_CURATE, CAP_INDEX_REBUILD,
     CAP_ATTRIBUTION_VIEW, CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE, CAP_USERS_ADD,
     CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE,
+    CAP_DOMAINS_UNSCOPED,
 })
 
 # The eight rungs, cumulative (each = the previous ∪ its additions). See §4.
@@ -130,7 +131,7 @@ _R6 = _R5 | {                                                    # operator
     CAP_GOLDS_CURATE, CAP_GOLDS_CLONE, CAP_SOURCES_CURATE,
     CAP_INDEX_REBUILD, CAP_ATTRIBUTION_VIEW,
 }
-_R7 = _R6 | {CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE, CAP_USERS_ADD}  # admin
+_R7 = _R6 | {CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE, CAP_USERS_ADD, CAP_DOMAINS_UNSCOPED}  # admin (unscoped across domains)
 _R8 = _R7 | {CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE}  # superuser
 
 # Role → capability bundle, keyed by level (§4). Policy encoded here: level7
@@ -183,18 +184,6 @@ _overrides_cache: dict[tuple[str, str], tuple[float, dict[str, str]]] = {}
 
 def is_valid_role(role: str) -> bool:
     return role in ROLE_CAPABILITIES
-
-
-def _rank(role: str) -> int:
-    try:
-        return ROLE_LADDER.index(role)
-    except ValueError:
-        # Unknown role string → treat as the safe floor, never as elevated.
-        return 0
-
-
-def at_least(role: str, minimum: str) -> bool:
-    return _rank(role) >= _rank(minimum)
 
 
 def capabilities_for(role: str) -> frozenset[str]:
@@ -313,46 +302,10 @@ def append_role_row(bucket: str, obj: str, row: Mapping[str, object]) -> None:
 # ── FastAPI dependency ─────────────────────────────────────────────────────
 
 
-def require_role(minimum: str) -> Callable[[], None]:
-    """Dependency that 403s unless the current guest is at least `minimum`.
-
-    When demo_mode is OFF the deploy is public and has no identities to
-    authorize. Rather than open everything (which would expose the admin
-    and role-write surface anonymously), it FAILS CLOSED for privileged
-    tiers: only the public tier (`novice` and below — i.e. /ask, /feedback,
-    /me) is allowed; evaluator/admin/superuser are denied. So a public
-    deploy keeps working for asking, but /gold and /admin/* stay locked
-    until demo_mode is on and a real role is present.
-    """
-
-    def _check() -> None:
-        if not settings.demo_mode:
-            # Public: allow only what the default (level1) may do; deny higher.
-            if at_least(DEFAULT_ROLE, minimum):
-                return
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    f"'{minimum}' requires demo_mode with an authenticated role; "
-                    "this deploy is public (demo_mode off)"
-                ),
-            )
-        guest = get_current_guest()
-        role = resolve_role(guest.token if guest else None)
-        if not at_least(role, minimum):
-            raise HTTPException(
-                status_code=403,
-                detail=f"requires role '{minimum}'; you are '{role}'",
-            )
-
-    return _check
-
-
 def require_capability(capability: str) -> Callable[[], None]:
     """Dependency that 403s unless the current guest's role has `capability`.
 
-    The capability-based counterpart to `require_role`, with the same
-    fail-closed public-mode rule: when demo_mode is OFF the deploy is anonymous,
+    Fails closed in public mode: when demo_mode is OFF the deploy is anonymous,
     so only PUBLIC_CAPABILITIES (the novice tier — ask/rate) are allowed and
     everything else is denied. When demo_mode is ON, the guest's effective role
     must include the capability; unknown roles resolve to an empty bundle, so

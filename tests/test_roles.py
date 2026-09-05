@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Eric Cooper.
-"""Tests for RBAC: ladder comparison, override replay, resolution, gating."""
+"""Tests for RBAC: override replay, resolution, capability gating."""
 
 from __future__ import annotations
 
@@ -24,15 +24,6 @@ def local_backend(monkeypatch):
     monkeypatch.setattr(roles.settings, "gcs_state_bucket", None)
     monkeypatch.setattr(roles.settings, "demo_mode", True)
     monkeypatch.setattr(roles.settings, "initial_roles", {})
-
-
-def test_ladder_monotonic():
-    assert roles.at_least("level7", "level1")
-    assert roles.at_least("level1", "level1")
-    assert not roles.at_least("level1", "level7")
-    assert not roles.at_least("level0", "level1")
-    # Unknown role never counts as elevated.
-    assert not roles.at_least("wizard", "level1")
 
 
 def test_level_number():
@@ -60,39 +51,6 @@ def test_resolve_prefers_override_then_seed_then_default(local_backend, monkeypa
     assert roles.resolve_role("tok_seed") == "level7"       # seed
     assert roles.resolve_role("tok_unknown") == "level1"    # default
     assert roles.resolve_role(None) == "level1"
-
-
-def test_public_mode_allows_default_denies_privileged(monkeypatch):
-    monkeypatch.setattr(roles.settings, "demo_mode", False)
-    monkeypatch.setattr(roles, "get_current_guest", lambda: None)
-    # Public tier stays open so /ask works with no auth...
-    roles.require_role("level1")()  # does not raise
-    # ...but privileged tiers fail closed (no anonymous admin/role writes).
-    for tier in ("level3", "level7", "level8"):
-        with pytest.raises(HTTPException) as ei:
-            roles.require_role(tier)()
-        assert ei.value.status_code == 403
-
-
-def test_require_role_enforced_in_demo(local_backend, monkeypatch):
-    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_ev": "level3"})
-    monkeypatch.setattr(
-        roles, "get_current_guest", lambda: GuestIdentity(token="tok_ev", recipient="ev")
-    )
-    roles.require_role("level1")()   # level3 ≥ level1
-    roles.require_role("level3")()   # equal
-    with pytest.raises(HTTPException) as ei:
-        roles.require_role("level7")()   # level3 < level7
-    assert ei.value.status_code == 403
-
-
-def test_suspended_blocked_everywhere(local_backend, monkeypatch):
-    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_x": "level0"})
-    monkeypatch.setattr(
-        roles, "get_current_guest", lambda: GuestIdentity(token="tok_x", recipient="x")
-    )
-    with pytest.raises(HTTPException):
-        roles.require_role("level1")()  # suspended (level0) fails the floor
 
 
 # ── Capabilities ────────────────────────────────────────────────────────────
