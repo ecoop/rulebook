@@ -1,7 +1,8 @@
 // Level presentation — colors (a judo-belt palette) + one-line descriptions for
 // the level badge. Mirrors ROLE_LEVELS in src/rulebook/roles.py; the backend is
 // the source of truth for policy, this is pure presentation. /me returns the
-// numeric `order` (0–8); role ids are "level0" … "level8".
+// numeric `order` (0–8); role ids are descriptive ("suspended" … "superuser").
+// Map a role id → order via the `ladder` from GET /advanced/roles (its index).
 
 export interface LevelInfo {
   name: string
@@ -66,12 +67,6 @@ export const LEVELS: readonly LevelInfo[] = [
     unlocks: 'Remove or rename people, and configure the role system itself.',
   },
 ]
-
-// Level number from a role id ("level5" → 5); 0 for anything unrecognized.
-export function levelNumber(role: string | null | undefined): number {
-  const m = /^level([0-8])$/.exec(role ?? '')
-  return m ? Number(m[1]) : 0
-}
 
 export function levelInfo(level: number): LevelInfo {
   return LEVELS[level] ?? LEVELS[0]

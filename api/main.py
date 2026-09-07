@@ -411,7 +411,7 @@ class MeResponse(BaseModel):
         default=None,
         description="Guest label; null outside demo_mode / when unauthenticated.",
     )
-    role: str = Field(..., description="Effective role — a level id, level0 (suspended) … level8 (superuser).")
+    role: str = Field(..., description="Effective role — a descriptive id, suspended (no access) … superuser.")
     order: int = Field(..., description="Presentational sort order 0–8, for the role picker + badge. Not an authz rank.")
     fingerprint: str = Field(..., description="8-hex fingerprint of this role's capability set — changes iff its permissions change.")
     capabilities: list[str] = Field(
@@ -895,7 +895,7 @@ def me_endpoint() -> MeResponse:
     Gated on `ask` (which every non-suspended role has), so a `suspended`
     guest gets 403 here — the frontend renders the suspended screen on that.
     Outside demo_mode there's no guest: recipient is null and role is the
-    novice default.
+    beginner default.
     """
     guest = get_current_guest()
     # "Last seen" (Option A): the frontend calls /me once per page load, so
@@ -983,7 +983,7 @@ def admin_set_role(req: RoleChangeRequest) -> RoleChangeResponse:
     dependencies=[Depends(require_capability(CAP_USERS_CHANGE_ROLE))],
 )
 def admin_reset_role(token: str) -> RoleChangeResponse:
-    """Clear a token's override; role falls back to the env seed (or novice)."""
+    """Clear a token's override; role falls back to the env seed (or beginner)."""
     bucket, obj = _require_gcs_for_roles()
     guest = get_current_guest()
     append_role_row(
@@ -1537,7 +1537,7 @@ def admin_list_feedback() -> AdminFeedbackListResponse:
 def admin_list_questions() -> AdminQuestionListResponse:
     """Asked questions, newest-first — the "my questions" history (#51).
 
-    Self-scoped by default (`activity.view`, level 1+): you see only the
+    Self-scoped by default (`activity.view`, beginner+): you see only the
     questions you asked. With `questions.view.all` (Reviewer, level 5+) you
     see everyone's, each stamped with its author — the same self→all slice the
     feedback/gold lists use, and the tier where row authorship becomes visible.

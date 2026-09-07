@@ -1,11 +1,11 @@
 # RBAC — capabilities and the eight rungs
 
-_Last updated: 2026-08-31_
+_Last updated: 2026-09-06_
 
 Authorization is **capability-based**: every endpoint gates on a named capability
 (`require_capability(cap)`), and a role is a bundle of capabilities. `/me` returns
-the caller's `role` (a level id, `level0`…`level8`), numeric `level`, the
-capability bundle, and `allowed_domains`. `ROLE_CAPABILITIES` is keyed by level;
+the caller's `role` (a descriptive id, `suspended`…`superuser`), numeric `order`, the
+capability bundle, and `allowed_domains`. `ROLE_CAPABILITIES` is keyed by role id;
 `ROLE_LEVELS` carries each level's name/color/description for the badge. See
 [`roles.md`](roles.md) for the overview and [`users-tab.md`](users-tab.md) for the
 admin UI.
@@ -89,10 +89,10 @@ same per-field caps (`rate`, `feedback.comment`); nobody edits another person's 
 
 ## 3. The eight rungs (levels)
 
-Roles are **numbered levels 0–8**. The number makes the ordering self-evident (level 5
-outranks level 4, no lore required) — the concern any color/word scheme can't answer on
-its own. **Level 0 is a suspended account** (no access); 1–8 are the rungs. Each level
-also carries a **color** (a judo-belt palette, for a fun badge) and a one-line
+Each role has a **descriptive id** plus a numeric **`order`** (0–8) used only for the
+picker/badge — not an authz rank. **`suspended` (order 0) is no access**; orders 1–8 are
+the rungs, `beginner` → `superuser`. Each also carries a **color** (a judo-belt palette,
+for a fun badge) and a one-line
 description — see the palette below. Every higher level includes everything below it; the
 table lists only **what each level adds**.
 
@@ -108,7 +108,7 @@ table lists only **what each level adds**.
 | **7** | admin | `users.view`, `users.change_role`, `users.add` |
 | **8** | superuser | `users.remove`, `users.rename`, `roles.manage` |
 
-Machine names are `level0` … `level8`; there are no aliases.
+Role ids are descriptive (`suspended` … `superuser`); legacy `level0`…`level8` ids still resolve via aliases during migration.
 
 Reference matrix (✓ = has it; columns are cumulative left→right, by level):
 
@@ -152,7 +152,7 @@ all (in the Users tab). So the level shows as a small **colored badge** — the 
 judo-belt flavor, and the rung number is prefixed so the order is unambiguous
 (`4 · green`). Red/brown/green collide under common colorblindness, so the badge always
 pairs color with the number + label. Colors + descriptions live in `ROLE_LEVELS`
-(`roles.py`) as the single source; `/me` returns the caller's `level`.
+(`roles.py`) as the single source; `/me` returns the caller's `order`.
 
 | Level | Color | Description | | Level | Color | Description |
 |---|---|---|---|---|---|---|
