@@ -26,13 +26,17 @@ def local_backend(monkeypatch):
     monkeypatch.setattr(roles.settings, "initial_roles", {})
 
 
-def test_level_number():
-    assert roles.level_number("level0") == 0
-    assert roles.level_number("level8") == 8
-    assert roles.level_number("wizard") == 0   # unknown → floor
-    # every level carries a name + color + description for the badge
-    assert set(roles.ROLE_LEVELS["level5"]) == {"level", "name", "color", "description"}
+def test_role_order():
+    assert roles.role_order("level0") == 0
+    assert roles.role_order("level8") == 8
+    assert roles.role_order("wizard") == 0   # unknown → floor
+    # every level carries an order + name + color + description for the badge
+    assert set(roles.ROLE_LEVELS["level5"]) == {"order", "name", "color", "description"}
     assert roles.ROLE_LEVELS["level5"]["name"] == "Reviewer"
+
+
+def test_ordered_roles():
+    assert roles.ordered_roles() == tuple(f"level{i}" for i in range(9))
 
 
 def test_overrides_from_rows_replay():
