@@ -117,17 +117,17 @@ from rulebook.roles import (  # noqa: E402
     CAP_USERS_VIEW,
     RESET_SENTINEL,
     ROLE_CAPABILITIES,
-    ROLE_LADDER,
     append_role_row,
     capabilities_for,
     has_capability,
     is_valid_role,
-    level_number,
+    ordered_roles,
     overrides_from_rows,
     read_role_rows,
     require_capability,
     resolve_role,
     role_fingerprint,
+    role_order,
 )
 from rulebook.store import list_domains  # noqa: E402
 from rulebook.tokens import (  # noqa: E402
@@ -412,7 +412,7 @@ class MeResponse(BaseModel):
         description="Guest label; null outside demo_mode / when unauthenticated.",
     )
     role: str = Field(..., description="Effective role — a level id, level0 (suspended) … level8 (superuser).")
-    level: int = Field(..., description="Numeric level 0–8, for ordering and the level badge.")
+    order: int = Field(..., description="Presentational sort order 0–8, for the role picker + badge. Not an authz rank.")
     fingerprint: str = Field(..., description="8-hex fingerprint of this role's capability set — changes iff its permissions change.")
     capabilities: list[str] = Field(
         default_factory=list,
@@ -907,7 +907,7 @@ def me_endpoint() -> MeResponse:
     return MeResponse(
         recipient=(guest.recipient if guest else None),
         role=role,
-        level=level_number(role),
+        order=role_order(role),
         fingerprint=role_fingerprint(role),
         capabilities=sorted(capabilities_for(role)),
         allowed_domains=resolve_allowed_domains(guest.token if guest else None),
@@ -944,7 +944,7 @@ def admin_list_roles() -> AdminRolesResponse:
         RoleAssignmentOut(token=tok, role=role, source=src, fingerprint=role_fingerprint(role))
         for tok, (role, src) in sorted(merged.items())
     ]
-    return AdminRolesResponse(roles=rows, ladder=list(ROLE_LADDER))
+    return AdminRolesResponse(roles=rows, ladder=list(ordered_roles()))
 
 
 @app.post(

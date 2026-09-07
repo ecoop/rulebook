@@ -46,7 +46,7 @@ def test_me_reports_seed_role(client):
     body = client.get("/me").json()
     assert body["recipient"] == "boss"
     assert body["role"] == "level8"
-    assert body["level"] == 8
+    assert body["order"] == 8
     assert body["demo_mode"] is True
     # /me carries the effective role's full capability bundle, sorted — this is
     # the contract the frontend renders tabs/columns/buttons against.
@@ -60,7 +60,7 @@ def test_me_defaults_to_level1(client):
     _as(client, "tok_nov")
     body = client.get("/me").json()
     assert body["role"] == "level1"
-    assert body["level"] == 1
+    assert body["order"] == 1
     # The casual tier: ask, rate, issue tags, plus a personal "Your activity"
     # page to revisit their own questions/ratings — nothing behind the curtain.
     assert body["capabilities"] == ["activity.view", "ask", "feedback.tag", "feedback.view", "rate"]

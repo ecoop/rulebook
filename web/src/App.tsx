@@ -113,7 +113,7 @@ interface Meta {
 interface Me {
   recipient: string | null
   role: string
-  level: number
+  order: number
   capabilities: string[]
   demo_mode: boolean
 }
@@ -504,7 +504,7 @@ export default function App() {
                 >
                   You're a{' '}
                   <span className="font-medium text-foreground underline decoration-dotted underline-offset-2">
-                    {levelInfo(me.level).name}
+                    {levelInfo(me.order).name}
                   </span>
                 </button>
               )}
@@ -583,7 +583,7 @@ export default function App() {
       )}
 
       {showRoles && me && (
-        <HowRolesWork currentLevel={me.level} onClose={() => setShowRoles(false)} />
+        <HowRolesWork currentLevel={me.order} onClose={() => setShowRoles(false)} />
       )}
 
       <main className="space-y-6 px-6 py-8 lg:pr-[19rem]">

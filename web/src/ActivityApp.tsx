@@ -128,7 +128,7 @@ interface AdminFeedbackListResponse {
 interface MeResponse {
   recipient: string | null
   role: string
-  level: number
+  order: number
   capabilities: string[]
   allowed_domains?: string[] | null
   demo_mode: boolean
@@ -1367,7 +1367,7 @@ export default function ActivityApp() {
                 {me?.recipient && (
                   <span className="flex items-center gap-1.5 text-sm">
                     <span className="font-medium text-foreground">{me.recipient}</span>
-                    {me.demo_mode && <LevelBadge level={me.level} />}
+                    {me.demo_mode && <LevelBadge level={me.order} />}
                   </span>
                 )}
                 <WidgetControls />

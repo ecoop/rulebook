@@ -1,7 +1,7 @@
 // Level presentation — colors (a judo-belt palette) + one-line descriptions for
 // the level badge. Mirrors ROLE_LEVELS in src/rulebook/roles.py; the backend is
 // the source of truth for policy, this is pure presentation. /me returns the
-// numeric `level`; role ids are "level0" … "level8".
+// numeric `order` (0–8); role ids are "level0" … "level8".
 
 export interface LevelInfo {
   name: string

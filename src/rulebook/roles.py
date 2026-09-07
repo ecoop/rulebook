@@ -45,10 +45,6 @@ log = logging.getLogger(__name__)
 # the ordering self-evident (level5 > level4, no lore required). Level 0 is a
 # suspended account (no access); 1–8 are the rungs. Each level also carries a
 # color and a one-line description for a UI badge — see ROLE_LEVELS below.
-ROLE_LADDER: tuple[str, ...] = (
-    "level0", "level1", "level2", "level3", "level4",
-    "level5", "level6", "level7", "level8",
-)
 DEFAULT_ROLE = "level1"   # a new / unseeded token is a beginner
 RESET_SENTINEL = "reset"  # a roles.jsonl row role that clears an override
 
@@ -155,22 +151,34 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
 # here as the single source of truth; expose via the API rather than duplicating
 # in the frontend.
 ROLE_LEVELS: dict[str, dict[str, object]] = {
-    "level0": {"level": 0, "name": "Suspended", "color": "#9AA0A6", "description": "No access"},
-    "level1": {"level": 1, "name": "Beginner", "color": "#E8E8E8", "description": "Ask and rate answers"},
-    "level2": {"level": 2, "name": "Annotator", "color": "#E5B80B", "description": "Comment on answers"},
-    "level3": {"level": 3, "name": "Contributor", "color": "#E07A20", "description": "Suggest and revisit your own golds"},
-    "level4": {"level": 4, "name": "Builder", "color": "#3A8C3A", "description": "See the passages and sources behind answers"},
-    "level5": {"level": 5, "name": "Reviewer", "color": "#2C64B4", "description": "Review everyone's work in their domains"},
-    "level6": {"level": 6, "name": "Director", "color": "#7A4A2B", "description": "Curate & clone golds, rebuild, audit — in their domains"},
-    "level7": {"level": 7, "name": "Admin", "color": "#1A1A1A", "description": "Users tab; change roles"},
-    "level8": {"level": 8, "name": "Superuser", "color": "#C4272E", "description": "Remove/rename users; RBAC config"},
+    "level0": {"order": 0, "name": "Suspended", "color": "#9AA0A6", "description": "No access"},
+    "level1": {"order": 1, "name": "Beginner", "color": "#E8E8E8", "description": "Ask and rate answers"},
+    "level2": {"order": 2, "name": "Annotator", "color": "#E5B80B", "description": "Comment on answers"},
+    "level3": {"order": 3, "name": "Contributor", "color": "#E07A20", "description": "Suggest and revisit your own golds"},
+    "level4": {"order": 4, "name": "Builder", "color": "#3A8C3A", "description": "See the passages and sources behind answers"},
+    "level5": {"order": 5, "name": "Reviewer", "color": "#2C64B4", "description": "Review everyone's work in their domains"},
+    "level6": {"order": 6, "name": "Director", "color": "#7A4A2B", "description": "Curate & clone golds, rebuild, audit — in their domains"},
+    "level7": {"order": 7, "name": "Admin", "color": "#1A1A1A", "description": "Users tab; change roles"},
+    "level8": {"order": 8, "name": "Superuser", "color": "#C4272E", "description": "Remove/rename users; RBAC config"},
 }
 
 
-def level_number(role: str) -> int:
-    """Numeric level for a role (0 for suspended / unknown)."""
+def role_order(role: str) -> int:
+    """Presentational sort order for a role (0 for suspended / unknown).
+
+    A display/ordering hint only — no authorization reads this; authz is
+    capability-based (see require_capability).
+    """
     meta = ROLE_LEVELS.get(role)
-    return int(meta["level"]) if meta else 0
+    return int(meta["order"]) if meta else 0
+
+
+def ordered_roles() -> tuple[str, ...]:
+    """Role ids low→high by their presentational `order` (replaces ROLE_LADDER).
+
+    Powers the Users-tab picker ordering; not an authorization ranking.
+    """
+    return tuple(sorted(ROLE_LEVELS, key=lambda r: int(ROLE_LEVELS[r]["order"])))
 
 # What a public (demo_mode off) deploy allows anonymously — the novice tier.
 PUBLIC_CAPABILITIES: frozenset[str] = ROLE_CAPABILITIES[DEFAULT_ROLE]
