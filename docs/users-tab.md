@@ -1,6 +1,6 @@
 # Users tab — reference
 
-_Last updated: 2026-08-27_
+_Last updated: 2026-09-06_
 
 The **Users** tab (in the "Your activity" view, `web/src/ActivityApp.tsx`)
 manages invitees, their roles, and their domain access. **Shipped** — this is
@@ -14,7 +14,7 @@ the as-built reference (the earlier frontend build-spec is superseded).
   (#112/#156). Admin/Superuser (level ≥ 7) are unscoped.
 
 Creating a user = add to the allowlist (+ optionally set a role and domains).
-Removing access: **suspend** (reversible — set role `level0`, keeps audit) vs
+Removing access: **suspend** (reversible — set role `suspended`, keeps audit) vs
 **remove** (hard delete from the allowlist).
 
 ## API
@@ -37,9 +37,9 @@ allowed_domains, demo_mode}`; the UI gates on **capabilities** (e.g.
 | POST | `/advanced/allowed-domains` | `users.change_role` |
 | POST | `/advanced/allowed-domains/{token}/reset` | `users.change_role` |
 
-`ladder` (from `/advanced/roles`, low→high): `["level0", …, "level8"]`
-(level0 = suspended, level8 = superuser). Reset clears an override → default
-`level1`. 409 on a duplicate token; 404 removing an unknown one.
+`ladder` (from `/advanced/roles`, low→high): `["suspended", …, "superuser"]`
+(suspended = suspended, superuser = superuser). Reset clears an override → default
+`beginner`. 409 on a duplicate token; 404 removing an unknown one.
 
 ## Gotchas
 

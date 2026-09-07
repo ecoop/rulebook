@@ -25,7 +25,7 @@ def client(monkeypatch):
         "invite_tokens_seed",
         {"tok_admin": "chief", "tok_ult": "una", "tok_nov": "newbie"},
     )
-    monkeypatch.setattr(settings, "initial_roles", {"tok_admin": "level7"})
+    monkeypatch.setattr(settings, "initial_roles", {"tok_admin": "admin"})
     monkeypatch.setattr(settings, "default_allowed_domains", ["ultimate", "goaltimate"])
     monkeypatch.setattr(settings, "initial_allowed_domains", {"tok_ult": ["ultimate"]})
 

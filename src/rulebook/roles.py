@@ -12,8 +12,9 @@ guest-auth answers *who is this token?* (identity). This module answers
                changes live (no redeploy) — the durability stopgap from
                docs/roles.md ("direct-to-GCS for roles").
 
-Effective role = override(token) or seed(token) or default (level1). Roles are
-numbered levels, level0 (suspended) … level8 (superuser); see ROLE_LEVELS.
+Effective role = override(token) or seed(token) or default (beginner). Role ids
+are descriptive — suspended, beginner, … superuser (see ROLE_LEVELS); legacy
+level0…8 ids still resolve via ROLE_ALIASES.
 
 The ladder answers "how privileged?" as a single rank, which can't express
 per-feature asks like "see the Advanced page but not the Users tab" or "edit
@@ -41,11 +42,10 @@ from .config import settings
 
 log = logging.getLogger(__name__)
 
-# Roles are numbered LEVELS, 0–8 (docs/rbac-capabilities.md §4): the number makes
-# the ordering self-evident (level5 > level4, no lore required). Level 0 is a
-# suspended account (no access); 1–8 are the rungs. Each level also carries a
-# color and a one-line description for a UI badge — see ROLE_LEVELS below.
-DEFAULT_ROLE = "level1"   # a new / unseeded token is a beginner
+# Roles have descriptive ids (docs/rbac-capabilities.md §4): suspended (no access),
+# then the rungs beginner → superuser. Each carries a numeric `order` (picker/badge
+# sort only, not a rank), a color, and a one-line description — see ROLE_LEVELS.
+DEFAULT_ROLE = "beginner"   # a new / unseeded token is a beginner
 RESET_SENTINEL = "reset"  # a roles.jsonl row role that clears an override
 
 
@@ -135,15 +135,15 @@ _R8 = _R7 | {CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE}  # superuser
 # holds the destructive ops (remove/rename) plus the future RBAC-config editor
 # (roles.manage).
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
-    "level0": frozenset(),  # suspended
-    "level1": _R1,          # casual player
-    "level2": _R2,          # + explain a rating
-    "level3": _R3,          # + suggest answers
-    "level4": _R4,          # behind the curtain (self)
-    "level5": _R5,          # read all, write own
-    "level6": _R6,          # operator
-    "level7": _R7,          # admin
-    "level8": _R8,          # superuser
+    "suspended":   frozenset(),  # no access
+    "beginner":    _R1,          # casual player
+    "annotator":   _R2,          # + explain a rating
+    "contributor": _R3,          # + suggest answers
+    "builder":     _R4,          # behind the curtain (self)
+    "reviewer":    _R5,          # read all, write own
+    "director":    _R6,          # operator
+    "admin":       _R7,          # users
+    "superuser":   _R8,          # full control
 }
 
 # Presentation for each level — color (a judo-belt palette; red breaks the ramp
@@ -151,16 +151,41 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
 # here as the single source of truth; expose via the API rather than duplicating
 # in the frontend.
 ROLE_LEVELS: dict[str, dict[str, object]] = {
-    "level0": {"order": 0, "name": "Suspended", "color": "#9AA0A6", "description": "No access"},
-    "level1": {"order": 1, "name": "Beginner", "color": "#E8E8E8", "description": "Ask and rate answers"},
-    "level2": {"order": 2, "name": "Annotator", "color": "#E5B80B", "description": "Comment on answers"},
-    "level3": {"order": 3, "name": "Contributor", "color": "#E07A20", "description": "Suggest and revisit your own golds"},
-    "level4": {"order": 4, "name": "Builder", "color": "#3A8C3A", "description": "See the passages and sources behind answers"},
-    "level5": {"order": 5, "name": "Reviewer", "color": "#2C64B4", "description": "Review everyone's work in their domains"},
-    "level6": {"order": 6, "name": "Director", "color": "#7A4A2B", "description": "Curate & clone golds, rebuild, audit — in their domains"},
-    "level7": {"order": 7, "name": "Admin", "color": "#1A1A1A", "description": "Users tab; change roles"},
-    "level8": {"order": 8, "name": "Superuser", "color": "#C4272E", "description": "Remove/rename users; RBAC config"},
+    "suspended":   {"order": 0, "name": "Suspended", "color": "#9AA0A6", "description": "No access"},
+    "beginner":    {"order": 1, "name": "Beginner", "color": "#E8E8E8", "description": "Ask and rate answers"},
+    "annotator":   {"order": 2, "name": "Annotator", "color": "#E5B80B", "description": "Comment on answers"},
+    "contributor": {"order": 3, "name": "Contributor", "color": "#E07A20", "description": "Suggest and revisit your own golds"},
+    "builder":     {"order": 4, "name": "Builder", "color": "#3A8C3A", "description": "See the passages and sources behind answers"},
+    "reviewer":    {"order": 5, "name": "Reviewer", "color": "#2C64B4", "description": "Review everyone's work in their domains"},
+    "director":    {"order": 6, "name": "Director", "color": "#7A4A2B", "description": "Curate & clone golds, rebuild, audit — in their domains"},
+    "admin":       {"order": 7, "name": "Admin", "color": "#1A1A1A", "description": "Users tab; change roles"},
+    "superuser":   {"order": 8, "name": "Superuser", "color": "#C4272E", "description": "Remove/rename users; RBAC config"},
 }
+
+
+# Legacy → canonical id aliases (#199 migration). The role ids were the numbered
+# level0…level8; they are now descriptive (suspended…superuser). Old assignments
+# still stored in roles.jsonl or the seed keep resolving through this map, so the
+# deploy needs NO data rewrite. Drop these once the stored ids are rewritten.
+ROLE_ALIASES: dict[str, str] = {
+    "level0": "suspended",
+    "level1": "beginner",
+    "level2": "annotator",
+    "level3": "contributor",
+    "level4": "builder",
+    "level5": "reviewer",
+    "level6": "director",
+    "level7": "admin",
+    "level8": "superuser",
+    # pre-level* names still lurking in old rows:
+    "novice": "beginner",
+    "evaluator": "contributor",
+}
+
+
+def canonical_role(role: str) -> str:
+    """Map a legacy role id to its current canonical id; pass others through."""
+    return ROLE_ALIASES.get(role, role)
 
 
 def role_order(role: str) -> int:
@@ -169,7 +194,7 @@ def role_order(role: str) -> int:
     A display/ordering hint only — no authorization reads this; authz is
     capability-based (see require_capability).
     """
-    meta = ROLE_LEVELS.get(role)
+    meta = ROLE_LEVELS.get(canonical_role(role))
     return int(meta["order"]) if meta else 0
 
 
@@ -191,12 +216,12 @@ _overrides_cache: dict[tuple[str, str], tuple[float, dict[str, str]]] = {}
 
 
 def is_valid_role(role: str) -> bool:
-    return role in ROLE_CAPABILITIES
+    return canonical_role(role) in ROLE_CAPABILITIES
 
 
 def capabilities_for(role: str) -> frozenset[str]:
     """The capability bundle for a role; empty for unknown roles (fail closed)."""
-    return ROLE_CAPABILITIES.get(role, frozenset())
+    return ROLE_CAPABILITIES.get(canonical_role(role), frozenset())
 
 
 def has_capability(role: str, capability: str) -> bool:
@@ -225,13 +250,16 @@ def role_fingerprint(role: str) -> str:
 
 
 def resolve_role(token: str | None) -> str:
-    """Effective level for a token: override ▸ seed ▸ default (level1)."""
+    """Effective role for a token: override ▸ seed ▸ default (beginner).
+
+    Legacy ids (level0…8, novice, evaluator) are canonicalized (ROLE_ALIASES).
+    """
     if token is None:
         return DEFAULT_ROLE
     overrides = _effective_overrides()
     if token in overrides:
-        return overrides[token]
-    return settings.initial_roles.get(token, DEFAULT_ROLE)
+        return canonical_role(overrides[token])
+    return canonical_role(settings.initial_roles.get(token, DEFAULT_ROLE))
 
 
 def _effective_overrides() -> dict[str, str]:
@@ -270,7 +298,7 @@ def overrides_from_rows(rows: Iterable[Mapping[str, object]]) -> dict[str, str]:
         if role == RESET_SENTINEL:
             out.pop(token, None)
         elif is_valid_role(role):
-            out[token] = role
+            out[token] = canonical_role(role)
     return out
 
 

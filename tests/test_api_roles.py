@@ -27,7 +27,7 @@ def client(monkeypatch):
     monkeypatch.setattr(
         settings,
         "initial_roles",
-        {"tok_super": "level8", "tok_admin": "level7", "tok_l4": "level4"},
+        {"tok_super": "superuser", "tok_admin": "admin", "tok_l4": "builder"},
     )
 
     import api.main as main
@@ -45,21 +45,21 @@ def test_me_reports_seed_role(client):
     _as(client, "tok_super")
     body = client.get("/me").json()
     assert body["recipient"] == "boss"
-    assert body["role"] == "level8"
+    assert body["role"] == "superuser"
     assert body["order"] == 8
     assert body["demo_mode"] is True
     # /me carries the effective role's full capability bundle, sorted — this is
     # the contract the frontend renders tabs/columns/buttons against.
-    assert body["capabilities"] == sorted(roles.ROLE_CAPABILITIES["level8"])
+    assert body["capabilities"] == sorted(roles.ROLE_CAPABILITIES["superuser"])
     assert "roles.manage" in body["capabilities"]
     # Fingerprint of the role's capability set — 8 hex, matches the helper.
-    assert body["fingerprint"] == roles.role_fingerprint("level8")
+    assert body["fingerprint"] == roles.role_fingerprint("superuser")
 
 
-def test_me_defaults_to_level1(client):
+def test_me_defaults_to_beginner(client):
     _as(client, "tok_nov")
     body = client.get("/me").json()
-    assert body["role"] == "level1"
+    assert body["role"] == "beginner"
     assert body["order"] == 1
     # The casual tier: ask, rate, issue tags, plus a personal "Your activity"
     # page to revisit their own questions/ratings — nothing behind the curtain.
@@ -71,7 +71,7 @@ def test_users_split_admin_vs_superuser(client):
     # are authorized and fail only for lack of the gcs backend (400), not authz.
     _as(client, "tok_admin")
     assert client.get("/advanced/invite-tokens").status_code == 400
-    assert client.post("/advanced/roles", json={"token": "tok_nov", "role": "level2"}).status_code == 400
+    assert client.post("/advanced/roles", json={"token": "tok_nov", "role": "annotator"}).status_code == 400
     assert client.post("/advanced/invite-tokens", json={"label": "x"}).status_code == 400
     # ...but the destructive ops (remove / rename) stay superuser-only → 403.
     assert client.delete("/advanced/invite-tokens/tok_x").status_code == 403
@@ -93,14 +93,14 @@ def test_admin_roles_superuser_only(client):
     resp = client.get("/advanced/roles")
     assert resp.status_code == 200
     roles = {r["token"]: r for r in resp.json()["roles"]}
-    assert roles["tok_super"]["role"] == "level8"
+    assert roles["tok_super"]["role"] == "superuser"
     assert roles["tok_super"]["source"] == "seed"
 
 
 def test_post_role_needs_gcs(client):
     # superuser is authorized, but role writes require the gcs backend.
     _as(client, "tok_super")
-    resp = client.post("/advanced/roles", json={"token": "tok_nov", "role": "level7"})
+    resp = client.post("/advanced/roles", json={"token": "tok_nov", "role": "admin"})
     assert resp.status_code == 400
 
 
@@ -126,12 +126,12 @@ def test_golds_and_feedback_self_scoped(client, monkeypatch):
     monkeypatch.setattr(main, "read_latest_feedback", lambda: feedback)
     monkeypatch.setattr(main, "read_qa_questions", lambda: {})
 
-    # level4 lacks *.view.all → sees only its own (author == "gina") rows.
+    # builder lacks *.view.all → sees only its own (author == "gina") rows.
     _as(client, "tok_l4")
     assert [g["qa_id"] for g in client.get("/advanced/golds").json()["golds"]] == ["q1"]
     assert [f["qa_id"] for f in client.get("/advanced/feedback").json()["feedback"]] == ["q1"]
 
-    # level8 has *.view.all → sees everyone's, with is_own flagging its own rows
+    # superuser has *.view.all → sees everyone's, with is_own flagging its own rows
     # (boss authored q2, gina authored q1) so the UI only offers Edit on own.
     _as(client, "tok_super")
     assert {g["qa_id"] for g in client.get("/advanced/golds").json()["golds"]} == {"q1", "q2"}
@@ -160,12 +160,12 @@ def test_questions_history_self_scoped(client, monkeypatch):
     assert [q["qa_id"] for q in qs] == ["q1"]
     assert qs[0]["rating"] == 4 and qs[0]["has_gold"] is True and qs[0]["answer"] == "A"
 
-    # activity.view is level1+, so a novice reaches it — and sees only their own
+    # activity.view is beginner+, so a novice reaches it — and sees only their own
     # (none here → empty), never everyone's.
     _as(client, "tok_nov")
     assert client.get("/advanced/questions").json()["questions"] == []
 
-    # level8 holds questions.view.all → sees everyone's, each stamped with its
+    # superuser holds questions.view.all → sees everyone's, each stamped with its
     # asker, and is_own flags only the caller's own (boss authored q2).
     _as(client, "tok_super")
     qs = {q["qa_id"]: q for q in client.get("/advanced/questions").json()["questions"]}
@@ -186,7 +186,7 @@ def test_clone_gold_creates_owned_copy(client, monkeypatch):
     calls: list = []
     monkeypatch.setattr(main, "log_gold", lambda qa_id, **kw: calls.append((qa_id, kw)))
 
-    # level8 holds golds.clone → forks the gold into a new one owned by the caller.
+    # superuser holds golds.clone → forks the gold into a new one owned by the caller.
     _as(client, "tok_super")
     resp = client.post("/advanced/golds/gsrc/clone")
     assert resp.status_code == 200
@@ -198,7 +198,7 @@ def test_clone_gold_creates_owned_copy(client, monkeypatch):
     assert kw["gold_answer"] == "orig"    # content copied from the source
     assert kw["author"] == "boss"         # …but owned by the cloner (tok_super = "boss")
 
-    # a role without golds.clone (level1 novice) is refused.
+    # a role without golds.clone (beginner novice) is refused.
     _as(client, "tok_nov")
     assert client.post("/advanced/golds/gsrc/clone").status_code == 403
 
@@ -219,9 +219,9 @@ def test_mutation_is_audited_and_audit_is_gated(client, monkeypatch):
     # The row records the actor's capability-set fingerprint at the time.
     import rulebook.roles as roles
 
-    assert audited[-1]["actor_fingerprint"] == roles.role_fingerprint("level8")
+    assert audited[-1]["actor_fingerprint"] == roles.role_fingerprint("superuser")
 
-    # Reading the trail needs attribution.view (level 6+): level8 ok, level4 denied.
+    # Reading the trail needs attribution.view (level 6+): superuser ok, builder denied.
     monkeypatch.setattr(main, "read_audit", lambda limit=None: [])
     assert client.get("/advanced/audit").status_code == 200
     _as(client, "tok_l4")
@@ -238,7 +238,7 @@ def test_reload_logs_gated_and_returns_counts(client, monkeypatch):
     monkeypatch.setattr(main, "read_latest_golds", lambda: [{}, {}, {}])
     monkeypatch.setattr(main, "log_audit", lambda **k: None)
 
-    # index.rebuild is level6+; admin (level7) holds it → re-syncs + reports counts.
+    # index.rebuild is director+; admin (admin) holds it → re-syncs + reports counts.
     _as(client, "tok_admin")
     r = client.post("/advanced/reload-logs")
     assert r.status_code == 200

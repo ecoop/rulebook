@@ -27,34 +27,59 @@ def local_backend(monkeypatch):
 
 
 def test_role_order():
-    assert roles.role_order("level0") == 0
-    assert roles.role_order("level8") == 8
+    assert roles.role_order("suspended") == 0
+    assert roles.role_order("superuser") == 8
     assert roles.role_order("wizard") == 0   # unknown → floor
     # every level carries an order + name + color + description for the badge
-    assert set(roles.ROLE_LEVELS["level5"]) == {"order", "name", "color", "description"}
-    assert roles.ROLE_LEVELS["level5"]["name"] == "Reviewer"
+    assert set(roles.ROLE_LEVELS["reviewer"]) == {"order", "name", "color", "description"}
+    assert roles.ROLE_LEVELS["reviewer"]["name"] == "Reviewer"
 
 
 def test_ordered_roles():
-    assert roles.ordered_roles() == tuple(f"level{i}" for i in range(9))
+    assert roles.ordered_roles() == (
+        "suspended", "beginner", "annotator", "contributor", "builder",
+        "reviewer", "director", "admin", "superuser",
+    )
+
+
+def test_legacy_ids_alias_to_canonical():
+    # Old assignments (level ids + pre-level names) still resolve after the rename.
+    assert roles.canonical_role("level8") == "superuser"
+    assert roles.canonical_role("level3") == "contributor"
+    assert roles.canonical_role("evaluator") == "contributor"
+    assert roles.canonical_role("novice") == "beginner"
+    assert roles.canonical_role("superuser") == "superuser"   # already canonical
+    assert roles.canonical_role("wizard") == "wizard"         # unknown passes through
+    # validity / caps / order all honor the alias
+    assert roles.is_valid_role("level7")
+    assert roles.capabilities_for("level5") == roles.capabilities_for("reviewer")
+    assert roles.role_order("level0") == 0
+    # append-only rows carrying legacy ids replay to canonical ids
+    rows = [{"token": "t", "role": "level8"}, {"token": "u", "role": "evaluator"}]
+    assert roles.overrides_from_rows(rows) == {"t": "superuser", "u": "contributor"}
+
+
+def test_resolve_canonicalizes_legacy_seed(local_backend, monkeypatch):
+    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_old": "level7"})
+    assert roles.resolve_role("tok_old") == "admin"
 
 
 def test_overrides_from_rows_replay():
     rows = [
-        {"token": "a", "role": "level1"},
-        {"token": "a", "role": "level3"},   # latest wins
-        {"token": "b", "role": "level7"},
+        {"token": "a", "role": "beginner"},
+        {"token": "a", "role": "contributor"},   # latest wins
+        {"token": "b", "role": "admin"},
         {"token": "b", "role": "reset"},     # cleared
         {"token": "c", "role": "bogus"},     # invalid ignored
     ]
-    assert roles.overrides_from_rows(rows) == {"a": "level3"}
+    assert roles.overrides_from_rows(rows) == {"a": "contributor"}
 
 
 def test_resolve_prefers_override_then_seed_then_default(local_backend, monkeypatch):
-    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_seed": "level7"})
-    assert roles.resolve_role("tok_seed") == "level7"       # seed
-    assert roles.resolve_role("tok_unknown") == "level1"    # default
-    assert roles.resolve_role(None) == "level1"
+    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_seed": "admin"})
+    assert roles.resolve_role("tok_seed") == "admin"       # seed
+    assert roles.resolve_role("tok_unknown") == "beginner"    # default
+    assert roles.resolve_role(None) == "beginner"
 
 
 # ── Capabilities ────────────────────────────────────────────────────────────
@@ -62,60 +87,60 @@ def test_resolve_prefers_override_then_seed_then_default(local_backend, monkeypa
 
 def test_rungs_are_monotonic():
     # Each level must be a strict superset of the one below it (§4).
-    levels = [f"level{n}" for n in range(9)]
+    levels = list(roles.ordered_roles())
     for lower, higher in zip(levels, levels[1:]):  # noqa: B905 — offset pairs, unequal by design
         lo, hi = roles.capabilities_for(lower), roles.capabilities_for(higher)
         assert lo < hi, f"{higher} must strictly extend {lower}"
-    # level8 (superuser) is the top and holds every capability.
-    assert roles.capabilities_for("level8") == roles.CAPABILITIES
+    # superuser (superuser) is the top and holds every capability.
+    assert roles.capabilities_for("superuser") == roles.CAPABILITIES
 
 
 def test_rung_boundaries():
     has = roles.has_capability
-    # level1: ask/rate/tag + a personal "Your activity" page (revisit your own
+    # beginner: ask/rate/tag + a personal "Your activity" page (revisit your own
     # questions/ratings), but no comment and nothing behind the curtain.
-    assert has("level1", roles.CAP_FEEDBACK_TAG)
-    assert has("level1", roles.CAP_ACTIVITY_VIEW)
-    assert has("level1", roles.CAP_FEEDBACK_VIEW)
-    assert not has("level1", roles.CAP_FEEDBACK_COMMENT)
-    assert not has("level1", roles.CAP_GOLDS_VIEW)
-    assert not has("level1", roles.CAP_ADVANCED_VIEW)
-    # level2 gains the comment; level3 gains gold authoring + revisiting own golds.
-    assert has("level2", roles.CAP_FEEDBACK_COMMENT)
-    assert not has("level2", roles.CAP_GOLD_AUTHOR)
-    assert has("level3", roles.CAP_GOLD_AUTHOR)
-    assert has("level3", roles.CAP_GOLDS_VIEW)
-    assert has("level3", roles.CAP_GOLDS_EDIT_OWN)
-    assert not has("level3", roles.CAP_ADVANCED_VIEW)
-    # level4: the retrieval machinery (passages/sources), self, read-mostly —
+    assert has("beginner", roles.CAP_FEEDBACK_TAG)
+    assert has("beginner", roles.CAP_ACTIVITY_VIEW)
+    assert has("beginner", roles.CAP_FEEDBACK_VIEW)
+    assert not has("beginner", roles.CAP_FEEDBACK_COMMENT)
+    assert not has("beginner", roles.CAP_GOLDS_VIEW)
+    assert not has("beginner", roles.CAP_ADVANCED_VIEW)
+    # annotator gains the comment; contributor gains gold authoring + revisiting own golds.
+    assert has("annotator", roles.CAP_FEEDBACK_COMMENT)
+    assert not has("annotator", roles.CAP_GOLD_AUTHOR)
+    assert has("contributor", roles.CAP_GOLD_AUTHOR)
+    assert has("contributor", roles.CAP_GOLDS_VIEW)
+    assert has("contributor", roles.CAP_GOLDS_EDIT_OWN)
+    assert not has("contributor", roles.CAP_ADVANCED_VIEW)
+    # builder: the retrieval machinery (passages/sources), self, read-mostly —
     # it no longer INTRODUCES the self views (those moved down), but inherits them.
-    assert has("level4", roles.CAP_ADVANCED_VIEW)
-    assert has("level4", roles.CAP_PASSAGES_VIEW)
-    assert has("level4", roles.CAP_SOURCES_VIEW)
-    assert has("level4", roles.CAP_GOLDS_EDIT_OWN)
+    assert has("builder", roles.CAP_ADVANCED_VIEW)
+    assert has("builder", roles.CAP_PASSAGES_VIEW)
+    assert has("builder", roles.CAP_SOURCES_VIEW)
+    assert has("builder", roles.CAP_GOLDS_EDIT_OWN)
     for cap in (roles.CAP_GOLDS_VIEW_ALL, roles.CAP_GOLDS_CURATE, roles.CAP_ATTRIBUTION_VIEW):
-        assert not has("level4", cap)
-    # level5: self → all (read) across questions/feedback/golds — with authorship;
-    # still no curate/clone, and the Audit tab (attribution.view) stays at level6.
-    assert has("level5", roles.CAP_GOLDS_VIEW_ALL)
-    assert has("level5", roles.CAP_FEEDBACK_VIEW_ALL)
-    assert has("level5", roles.CAP_QUESTIONS_VIEW_ALL)
-    assert not has("level4", roles.CAP_QUESTIONS_VIEW_ALL)
-    assert not has("level5", roles.CAP_GOLDS_CURATE)
-    assert not has("level5", roles.CAP_ATTRIBUTION_VIEW)
-    # level6: curate/clone/rebuild + the attribution wall — but no Users.
+        assert not has("builder", cap)
+    # reviewer: self → all (read) across questions/feedback/golds — with authorship;
+    # still no curate/clone, and the Audit tab (attribution.view) stays at director.
+    assert has("reviewer", roles.CAP_GOLDS_VIEW_ALL)
+    assert has("reviewer", roles.CAP_FEEDBACK_VIEW_ALL)
+    assert has("reviewer", roles.CAP_QUESTIONS_VIEW_ALL)
+    assert not has("builder", roles.CAP_QUESTIONS_VIEW_ALL)
+    assert not has("reviewer", roles.CAP_GOLDS_CURATE)
+    assert not has("reviewer", roles.CAP_ATTRIBUTION_VIEW)
+    # director: curate/clone/rebuild + the attribution wall — but no Users.
     for cap in (roles.CAP_GOLDS_CURATE, roles.CAP_GOLDS_CLONE, roles.CAP_INDEX_REBUILD,
                 roles.CAP_SOURCES_CURATE, roles.CAP_ATTRIBUTION_VIEW):
-        assert has("level6", cap)
-    assert not has("level6", roles.CAP_USERS_VIEW)
-    # level7 (admin): Users tab, change role, add invitees — but not remove/rename.
+        assert has("director", cap)
+    assert not has("director", roles.CAP_USERS_VIEW)
+    # admin (admin): Users tab, change role, add invitees — but not remove/rename.
     for cap in (roles.CAP_USERS_VIEW, roles.CAP_USERS_CHANGE_ROLE, roles.CAP_USERS_ADD):
-        assert has("level7", cap)
+        assert has("admin", cap)
     for cap in (roles.CAP_USERS_REMOVE, roles.CAP_USERS_RENAME, roles.CAP_ROLES_MANAGE):
-        assert not has("level7", cap)
-    # level8 (superuser): the destructive ops + the RBAC-config editor.
+        assert not has("admin", cap)
+    # superuser (superuser): the destructive ops + the RBAC-config editor.
     for cap in (roles.CAP_USERS_REMOVE, roles.CAP_USERS_RENAME, roles.CAP_ROLES_MANAGE):
-        assert has("level8", cap)
+        assert has("superuser", cap)
     # No role edits another's gold in place — clone replaced edit.any.
     assert not hasattr(roles, "CAP_GOLDS_EDIT_ANY")
 
@@ -127,11 +152,11 @@ def test_capability_fingerprint():
     assert len(fp(["ask"])) == 8
     # Any change to the set changes the fingerprint.
     assert fp(["ask", "rate"]) != fp(["ask", "rate", "gold.author"])
-    # level3 (Contributor) = {ask, rate, feedback.tag, activity.view, feedback.view,
+    # contributor (Contributor) = {ask, rate, feedback.tag, activity.view, feedback.view,
     # feedback.comment, gold.author, golds.view, golds.edit.own}; sorted+hashed.
-    assert roles.role_fingerprint("level3") == "f4c9d61a"
+    assert roles.role_fingerprint("contributor") == "f4c9d61a"
     # Distinct bundles → distinct fingerprints.
-    assert roles.role_fingerprint("level3") != roles.role_fingerprint("level4")
+    assert roles.role_fingerprint("contributor") != roles.role_fingerprint("builder")
 
 
 def test_unknown_role_has_no_capabilities():
@@ -153,11 +178,11 @@ def test_require_capability_public_mode(monkeypatch):
 
 
 def test_require_capability_enforced_in_demo(local_backend, monkeypatch):
-    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_g": "level4"})
+    monkeypatch.setattr(roles.settings, "initial_roles", {"tok_g": "builder"})
     monkeypatch.setattr(
         roles, "get_current_guest", lambda: GuestIdentity(token="tok_g", recipient="g")
     )
-    roles.require_capability(roles.CAP_GOLDS_VIEW)()   # level4 may view
+    roles.require_capability(roles.CAP_GOLDS_VIEW)()   # builder may view
     with pytest.raises(HTTPException) as ei:
         roles.require_capability(roles.CAP_GOLDS_CURATE)()  # but not curate
     assert ei.value.status_code == 403

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
-import { LevelBadge, levelInfo, levelNumber } from './levels'
+import { LevelBadge, levelInfo } from './levels'
 import { type IssueTag, TAG_LABELS, TAGS } from './tags'
 import { WidgetControls } from './WidgetControls'
 
@@ -300,11 +300,11 @@ function inviteLinkFor(token: string, label: string): string {
   return `${window.location.origin}/?token=${token}&name=${encodeURIComponent(label)}`
 }
 
-// Logical role ordering (low→high) — numbered levels (docs/rbac-capabilities.md
+// Logical role ordering (low→high) — descriptive ids (docs/rbac-capabilities.md
 // §4), a fallback when the backend ladder from GET /advanced/roles hasn't loaded.
 const ROLE_LADDER_FALLBACK = [
-  'level0', 'level1', 'level2', 'level3', 'level4',
-  'level5', 'level6', 'level7', 'level8',
+  'suspended', 'beginner', 'annotator', 'contributor', 'builder',
+  'reviewer', 'director', 'admin', 'superuser',
 ]
 
 // Generic click handler for a sortable table column: same column → flip
@@ -701,7 +701,7 @@ export default function ActivityApp() {
   }
 
   async function refreshMe() {
-    // /me is gated at novice, so a 403 means the guest is suspended — show
+    // /me is gated at beginner, so a 403 means the guest is suspended — show
     // the suspended screen rather than the admin surface.
     try {
       const resp = await fetch('/me')
@@ -1316,7 +1316,7 @@ export default function ActivityApp() {
       return {
         token: t.token,
         label: t.label,
-        role: r?.role ?? 'level1',
+        role: r?.role ?? 'beginner',
         source: r?.source ?? '—',
         allowedDomains: a ? a.domains : null,
         allowedDomainsSource: a?.source ?? 'default',
@@ -2494,12 +2494,12 @@ export default function ActivityApp() {
                               value={u.role}
                               disabled={busy || !can('users.change_role')}
                               onChange={(e) => void changeRole(u.token, e.target.value)}
-                              title={levelInfo(levelNumber(u.role)).description}
+                              title={levelInfo(roleOrder.indexOf(u.role)).description}
                               className="rounded-md border border-input bg-card px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                             >
-                              {ladder.map((r) => (
+                              {ladder.map((r, i) => (
                                 <option key={r} value={r}>
-                                  {levelInfo(levelNumber(r)).name}
+                                  {levelInfo(i).name}
                                 </option>
                               ))}
                             </select>

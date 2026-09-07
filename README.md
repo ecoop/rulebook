@@ -1,6 +1,6 @@
 # Rulebook
 
-_Last updated: 2026-08-27_
+_Last updated: 2026-09-06_
 
 A RAG (retrieval-augmented generation) app that answers questions about the rules of games, across several **domains**: the disc sports **ultimate** and **goaltimate**, plus **badminton**, **curling**, **hearts**, and **backgammon**. Ask a question, get an answer with citations back to the specific rule, and see the retrieved passages that produced it.
 
@@ -24,7 +24,7 @@ rulebook/
 │   ├── retrieve.py            # single-domain and cross-domain retrieval
 │   ├── generate.py            # Claude call with a citation-forcing prompt
 │   ├── pipeline.py            # end-to-end: question → answer + citations
-│   ├── roles.py               # capability-based RBAC (level0–8, ROLE_CAPABILITIES)
+│   ├── roles.py               # capability-based RBAC (suspended…superuser, ROLE_CAPABILITIES)
 │   ├── allowed_domains.py     # per-user domain scoping
 │   ├── registry.py            # per-domain metadata (display name, source URLs)
 │   ├── interaction_log.py     # append-only JSONL logs (qa / feedback / gold)
@@ -84,7 +84,7 @@ Nothing in retrieval or generation is domain-specific — they read the `domain`
 Rulebook runs as an invite-only demo, using the [`guest-auth`](https://github.com/ecoop/guest-auth) library.
 
 - **Local / simple:** `RULEBOOK_DEMO_MODE=true` and inline tokens via `RULEBOOK_INVITE_TOKENS='{"tok_…":"label"}'`.
-- **Hosted:** tokens + roles + domain grants live in a GCS state bucket (not env), managed **live** from the **Users** tab — add/suspend/remove invitees and change roles without a redeploy. Roles are capability-based (level0 suspended … level8 superuser); see [`docs/roles.md`](docs/roles.md) and [`docs/rbac-capabilities.md`](docs/rbac-capabilities.md).
+- **Hosted:** tokens + roles + domain grants live in a GCS state bucket (not env), managed **live** from the **Users** tab — add/suspend/remove invitees and change roles without a redeploy. Roles are capability-based (suspended … superuser); see [`docs/roles.md`](docs/roles.md) and [`docs/rbac-capabilities.md`](docs/rbac-capabilities.md).
 
 Deploy is a single `./scripts/deploy.sh` to your own Cloud Run project; see [`docs/migrate-to-dedicated-project.md`](docs/migrate-to-dedicated-project.md) for the project layout.
 

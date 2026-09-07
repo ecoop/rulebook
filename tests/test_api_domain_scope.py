@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Eric Cooper.
 """Domain-scoped Reviewers/Directors (#156): admin views & actions are confined
-to the caller's allowed_domains, while Admin (level7) and Superuser (level8) are
+to the caller's allowed_domains, while Admin (admin) and Superuser (superuser) are
 unscoped — omnipotent across every domain.
 
 End-to-end through the real middleware + capability deps, so it proves the scope
@@ -27,7 +27,7 @@ def client(monkeypatch):
     monkeypatch.setattr(
         settings,
         "initial_roles",
-        {"tok_super": "level8", "tok_admin": "level7", "tok_dir": "level6", "tok_rev": "level5"},
+        {"tok_super": "superuser", "tok_admin": "admin", "tok_dir": "director", "tok_rev": "reviewer"},
     )
     monkeypatch.setattr(settings, "default_allowed_domains", ["ultimate", "goaltimate"])
     # Reviewer + Director are scoped to ultimate only; Admin/Superuser ignore this.
@@ -73,7 +73,7 @@ def _seed_reads(monkeypatch):
 
 def test_reviewer_reads_only_their_domains(client, monkeypatch):
     _seed_reads(monkeypatch)
-    # Reviewer (level5) has *.view.all but is scoped to ultimate → sees only the
+    # Reviewer (reviewer) has *.view.all but is scoped to ultimate → sees only the
     # ultimate rows across all three tabs, never badminton.
     _as(client, "tok_rev")
     assert [g["qa_id"] for g in client.get("/advanced/golds").json()["golds"]] == ["qu"]
@@ -83,7 +83,7 @@ def test_reviewer_reads_only_their_domains(client, monkeypatch):
 
 def test_admin_and_superuser_are_unscoped(client, monkeypatch):
     _seed_reads(monkeypatch)
-    # Admin (level7) and Superuser (level8) are omnipotent across domains — the
+    # Admin (admin) and Superuser (superuser) are omnipotent across domains — the
     # allowlist is ignored, so both rows show.
     for tok in ("tok_admin", "tok_super"):
         _as(client, tok)

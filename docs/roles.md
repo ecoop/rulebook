@@ -1,6 +1,6 @@
 # User roles (RBAC)
 
-_Last updated: 2026-08-27_
+_Last updated: 2026-09-06_
 
 > **This is the overview.** The authoritative reference is
 > [`rbac-capabilities.md`](rbac-capabilities.md) (the capability set and which
@@ -19,22 +19,22 @@ Authorization is **capability-based**. Endpoints gate on named capabilities via
 capabilities; `/me` returns the caller's full bundle and the frontend renders
 controls against it (the backend still enforces).
 
-Roles are nine stable machine ids, `level0`…`level8`, each a strict superset of
-the one below (Hierarchical RBAC / NIST). The numbers are stable keys; the
+Roles are nine stable machine ids, `suspended`…`superuser`, each a strict superset of
+the one below (Hierarchical RBAC / NIST). The ids are stable keys; the
 **display name** is a cosmetic label and the ordering is a display choice, not a
 security boundary.
 
 | id | name | what it adds (one-line) |
 |---|---|---|
-| `level0` | Suspended | No access |
-| `level1` | Beginner | Ask and rate answers |
-| `level2` | Annotator | Comment on answers |
-| `level3` | Contributor | Suggest and revisit your own golds |
-| `level4` | Builder | See the passages and sources behind answers |
-| `level5` | Reviewer | Review everyone's work |
-| `level6` | Director | Curate & clone golds, rebuild index, audit |
-| `level7` | Admin | Users tab; change roles |
-| `level8` | Superuser | Remove/rename users; RBAC config |
+| `suspended` | Suspended | No access |
+| `beginner` | Beginner | Ask and rate answers |
+| `annotator` | Annotator | Comment on answers |
+| `contributor` | Contributor | Suggest and revisit your own golds |
+| `builder` | Builder | See the passages and sources behind answers |
+| `reviewer` | Reviewer | Review everyone's work |
+| `director` | Director | Curate & clone golds, rebuild index, audit |
+| `admin` | Admin | Users tab; change roles |
+| `superuser` | Superuser | Remove/rename users; RBAC config |
 
 Names and descriptions live in one place — `ROLE_LEVELS` in
 `src/rulebook/roles.py`, mirrored for presentation in `web/src/levels.tsx`. The
@@ -46,25 +46,25 @@ full capability-to-level matrix is in
 Each role's capability set has an 8-hex **fingerprint** —
 `sha256(",".join(sorted(caps)))[:8]` — an order-independent content address of
 *what the role can do*, used for dedup / versioning / audit. It is **not** the
-assignment key: assignments key on the stable `levelN` id, so relabeling or
+assignment key: assignments key on the stable role id, so relabeling or
 re-tuning a level never orphans who is assigned to it.
 
 ## Role resolution — two sources
 
 Merged per request:
 
-1. **Seed** — `RULEBOOK_INITIAL_ROLES` (env), e.g. `{"tok_alice": "level7"}`.
+1. **Seed** — `RULEBOOK_INITIAL_ROLES` (env), e.g. `{"tok_alice": "admin"}`.
    Baseline; requires a redeploy to change.
 2. **Overrides** — live assignments in the GCS state object, written by the
    Users tab / `POST /advanced/roles`. Persist across restarts, no redeploy.
 
-Effective role: `override(token) or seed(token) or "level1"`. `level1`
+Effective role: `override(token) or seed(token) or "beginner"`. `beginner`
 (Beginner) is the safe default for an authenticated-but-unassigned invite — they
 can ask and rate, nothing more.
 
-### Suspended (`level0`) — revocation as a role
+### Suspended (`suspended`) — revocation as a role
 
-Setting a user to `level0` gates every endpoint (including `/me`) → 403, while
+Setting a user to `suspended` gates every endpoint (including `/me`) → 403, while
 their `guest-auth` cookie stays technically valid. Advantages of modeling
 revocation as a role: reversible with one `POST /advanced/roles` call, no
 redeploy to revoke or restore, and historical/audit rows keep their `author`
@@ -73,7 +73,7 @@ resolving) is a separate destructive op — `users.remove`, superuser-only.
 
 ### Bootstrap
 
-At least one seed token must be `level8`. There is no self-promotion endpoint, by
+At least one seed token must be `superuser`. There is no self-promotion endpoint, by
 design — same shape as `root`: the first superuser is baked in at deploy time, so
 an admin can't grant themselves the keys and a demotion accident can't deadlock
 recovery.
@@ -89,14 +89,14 @@ Representative gates (full matrix in [`rbac-capabilities.md`](rbac-capabilities.
 
 | Surface | Capability | Lowest level |
 |---|---|---|
-| ask, rate, revisit your own | `ask`, `rate`, `activity.view`, `feedback.view` | level1 |
-| comment on an answer | `feedback.comment` | level2 |
-| suggest & revisit your own golds | `gold.author`, `golds.view`, `golds.edit.own` | level3 |
-| passages + Sources tab, own items | `advanced.view`, `passages.view`, `sources.view` | level4 |
-| review everyone's items (with authors) | `feedback.view.all`, `golds.view.all`, `questions.view.all` | level5 |
-| curate / clone / rebuild / audit | `golds.curate`, `golds.clone`, `index.rebuild`, `attribution.view` | level6 |
-| Users tab, change role, add invitee | `users.view`, `users.change_role`, `users.add` | level7 |
-| remove / rename user, RBAC config | `users.remove`, `users.rename`, `roles.manage` | level8 |
+| ask, rate, revisit your own | `ask`, `rate`, `activity.view`, `feedback.view` | beginner |
+| comment on an answer | `feedback.comment` | annotator |
+| suggest & revisit your own golds | `gold.author`, `golds.view`, `golds.edit.own` | contributor |
+| passages + Sources tab, own items | `advanced.view`, `passages.view`, `sources.view` | builder |
+| review everyone's items (with authors) | `feedback.view.all`, `golds.view.all`, `questions.view.all` | reviewer |
+| curate / clone / rebuild / audit | `golds.curate`, `golds.clone`, `index.rebuild`, `attribution.view` | director |
+| Users tab, change role, add invitee | `users.view`, `users.change_role`, `users.add` | admin |
+| remove / rename user, RBAC config | `users.remove`, `users.rename`, `roles.manage` | superuser |
 
 Non-permitted controls are **hidden, not disabled** — "you only see what you can
 do." Gating is active only in `demo_mode`; a local / dev deploy keeps full
@@ -105,10 +105,10 @@ features.
 ## Self vs all — scoping
 
 Questions, golds, and feedback lists are scoped to the caller's own rows unless
-they hold the matching `*.view.all` capability (level5+), which also reveals **who**
+they hold the matching `*.view.all` capability (reviewer+), which also reveals **who**
 wrote/asked each row — authorship rides with the all-view tier, not a separate wall
-(we don't do blind review). `attribution.view` (level6) is now just the Audit tab.
-Curation and cloning key on `gold_id`; a user with `golds.clone` (level6) forks
+(we don't do blind review). `attribution.view` (director) is now just the Audit tab.
+Curation and cloning key on `gold_id`; a user with `golds.clone` (director) forks
 another's gold into a new one they own rather than editing it in place — there is no
 `golds.edit.any`.
 
@@ -125,13 +125,13 @@ see `src/rulebook/allowed_domains.py` and `_admin_domain_scope`/`_in_scope` in
 Every shared-state mutation (role change, gold curation, index rebuild, user
 add / remove / rename) appends a row to `audit.jsonl` — actor, action, target,
 detail, and the actor's capability-set fingerprint at the time. Readable via
-`GET /advanced/audit`, gated on `attribution.view` (level6+). This was a non-goal
+`GET /advanced/audit`, gated on `attribution.view` (director+). This was a non-goal
 in the original design; it now ships.
 
 ## `/me`
 
 `GET /me` (any authenticated caller) returns
-`{recipient, role, level, capabilities, fingerprint, demo_mode}` — the contract
+`{recipient, role, order, capabilities, fingerprint, demo_mode}` — the contract
 the frontend renders tabs / columns / buttons against. Note it is fetched once on
 load, so a role change mid-session does not hot-swap the UI yet (tracked in
 [#42](https://github.com/ecoop/rulebook/issues/42)).
@@ -159,7 +159,7 @@ This document originally specified a monotonic **four-tier** ladder
 tiers became the nine `levelN` capability bundles, `require_role` became
 `require_capability`, `/admin/*` became `/advanced/*`, and the frontend gating +
 superuser Users tab were built. The still-valid design rationale — revocation as
-a role, the Admin (`level7`) / Superuser (`level8`) split to avoid self-promotion
+a role, the Admin (`admin`) / Superuser (`superuser`) split to avoid self-promotion
 and bootstrap deadlock, hide-not-disable, two-source resolution — carried
 forward above. See the git log and the two `rbac-*.md` docs for the capability
 model and the data-driven-roles plan.

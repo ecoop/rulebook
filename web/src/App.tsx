@@ -278,7 +278,7 @@ export default function App() {
   }, [result, rating, tags, comment, savedComment, gold, savedGold])
 
   async function refreshMe() {
-    // /me is gated at novice, so a 403 means the guest is suspended — render
+    // /me is gated at beginner, so a 403 means the guest is suspended — render
     // the suspended screen instead of the app. Other failures are non-fatal:
     // we don't gate (the backend still enforces).
     try {

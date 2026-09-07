@@ -1,6 +1,6 @@
 # Demo mode on Cloud Run
 
-_Last updated: 2026-08-27_
+_Last updated: 2026-09-06_
 
 **Implemented and live** at <https://rulebook.cooper.nu>. The capability-based
 RBAC backend, a GCS-backed live-editable invite allowlist, frontend gating, and
@@ -16,11 +16,11 @@ the Users tab all shipped. This is the operator runbook.
   ~30s TTL when `STATE_BACKEND_KIND=gcs`. So **adding/removing invitees is
   redeploy-free**.
 - **Roles (authZ):** capability-based — `RULEBOOK_INITIAL_ROLES` seed ⊕ live
-  `roles.jsonl` (`RULEBOOK_ROLES_OBJECT`). Roles are the numbered levels
-  `level0` (suspended) … `level8` (superuser); each is a bundle of capabilities,
+  `roles.jsonl` (`RULEBOOK_ROLES_OBJECT`). Roles are descriptive ids,
+  `suspended` … `superuser`; each is a bundle of capabilities,
   and endpoints gate on `require_capability(...)`, not role names (see
   [roles.md](roles.md), [rbac-capabilities.md](rbac-capabilities.md)).
-  Unassigned tokens default to `level1`. Promote/demote/suspend is live via
+  Unassigned tokens default to `beginner`. Promote/demote/suspend is live via
   `POST /advanced/roles` — no redeploy — as is per-user **domain scoping** via
   `/advanced/allowed-domains` (which domains a user may ask against; Admin/
   Superuser are unscoped).
@@ -42,7 +42,7 @@ application-default login`). Share links as `https://rulebook.cooper.nu/?token=<
 **Repurposing a token's label** (e.g. an unused invite → a new person): fine when
 unused. If the token was *used*, the new name inherits its weekly cost, an
 existing cookie keeps resolving to it, and past log rows keep the old label —
-mint a fresh token and suspend the old one (set role `level0`) instead.
+mint a fresh token and suspend the old one (set role `suspended`) instead.
 
 ## Deploy config (Cloud Run)
 
@@ -52,9 +52,9 @@ mint a fresh token and suspend the old one (set role `level0`) instead.
   `rules_sync`, #170).
 - `RULEBOOK_DEMO_MODE=true`.
 - **Bootstrap a superuser** (only way to seed the first one):
-  `RULEBOOK_INITIAL_ROLES='{"tok_you":"level8"}'`. (Use the level id — a bad
-  role id like `"superuser"` resolves to *no* capabilities, fail-closed, and the
-  seeded user gets locked out.)
+  `RULEBOOK_INITIAL_ROLES='{"tok_you":"superuser"}'`. (An unknown role id
+  resolves to *no* capabilities, fail-closed, so a typo locks the user out;
+  legacy `level0`…`level8` ids still resolve via aliases.)
 - `--max-instances=1` — the cost counter is per-instance in-memory; more
   instances under-count caps.
 - Keep seed roles/tokens in **Secret Manager → env** (`--set-secrets`), never
