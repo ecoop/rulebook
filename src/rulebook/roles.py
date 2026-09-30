@@ -2,41 +2,46 @@
 """Role-based authorization layered on guest-auth (see docs/roles.md).
 
 guest-auth answers *who is this token?* (identity). This module answers
-*what may they do?* — a small monotonic ladder resolved from two sources:
+*what may they do?*. The authorization *mechanism* — the capability model,
+alias resolution, role ordering, and append-only override replay — is the
+`role-capabilities` library (ecoop/rulebook#220); this module is now Rulebook's
+**declarations** (its capability vocabulary, role→capability bundles, and role
+presentation) plus the **wiring** that reads them from live settings.
+
+Effective role = override(token) or seed(token) or default (beginner), resolved
+from two sources:
 
     seed       RULEBOOK_INITIAL_ROLES, {token: role}. Baseline; redeploy to
                change. Must seed at least one `superuser` (bootstrap).
     overrides  an append-only `roles.jsonl` object in the state bucket,
                written by the superuser API. Latest row per token wins; a
-               `reset` row falls back to the seed. Persists across restarts,
-               changes live (no redeploy) — the durability stopgap from
-               docs/roles.md ("direct-to-GCS for roles").
+               `reset` row falls back to the seed.
 
-Effective role = override(token) or seed(token) or default (beginner). Role ids
-are descriptive — suspended, beginner, … superuser (see ROLE_LEVELS); legacy
-level0…8 ids still resolve via ROLE_ALIASES.
-
-The ladder answers "how privileged?" as a single rank, which can't express
-per-feature asks like "see the Advanced page but not the Users tab" or "edit
-your own gold but not others'". So authorization is *also* expressed as
-**capabilities** (see docs/rbac-capabilities.md): endpoints gate on a named
-capability via `require_capability`, and a role is a bundle of capabilities
-(`ROLE_CAPABILITIES`). The ladder is retained for role *ordering* (the Users-
-tab picker); the capability map is the authority on what a role may *do*. Gating is a no-op when demo_mode is off (a public
-deploy has no identities to authorize) — for both mechanisms it fails closed to
-the public tier.
+Role ids are descriptive — suspended, beginner, … superuser (see ROLE_LEVELS);
+legacy level0…8 ids still resolve via ROLE_ALIASES. Endpoints gate on a named
+capability via `require_capability`; a role is a bundle of capabilities
+(ROLE_CAPABILITIES). Gating is a no-op when demo_mode is off (a public deploy has
+no identities to authorize) — it fails closed to the public tier.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import time
 from collections.abc import Callable, Iterable, Mapping
 
 from fastapi import HTTPException
 from guest_auth import get_current_guest
+
+# Re-exported unchanged for api/main.py and the test suite (Rulebook's public
+# roles API); not referenced inside this module, hence the noqa.
+from role_capabilities import RESET_SENTINEL as RESET_SENTINEL  # noqa: F401
+from role_capabilities import (
+    CapabilityModel,
+    GcsRoleStore,
+    replay_overrides,
+)
+from role_capabilities import capability_fingerprint as capability_fingerprint  # noqa: F401
 
 from .config import settings
 
@@ -46,7 +51,6 @@ log = logging.getLogger(__name__)
 # then the rungs beginner → superuser. Each carries a numeric `order` (picker/badge
 # sort only, not a rank), a color, and a one-line description — see ROLE_LEVELS.
 DEFAULT_ROLE = "beginner"   # a new / unseeded token is a beginner
-RESET_SENTINEL = "reset"  # a roles.jsonl row role that clears an override
 
 
 # ── Capabilities ───────────────────────────────────────────────────────────
@@ -130,9 +134,9 @@ _R6 = _R5 | {                                                    # operator
 _R7 = _R6 | {CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE, CAP_USERS_ADD, CAP_DOMAINS_UNSCOPED}  # admin (unscoped across domains)
 _R8 = _R7 | {CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE}  # superuser
 
-# Role → capability bundle, keyed by level (§4). Policy encoded here: level7
-# (admin) manages users — view, change role, add invitees; level8 (superuser)
-# holds the destructive ops (remove/rename) plus the future RBAC-config editor
+# Role → capability bundle, keyed by level (§4). Policy encoded here: admin
+# manages users — view, change role, add invitees; superuser holds the
+# destructive ops (remove/rename) plus the future RBAC-config editor
 # (roles.manage).
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "suspended":   frozenset(),  # no access
@@ -162,7 +166,6 @@ ROLE_LEVELS: dict[str, dict[str, object]] = {
     "superuser":   {"order": 8, "name": "Superuser", "color": "#C4272E", "description": "Remove/rename users; RBAC config"},
 }
 
-
 # Legacy → canonical id aliases (#199 migration). The role ids were the numbered
 # level0…level8; they are now descriptive (suspended…superuser). Old assignments
 # still stored in roles.jsonl or the seed keep resolving through this map, so the
@@ -183,30 +186,22 @@ ROLE_ALIASES: dict[str, str] = {
 }
 
 
-def canonical_role(role: str) -> str:
-    """Map a legacy role id to its current canonical id; pass others through."""
-    return ROLE_ALIASES.get(role, role)
+# ── The capability model (role-capabilities) ─────────────────────────────────
+#
+# One CapabilityModel built from the declarations above owns the mechanism:
+# alias resolution, capability lookups, fingerprints, and role ordering. The
+# `order` is derived from ROLE_LEVELS so the model's role_order matches the
+# badge/picker order 0…8.
+_MODEL = CapabilityModel(
+    capabilities=CAPABILITIES,
+    roles=ROLE_CAPABILITIES,
+    default_role=DEFAULT_ROLE,
+    aliases=ROLE_ALIASES,
+    order=tuple(sorted(ROLE_LEVELS, key=lambda r: int(ROLE_LEVELS[r]["order"]))),
+)
 
-
-def role_order(role: str) -> int:
-    """Presentational sort order for a role (0 for suspended / unknown).
-
-    A display/ordering hint only — no authorization reads this; authz is
-    capability-based (see require_capability).
-    """
-    meta = ROLE_LEVELS.get(canonical_role(role))
-    return int(meta["order"]) if meta else 0
-
-
-def ordered_roles() -> tuple[str, ...]:
-    """Role ids low→high by their presentational `order` (replaces ROLE_LADDER).
-
-    Powers the Users-tab picker ordering; not an authorization ranking.
-    """
-    return tuple(sorted(ROLE_LEVELS, key=lambda r: int(ROLE_LEVELS[r]["order"])))
-
-# What a public (demo_mode off) deploy allows anonymously — the novice tier.
-PUBLIC_CAPABILITIES: frozenset[str] = ROLE_CAPABILITIES[DEFAULT_ROLE]
+# What a public (demo_mode off) deploy allows anonymously — the beginner tier.
+PUBLIC_CAPABILITIES: frozenset[str] = _MODEL.capabilities_for(DEFAULT_ROLE)
 
 # Refresh window for the GCS overrides — same rationale as the token source.
 DEFAULT_TTL_SECONDS = 30.0
@@ -215,35 +210,49 @@ DEFAULT_TTL_SECONDS = 30.0
 _overrides_cache: dict[tuple[str, str], tuple[float, dict[str, str]]] = {}
 
 
+# ── Delegates to the capability model ────────────────────────────────────────
+
+
+def canonical_role(role: str) -> str:
+    """Map a legacy role id to its current canonical id; pass others through."""
+    return _MODEL.canonical_role(role)
+
+
 def is_valid_role(role: str) -> bool:
-    return canonical_role(role) in ROLE_CAPABILITIES
+    return _MODEL.is_valid_role(role)
 
 
 def capabilities_for(role: str) -> frozenset[str]:
     """The capability bundle for a role; empty for unknown roles (fail closed)."""
-    return ROLE_CAPABILITIES.get(canonical_role(role), frozenset())
+    return _MODEL.capabilities_for(role)
 
 
 def has_capability(role: str, capability: str) -> bool:
-    return capability in capabilities_for(role)
-
-
-def capability_fingerprint(caps: Iterable[str]) -> str:
-    """Short content-address of a capability SET (docs/rbac-data-driven-roles.md).
-
-    Order-independent by construction (sort before hashing), so the same set of
-    capabilities always yields the same 8-hex fingerprint regardless of how it
-    was assembled. A fingerprint, NOT an identity: it changes whenever the set
-    changes, so it's for dedup / "did this role's powers change?" / audit — not
-    the assignment key.
-    """
-    canonical = ",".join(sorted(set(caps)))
-    return hashlib.sha256(canonical.encode()).hexdigest()[:8]
+    return _MODEL.has_capability(role, capability)
 
 
 def role_fingerprint(role: str) -> str:
     """Fingerprint of a role's CURRENT capability bundle (empty set → its own hash)."""
-    return capability_fingerprint(capabilities_for(role))
+    return _MODEL.role_fingerprint(role)
+
+
+def role_order(role: str) -> int:
+    """Presentational sort order for a role (0 for suspended / unknown).
+
+    A display/ordering hint only — no authorization reads this; authz is
+    capability-based (see require_capability). Unknown roles floor to 0 so a
+    stale/unknown id sorts to the bottom rather than the model's -1.
+    """
+    order = _MODEL.role_order(role)
+    return order if order >= 0 else 0
+
+
+def ordered_roles() -> tuple[str, ...]:
+    """Role ids low→high by their presentational `order`.
+
+    Powers the Users-tab picker ordering; not an authorization ranking.
+    """
+    return _MODEL.ordered_roles()
 
 
 # ── Resolution ────────────────────────────────────────────────────────────
@@ -258,8 +267,22 @@ def resolve_role(token: str | None) -> str:
         return DEFAULT_ROLE
     overrides = _effective_overrides()
     if token in overrides:
-        return canonical_role(overrides[token])
+        return overrides[token]  # already canonical
     return canonical_role(settings.initial_roles.get(token, DEFAULT_ROLE))
+
+
+def overrides_from_rows(rows: Iterable[Mapping[str, object]]) -> dict[str, str]:
+    """Replay append-only {token, role} rows to {token: role}; latest wins, reset clears.
+
+    Rulebook keys overrides by token; the library replays by a `principal` field,
+    so rows are translated token→principal on the way in (and the result is keyed
+    back by token). Invalid roles are skipped and roles are canonicalized.
+    """
+    translated = (
+        {"principal": str(row.get("token", "")), "role": str(row.get("role", ""))}
+        for row in rows
+    )
+    return replay_overrides(translated, model=_MODEL)
 
 
 def _effective_overrides() -> dict[str, str]:
@@ -287,33 +310,12 @@ def _read_overrides(bucket: str, obj: str) -> dict[str, str] | None:
         return None
 
 
-def overrides_from_rows(rows: Iterable[Mapping[str, object]]) -> dict[str, str]:
-    """Replay append-only rows to {token: role}; latest wins, reset clears."""
-    out: dict[str, str] = {}
-    for row in rows:
-        token = str(row.get("token", ""))
-        role = str(row.get("role", ""))
-        if not token:
-            continue
-        if role == RESET_SENTINEL:
-            out.pop(token, None)
-        elif is_valid_role(role):
-            out[token] = canonical_role(role)
-    return out
-
-
 # ── GCS storage (append-only jsonl object) ─────────────────────────────────
 
 
 def read_role_rows(bucket: str, obj: str) -> list[dict]:
     """All rows from the roles.jsonl object; [] if absent."""
-    from google.cloud import storage
-
-    blob = storage.Client().bucket(bucket).blob(obj)
-    if not blob.exists():
-        return []
-    text = blob.download_as_text()
-    return [json.loads(line) for line in text.splitlines() if line.strip()]
+    return GcsRoleStore(bucket, obj).read_rows()
 
 
 def append_role_row(bucket: str, obj: str, row: Mapping[str, object]) -> None:
@@ -323,15 +325,7 @@ def append_role_row(bucket: str, obj: str, row: Mapping[str, object]) -> None:
     changes weekly at most, per docs/roles.md) and keeps the object a
     plain append-only log for audit.
     """
-    from google.cloud import storage
-
-    blob = storage.Client().bucket(bucket).blob(obj)
-    existing = blob.download_as_text() if blob.exists() else ""
-    line = json.dumps(dict(row), sort_keys=True)
-    blob.upload_from_string(
-        (existing + line + "\n") if existing else (line + "\n"),
-        content_type="application/x-ndjson",
-    )
+    GcsRoleStore(bucket, obj).append_row(row)
     _overrides_cache.pop((bucket, obj), None)  # reflect the write immediately
 
 
@@ -342,7 +336,7 @@ def require_capability(capability: str) -> Callable[[], None]:
     """Dependency that 403s unless the current guest's role has `capability`.
 
     Fails closed in public mode: when demo_mode is OFF the deploy is anonymous,
-    so only PUBLIC_CAPABILITIES (the novice tier — ask/rate) are allowed and
+    so only PUBLIC_CAPABILITIES (the beginner tier — ask/rate) are allowed and
     everything else is denied. When demo_mode is ON, the guest's effective role
     must include the capability; unknown roles resolve to an empty bundle, so
     they fail closed.
