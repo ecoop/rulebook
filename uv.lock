@@ -3021,6 +3021,19 @@ wheels = [
 ]
 
 [[package]]
+name = "role-capabilities"
+version = "0.0.1"
+source = { git = "https://github.com/ecoop/role-capabilities.git?branch=main#0cdbe957a49504efeb2fefb6160a7250bfae5d0a" }
+
+[package.optional-dependencies]
+fastapi = [
+    { name = "fastapi" },
+]
+guest-auth = [
+    { name = "guest-auth" },
+]
+
+[[package]]
 name = "rpds-py"
 version = "2026.6.3"
 source = { registry = "https://pypi.org/simple" }
@@ -3186,6 +3199,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pypdf" },
     { name = "python-dotenv" },
+    { name = "role-capabilities", extra = ["fastapi", "guest-auth"] },
     { name = "tqdm" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "voyageai" },
@@ -3215,6 +3229,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6.0" },
     { name = "pypdf", specifier = ">=5.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "role-capabilities", extras = ["fastapi", "guest-auth"], git = "https://github.com/ecoop/role-capabilities.git?branch=main" },
     { name = "tqdm", specifier = ">=4.66.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
     { name = "voyageai", specifier = ">=0.3.0" },
