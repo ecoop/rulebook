@@ -3022,8 +3022,12 @@ wheels = [
 
 [[package]]
 name = "role-capabilities"
-version = "0.0.1"
-source = { git = "https://github.com/ecoop/role-capabilities.git?branch=main#0cdbe957a49504efeb2fefb6160a7250bfae5d0a" }
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/db/8529429b19ea1fc7fabf91b480fe227ad4000ef02b7ba473680101c1ae3d/role_capabilities-0.1.0.tar.gz", hash = "sha256:61db07798dd517cce88c0fb4e62e659b39868aafb25dbbdbf68b397fd8b83413", size = 69964, upload-time = "2026-09-30T21:18:04.352Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e8/5b/98d9841fb3c786c103f0e4ca792d02d0dd327fa96b21573289992651ecda/role_capabilities-0.1.0-py3-none-any.whl", hash = "sha256:c8741dbd80facee518644598f158929207617e13bb68394cde05d09e6c91f621", size = 16049, upload-time = "2026-09-30T21:18:02.892Z" },
+]
 
 [package.optional-dependencies]
 fastapi = [
@@ -3229,7 +3233,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6.0" },
     { name = "pypdf", specifier = ">=5.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "role-capabilities", extras = ["fastapi", "guest-auth"], git = "https://github.com/ecoop/role-capabilities.git?branch=main" },
+    { name = "role-capabilities", extras = ["fastapi", "guest-auth"], specifier = ">=0.1.0" },
     { name = "tqdm", specifier = ">=4.66.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
     { name = "voyageai", specifier = ">=0.3.0" },
