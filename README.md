@@ -1,8 +1,10 @@
 # Rulebook
 
 [![CI](https://github.com/ecoop/rulebook/actions/workflows/ci.yml/badge.svg)](https://github.com/ecoop/rulebook/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-_Last updated: 2026-09-08_
+_Last updated: 2026-09-30_
 
 A RAG (retrieval-augmented generation) app that answers questions about the rules of games, across several **domains**: the disc sports **ultimate** and **goaltimate**, plus **badminton**, **curling**, **hearts**, and **backgammon**. Ask a question, get an answer with citations back to the specific rule, and see the retrieved passages that produced it.
 
