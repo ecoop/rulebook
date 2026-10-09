@@ -1674,14 +1674,14 @@ wheels = [
 
 [[package]]
 name = "llm-cost-governor"
-version = "0.4.7"
+version = "0.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d0/d7/83cdfb3fcf16a18ca09a284cfef8fba098ab061e2f4e45a2e8d04e0b6fcc/llm_cost_governor-0.4.7.tar.gz", hash = "sha256:c3827bfefdf36c255b5887e9e5c25ee7cc42bed1b814a67bdd1104c7cbd312bc", size = 87699, upload-time = "2026-09-29T22:39:08.514Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b0/49/ae7bb685b9cbd70807c4c264b2a83d9632e852d2be0fd40c73076a8c633f/llm_cost_governor-0.6.1.tar.gz", hash = "sha256:b26a5df4b0bae2dd2d6880dfc1a087033bb49e7e0bde3cfa57559632e6768f74", size = 101460, upload-time = "2026-10-09T22:23:21.532Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/69/48/08c5b6682425cbe00ff51290a4de167cda2f23dc3649bf5190c270f5610c/llm_cost_governor-0.4.7-py3-none-any.whl", hash = "sha256:117d98a15dc9b7cfa2c7fd7ab790e40b02a51b62021517115f7835ee0a077405", size = 70195, upload-time = "2026-09-29T22:39:07.171Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/79/7ab4db086f2dd38bbda9fe33c94394b2266971ef957e654a4ff03291488f/llm_cost_governor-0.6.1-py3-none-any.whl", hash = "sha256:4a3c116b0096e501f77e61aaba4984cee566a8587e244a09dadcc6607b5318c1", size = 74634, upload-time = "2026-10-09T22:23:20.098Z" },
 ]
 
 [package.optional-dependencies]
@@ -3226,7 +3226,7 @@ requires-dist = [
     { name = "google-cloud-storage", specifier = ">=2.10" },
     { name = "guest-auth", specifier = ">=0.1.1" },
     { name = "jsonl-log", specifier = ">=0.1.1" },
-    { name = "llm-cost-governor", extras = ["fastapi", "gcs"], specifier = ">=0.4.7" },
+    { name = "llm-cost-governor", extras = ["fastapi", "gcs"], specifier = ">=0.6.1" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "openai", specifier = ">=1.55.0" },
     { name = "pydantic", specifier = ">=2.9.0" },
