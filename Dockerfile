@@ -52,20 +52,24 @@ FROM python:3.13-slim@sha256:7e3a6aca9d74f93cca21a91d86a8dad8c34749afd5b4a98ee48
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
 
-# Create a venv we can copy whole into the runtime image — keeps the
-# runtime layer free of build-essential and pip's working state.
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Install by project spec so pip resolves llm-cost-governor, guest-auth,
-# jsonl-log, etc. from pyproject.toml — same source of truth uv uses.
-# README is only referenced by [project].readme; copy it so pip can
-# resolve the metadata without ferrying the whole repo yet.
-COPY pyproject.toml README.md ./
+# Install from uv.lock, not a fresh resolve. `pip install .` floated every dep
+# to the newest version satisfying its floor, so the deployed image never
+# matched uv.lock / CI — a deploy could silently pull a newer minor than CI
+# tested. `uv sync --frozen` installs EXACTLY the locked versions into
+# /opt/venv (reproducible; prod == CI == local), then the project itself
+# (--no-editable: a real install, not a src/ symlink). README is referenced by
+# [project].readme, so copy it for metadata.
+RUN pip install uv
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
-RUN pip install --upgrade pip && pip install .
+RUN uv sync --frozen --no-dev --no-editable
+ENV PATH="/opt/venv/bin:$PATH"
 
 
 # ─── 3. Runtime: slim image, non-root, app + venv + web bundle ────────────────
