@@ -9,7 +9,11 @@ goaltimate answer for a user without goaltimate, or a poker answer at all).
 
 from __future__ import annotations
 
-from rulebook.generate import build_system_prompt, find_unverified_citations
+from types import SimpleNamespace
+
+import rulebook.generate as gen
+from rulebook.config import settings
+from rulebook.generate import build_system_prompt, find_unverified_citations, generate_answer
 from rulebook.retrieve import RetrievedChunk
 
 
@@ -56,6 +60,42 @@ _CHUNKS = [
     _chunk("ultimate", "II.B.1"),
     _chunk("hearts", "Object of the Game"),
 ]
+
+
+def _capture_call(monkeypatch) -> dict:
+    """Stub guarded_call and return the kwargs it was called with."""
+    seen: dict = {}
+
+    def fake_guarded_call(client, **kwargs):
+        seen.update(kwargs)
+        resp = SimpleNamespace(
+            content=[
+                SimpleNamespace(type="thinking", thinking=""),
+                SimpleNamespace(type="text", text="ok [ultimate II.B.1]"),
+            ],
+            usage=SimpleNamespace(input_tokens=10, output_tokens=5),
+            stop_reason="end_turn",
+        )
+        return resp, None
+
+    monkeypatch.setattr(gen, "guarded_call", fake_guarded_call)
+    return seen
+
+
+def test_generate_answer_passes_configured_effort(monkeypatch):
+    seen = _capture_call(monkeypatch)
+    monkeypatch.setattr(settings, "claude_effort", "low")
+    out = generate_answer("q?", [_chunk("ultimate", "II.B.1")])
+    assert seen["output_config"] == {"effort": "low"}
+    # Thinking blocks are skipped; only text reaches the answer.
+    assert out.answer == "ok [ultimate II.B.1]"
+
+
+def test_generate_answer_omits_effort_when_unset(monkeypatch):
+    seen = _capture_call(monkeypatch)
+    monkeypatch.setattr(settings, "claude_effort", "")
+    generate_answer("q?", [_chunk("ultimate", "II.B.1")])
+    assert "output_config" not in seen
 
 
 def test_all_citations_verified_returns_empty():

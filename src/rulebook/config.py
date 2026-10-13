@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     embedding_provider: str = Field(default="voyage", pattern="^(voyage|openai)$")
     embedding_model: str = "voyage-4"
     claude_model: str = "claude-sonnet-5"
+    # Effort for answer generation (output_config.effort): how much the model
+    # thinks before answering. "low" measured ~17% cheaper than the model
+    # default ("high") with no loss on the gold set. Empty = omit the
+    # parameter, for models that don't accept effort.
+    claude_effort: str = Field(default="low", pattern="^(|low|medium|high|xhigh|max)$")
 
     # --- Storage -----------------------------------------------------------
     # Where the vector index lives on the local filesystem. Local dev leaves
