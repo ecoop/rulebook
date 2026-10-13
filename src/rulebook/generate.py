@@ -180,6 +180,8 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
         app_state.provider_totals_hook,
         EventLogHook(enabled=settings.guardrails_enabled),
     ]
+    # Effort only when configured: some models reject output_config.effort.
+    extra = {"output_config": {"effort": settings.claude_effort}} if settings.claude_effort else {}
     resp, _usage = guarded_call(
         client,
         provider="anthropic",
@@ -195,6 +197,7 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
                 "content": USER_TEMPLATE.format(context=context, question=question),
             }
         ],
+        **extra,
     )
     text = "".join(block.text for block in resp.content if getattr(block, "type", None) == "text")
     return GeneratedAnswer(
