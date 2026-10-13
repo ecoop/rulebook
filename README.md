@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-_Last updated: 2026-09-30_
+_Last updated: 2026-10-13_
 
 A RAG (retrieval-augmented generation) app that answers questions about the rules of games, across several **domains**: the disc sports **ultimate** and **goaltimate**, plus **badminton**, **curling**, **hearts**, and **backgammon**. Ask a question, get an answer with citations back to the specific rule, and see the retrieved passages that produced it.
 
@@ -120,6 +120,7 @@ uv run pytest
 - [`docs/users-tab.md`](docs/users-tab.md) — managing invitees.
 - [`docs/migrate-to-dedicated-project.md`](docs/migrate-to-dedicated-project.md) — hosting / project layout.
 - [`docs/demo-mode.md`](docs/demo-mode.md) — running the local, no-GCS invite/demo mode.
+- [`docs/phase-2-accounts-and-quotas.md`](docs/phase-2-accounts-and-quotas.md) — plan (not built): self-serve accounts, waitlist gating, per-user quotas, Goaltimate edition.
 - [`docs/defensive-by-design.md`](docs/defensive-by-design.md) — cost governance + output validation around the LLM calls.
 - [`rules/SOURCES.md`](rules/SOURCES.md) — where each domain's rules come from + the copyright policy.
 
