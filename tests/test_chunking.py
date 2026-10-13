@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 from rulebook.chunking import (
+    MAX_CHARS,
+    _detect_hierarchical_anchors,
     _detect_markdown_heading_anchors,
     _detect_numbered_title_anchors,
     _normalize_ws,
+    _split_if_long,
     chunk_pages,
 )
 from rulebook.ingest import PageText
@@ -107,3 +110,89 @@ def test_markdown_headings_ignored_when_numbering_present():
     ids = {c.rule_id for c in chunks}
     assert {"R1", "R2", "R3", "R4", "R5"} <= ids
     assert not any("Title line" == c.rule_id for c in chunks)
+
+
+# --- hierarchical (Roman / letter / digit) anchors: USAG Goaltimate style ----
+
+
+def _hier_ids(text: str) -> list[str]:
+    return [rid for _off, rid in _detect_hierarchical_anchors(text)]
+
+
+def test_five_char_roman_section_is_detected():
+    # "XVIII." was beyond a 4-char cap, so the whole section was filed under XVII.
+    text = (
+        "XVII. Screens\nA. A screen is defined.\n"
+        "XVIII. Violations & Fouls\nK. Goaltending: Players entering.\n"
+        "1. Goaltending Count: If a player delays.\n"
+    )
+    assert _hier_ids(text) == ["XVII", "XVII.A", "XVIII", "XVIII.K", "XVIII.K.1"]
+
+
+def test_toc_entries_do_not_capture_the_body():
+    # A TOC ending at "XXI." made the body's "I. Introduction" read as letter I
+    # of section XXI (rule id XXI.I) instead of section I.
+    toc = "I. Introduction 3\nII. Spirit of the Game 3\nXXI. Etiquette 42\n"
+    body = "I. Introduction\nA. Description: Goaltimate is a disc sport.\n"
+    ids = _hier_ids(toc + body)
+    assert "I.A" in ids and not any(r.startswith("XXI") for r in ids)
+
+
+def test_toc_dot_leaders_are_recognized():
+    text = "XX. Game Officials ........ 41\nXXI. Etiquette .......... 42\nI. Introduction\nA. Rules.\n"
+    assert _hier_ids(text) == ["I", "I.A"]
+
+
+def test_letter_continuing_sequence_beats_roman():
+    # In section IV, "V." right after "U." is the next letter, not section V.
+    text = "IV. Field\nU. The penultimate letter.\nV. The next letter.\n"
+    assert _hier_ids(text)[-1] == "IV.V"
+
+
+def test_appendix_is_top_level_but_cross_reference_is_not():
+    text = (
+        "II. Spirit\nD. For behavior warranting sanctions pursuant to\n"
+        "Appendix B: Guidelines to Misconduct, captains act.\n"
+        "XXI. Etiquette\nB. Avoid delay.\n"
+        "Appendix B: Guidelines for Misconduct\nB. Fighting: The following acts.\n"
+    )
+    ids = _hier_ids(text)
+    # The mid-sentence mention doesn't open a section; the real heading does, so
+    # its B. no longer overwrites (via keep-last dedupe) Etiquette's XXI.B.
+    assert ids == ["II", "II.D", "XXI", "XXI.B", "Appendix B", "Appendix B.B"]
+
+
+def test_appendix_ignored_without_roman_sections():
+    # Digit-sectioned rulebooks (Official Rules of Ultimate) list appendices too;
+    # treating them as a parent would re-parent every later numbered rule.
+    text = "Appendix A: Field Diagram\n1. Introduction\n2. Spirit of the Game\n"
+    assert _hier_ids(text) == ["1", "2"]
+
+
+# --- splitting an over-long section ----------------------------------------
+
+
+def test_split_long_section_breaks_at_sentence_ends():
+    # pypdf's word-per-paragraph output made every word a "paragraph", so the old
+    # paragraph packer cut mid-sentence ("…count reaches" | "three, this is…").
+    sentence = "When the goaltending count reaches three this is a goaltending violation."
+    text = "\n\n".join(" ".join([sentence] * 40).split(" "))  # one word per paragraph
+    pieces = _split_if_long(text)
+    assert len(pieces) > 1
+    assert all(len(p) <= MAX_CHARS and p.endswith("violation.") for p in pieces)
+    assert " ".join(pieces) == _normalize_ws(text)
+
+
+def test_split_keeps_annotation_brackets_with_their_sentence():
+    text = ("A rule applies. [[An annotation explains it.]] " * 60).strip()
+    pieces = _split_if_long(text)
+    assert len(pieces) > 1
+    # Never split between a sentence's period and its closing "]]".
+    assert not any(p.startswith("]]") or p.endswith("it.") for p in pieces)
+
+
+def test_split_word_cuts_an_oversize_sentence():
+    text = "word " * 1000  # one 5000-char "sentence" with no terminator
+    pieces = _split_if_long(text)
+    assert len(pieces) > 1 and all(len(p) <= MAX_CHARS for p in pieces)
+    assert " ".join(pieces) == _normalize_ws(text)

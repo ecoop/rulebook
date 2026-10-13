@@ -17,8 +17,8 @@ STRATEGY
        its rule id, page range, domain, and source PDF.
 
     4. If a section is longer than MAX_CHARS, split it further at
-       paragraph breaks with a small overlap so context bleeds across the
-       cut and no single chunk becomes needle-in-a-haystack.
+       sentence ends, so no piece stops mid-sentence and no single chunk
+       becomes needle-in-a-haystack.
 
 TUNING
 
@@ -97,15 +97,20 @@ _NUMBERED_TITLE = re.compile(r"\b(R\d+)\.\s+[A-Z][A-Z]+(?:[A-Z '&/-]*[A-Z])?")
 # The lookahead requires an uppercase letter (roman/letter) or any letter
 # (digit) after the whitespace, which weeds out the frequent list numbering
 # inside prose that happens to sit at a line start.
+#
+# Roman numerals run up to 7 chars ("XXXVIII") — a 4-char cap silently
+# dropped "XVIII." and folded that whole section into XVII. Appendices
+# ("Appendix B: Guidelines…") are top-level too, so their A./1. clauses don't
+# land under (and, via the keep-last dedupe, overwrite) the last roman section.
 _HIER_LEVELS = [
-    (0, re.compile(r"^\s*([IVXLC]{1,4})\.\s+(?=[A-Z])", re.M)),   # I. II. III.
+    (0, re.compile(r"^\s*([IVXLC]{1,7})\.\s+(?=[A-Z])", re.M)),   # I. II. XVIII.
+    (0, re.compile(r"^\s*(Appendix\s+[A-Z])\s*:", re.M)),          # Appendix B:
     (1, re.compile(r"^\s*([A-Z])\.\s+(?=[A-Za-z])", re.M)),        # A. B. C.
     (2, re.compile(r"^\s*(\d{1,3})\.\s+(?=[A-Za-z])", re.M)),      # 1. 2. 3.
 ]
 
 MAX_CHARS = 1500       # ~350 tokens; comfortably under any embedder's cap
 MIN_CHARS = 60         # discard shorter fragments (headings-only, page numbers)
-SPLIT_OVERLAP = 150    # overlap between hard-cut pieces of an oversize section
 
 _WHITESPACE_RUN = re.compile(r"\s+")
 
@@ -308,24 +313,33 @@ def _detect_hierarchical_anchors(text: str) -> list[tuple[int, str]]:
 
             1. Multi-char Roman ("II", "III", "IV" ...) is unambiguous —
                always accept as Roman.
-            2. Single-char Roman ("I", "V", "X", "L", "C") is accepted as
-               Roman only when it CONTINUES the section sequence (first
-               ever OR previous_roman + 1). Otherwise it's a subsection
-               letter.
+            2. Single-char Roman ("I", "V", "X", "L", "C") is a subsection
+               letter when it CONTINUES the letter sequence ("V." after
+               "U."). Otherwise it's Roman when it continues the section
+               sequence (first ever OR previous_roman + 1). Otherwise it's
+               a letter.
 
     TOC POLLUTION
 
         A rulebook's table of contents lists every section once before the
         body does — so "I. Introduction 3" fires an anchor at offset ~100,
-        and the real "I. Introduction" fires again at offset ~2500. We
-        dedupe the final rule-id list keeping the LAST occurrence, which
-        drops the TOC entries in favor of the real body anchors.
+        and the real "I. Introduction" fires again at offset ~2500. Entries
+        that read as a TOC line (a short title, then a page number) are
+        dropped up front: left in, the TOC's last "XXI." made the body's
+        "I. Introduction" look like letter I of section XXI. Any that slip
+        through are handled by deduping the final rule-id list keeping the
+        LAST occurrence, which favors the real body anchors.
     """
     events: list[tuple[int, int, str]] = []
     for level, pat in _HIER_LEVELS:
         for m in pat.finditer(text):
-            events.append((m.start(), level, m.group(1)))
+            tag = _WHITESPACE_RUN.sub(" ", m.group(1))
+            if tag.startswith("Appendix") and not _starts_sentence(text, m.start()):
+                continue  # a cross-reference ("pursuant to Appendix B: …")
+            events.append((m.start(), level, tag))
     events.sort(key=lambda e: e[0])
+
+    events = _drop_toc_entries(text, events)
 
     # Group by offset — same position may have multiple candidates.
     buckets: dict[int, list[tuple[int, str]]] = {}
@@ -337,11 +351,18 @@ def _detect_hierarchical_anchors(text: str) -> list[tuple[int, str]]:
     anchors: list[tuple[int, str]] = []
 
     for offset in sorted(buckets):
-        level, tag = _choose_candidate(buckets[offset], current_roman)
+        candidates = buckets[offset]
+        if current_roman is None:
+            # "Appendix B:" is a top-level heading only in roman-sectioned
+            # rulebooks; elsewhere it would re-parent every later clause.
+            candidates = [c for c in candidates if not c[1].startswith("Appendix")]
+            if not candidates:
+                continue
+        level, tag = _choose_candidate(candidates, current_roman, path[1])
         path[level] = tag
         for i in range(level + 1, len(path)):
             path[i] = None
-        if level == 0:
+        if level == 0 and _roman_to_int(tag) is not None:
             current_roman = _roman_to_int(tag)
         rule_id = ".".join(p for p in path if p is not None)
         anchors.append((offset, rule_id))
@@ -353,23 +374,63 @@ def _detect_hierarchical_anchors(text: str) -> list[tuple[int, str]]:
     return sorted(((off, rid) for rid, off in seen_last.items()), key=lambda x: x[0])
 
 
+# A table-of-contents line once its anchor is stripped: a short title with no
+# sentence punctuation, dot leaders, then a page number ("Etiquette ..... 42").
+_TOC_LINE = re.compile(r"[^.!?]{1,80}?\s*\d{1,3}")
+_DOT_LEADER = re.compile(r"\.{2,}")
+
+
+def _drop_toc_entries(
+    text: str, events: list[tuple[int, int, str]]
+) -> list[tuple[int, int, str]]:
+    """Remove anchors whose span up to the next anchor is just a TOC line."""
+    events = sorted(events, key=lambda e: e[0])
+    kept: list[tuple[int, int, str]] = []
+    for i, (offset, level, tag) in enumerate(events):
+        end = next((e[0] for e in events[i + 1 :] if e[0] > offset), len(text))
+        span = text[offset:end]
+        # Drop the anchor itself ("XXI." / "Appendix B:"), then dot leaders.
+        span = span.lstrip().removeprefix(tag.split(" ")[0])
+        span = _WHITESPACE_RUN.sub(" ", _DOT_LEADER.sub(" ", span.lstrip(".: \n")))
+        if level == 0 and _TOC_LINE.fullmatch(span.strip()):
+            continue
+        kept.append((offset, level, tag))
+    return kept
+
+
+def _starts_sentence(text: str, offset: int) -> bool:
+    """True if ``offset`` follows a sentence end, a page number or nothing.
+
+    Word-per-line extraction puts every word at a line start, so "^" alone
+    can't tell a heading from a mid-sentence mention of the same words.
+    """
+    before = text[:offset].rstrip()
+    return not before or before[-1] in ".!?:;)]" or before[-1].isdigit()
+
+
 def _choose_candidate(
     candidates: list[tuple[int, str]],
     current_roman: int | None,
+    current_letter: str | None,
 ) -> tuple[int, str]:
     """Pick the right (level, tag) when multiple regex hits share one offset."""
-    # 1. Multi-char Roman is unambiguous.
+    # 1. Multi-char Roman (and "Appendix B") is unambiguous.
     for level, tag in candidates:
         if level == 0 and len(tag) > 1:
             return (level, tag)
-    # 2. Single-char Roman only wins if it continues the section sequence.
+    # 2. A single char that continues the letter sequence is a letter.
+    for level, tag in candidates:
+        if level == 1 and current_letter and ord(tag) == ord(current_letter) + 1:
+            return (level, tag)
+    # 3. Otherwise single-char Roman wins if it continues (or restarts) the
+    #    section sequence.
     for level, tag in candidates:
         if level == 0:
             n = _roman_to_int(tag)
             if current_roman is None or (n is not None and n == current_roman + 1):
                 return (level, tag)
             break  # there's at most one Roman candidate per offset
-    # 3. Otherwise prefer the most specific interpretation (digit > letter).
+    # 4. Otherwise prefer the most specific interpretation (digit > letter).
     return max(candidates, key=lambda c: c[0])
 
 
@@ -388,45 +449,58 @@ def _roman_to_int(s: str) -> int | None:
     return total
 
 
+# A sentence ends at . ! or ? — optionally closed by a quote, paren or the
+# rulebook's "[[annotation]]" brackets — followed by whitespace.
+_SENTENCE_END = re.compile(r"(?<=[.!?])[\"”’)\]]*\s+")
+
+
 def _split_if_long(text: str) -> list[str]:
-    """Emit a single-element list if short enough; otherwise split further."""
+    """Emit a single-element list if short enough; otherwise pack whole
+    sentences into pieces of at most MAX_CHARS.
+
+    Splits at sentence ends, not paragraph breaks: pypdf extracts some
+    rulebooks one word per paragraph (``word\\n\\nword``), so a paragraph
+    break there is just a word break and packing paragraphs cut sections
+    mid-sentence ("…when the goaltending count reaches" | "three, this is a
+    goaltending violation"). A single sentence over MAX_CHARS falls back to
+    word-boundary cuts.
+    """
     if len(text) <= MAX_CHARS:
         return [text]
 
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    sentences = [s for s in _SENTENCE_END.split(_normalize_ws(text)) if s]
     out: list[str] = []
-    buf: list[str] = []
-    buf_len = 0
-
-    def flush():
-        nonlocal buf, buf_len
-        if buf:
-            out.append("\n\n".join(buf))
-            buf, buf_len = [], 0
-
-    for p in paragraphs:
-        needed = len(p) + (2 if buf else 0)
-        if buf_len + needed <= MAX_CHARS:
-            buf.append(p)
-            buf_len += needed
-            continue
-        flush()
-        if len(p) <= MAX_CHARS:
-            buf = [p]
-            buf_len = len(p)
+    buf = ""
+    for sent in sentences:
+        if len(sent) > MAX_CHARS:
+            if buf:
+                out.append(buf)
+                buf = ""
+            out.extend(_word_cut(sent))
+        elif not buf:
+            buf = sent
+        elif len(buf) + 1 + len(sent) <= MAX_CHARS:
+            buf += " " + sent
         else:
-            out.extend(_hard_cut(p))
-    flush()
+            out.append(buf)
+            buf = sent
+    if buf:
+        out.append(buf)
     return out
 
 
-def _hard_cut(text: str) -> list[str]:
-    out = []
-    step = MAX_CHARS - SPLIT_OVERLAP
-    i = 0
-    while i < len(text):
-        out.append(text[i : i + MAX_CHARS])
-        i += step
+def _word_cut(text: str) -> list[str]:
+    """Cut an over-long sentence at word boundaries into <= MAX_CHARS pieces."""
+    out: list[str] = []
+    buf = ""
+    for word in text.split(" "):
+        if buf and len(buf) + 1 + len(word) > MAX_CHARS:
+            out.append(buf)
+            buf = word
+        else:
+            buf = f"{buf} {word}" if buf else word
+    if buf:
+        out.append(buf)
     return out
 
 
