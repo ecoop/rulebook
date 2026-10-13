@@ -94,3 +94,21 @@ def test_tolerates_page_suffix_from_header():
 def test_dedupes_repeated_bogus_citation():
     answer = "[goaltimate X.A] … again [goaltimate X.A]."
     assert find_unverified_citations(answer, _CHUNKS) == ["goaltimate X.A"]
+
+
+def test_subclause_of_retrieved_rule_is_verified():
+    # Chunks stop at II.B.1, but its text holds lettered sub-clauses the model
+    # may cite directly — those point inside a passage it was given.
+    answer = "Lettered [ultimate II.B.1.a], parenthesized [ultimate II.B.1(b)]."
+    assert find_unverified_citations(answer, _CHUNKS) == []
+
+
+def test_sibling_with_shared_prefix_is_still_flagged():
+    # II.B.10 merely shares a string prefix with II.B.1; it is not a sub-clause.
+    answer = "Not retrieved [ultimate II.B.10]."
+    assert find_unverified_citations(answer, _CHUNKS) == ["ultimate II.B.10"]
+
+
+def test_subclause_in_other_domain_is_still_flagged():
+    answer = "Wrong domain [goaltimate II.B.1.a]."
+    assert find_unverified_citations(answer, _CHUNKS) == ["goaltimate II.B.1.a"]

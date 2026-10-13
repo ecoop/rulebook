@@ -115,7 +115,10 @@ def find_unverified_citations(answer: str, chunks: list[RetrievedChunk]) -> list
     chunk — i.e. passages the model cited but was never given (#172).
 
     A pure membership check (no LLM call): a citation is verified iff some
-    retrieved chunk has the same domain AND rule_id. Catches both a real domain
+    retrieved chunk has the same domain AND either the same rule_id or one it
+    sits under. Chunks stop at the section level (``XVII.K.2``) while their
+    text carries lettered sub-clauses, so a citation to ``XVII.K.2.a`` or
+    ``XVII.K.2(a)`` points inside a passage the model was given. Catches both a real domain
     the caller didn't retrieve (e.g. goaltimate for a user without it) and an
     entirely fabricated one (e.g. poker, not a domain at all). Advisory: callers
     flag, never strip, so a rare non-citation bracket is harmless. Markdown links
@@ -132,9 +135,25 @@ def find_unverified_citations(answer: str, chunks: list[RetrievedChunk]) -> list
         # (" — p.3" / " — pp.3-4"); citations key on the bare rule_id.
         rule_id = m.group(2).strip().split(" — ")[0].strip()
         label = f"{domain} {rule_id}"
-        if (domain, rule_id) not in valid and label not in flagged:
+        if not _is_covered(domain, rule_id, valid) and label not in flagged:
             flagged.append(label)
     return flagged
+
+
+def _is_covered(domain: str, rule_id: str, valid: set[tuple[str, str]]) -> bool:
+    """True if ``rule_id`` is a retrieved rule or a sub-clause of one.
+
+    A sub-clause continues its parent's id with ``.`` or ``(`` — so
+    ``II.B.1.a`` and ``II.B.1(a)`` fall under ``II.B.1``, but ``II.B.10``
+    does not.
+    """
+    if (domain, rule_id) in valid:
+        return True
+    return any(
+        d == domain and rule_id.startswith(parent) and rule_id[len(parent)] in ".("
+        for d, parent in valid
+        if len(rule_id) > len(parent)
+    )
 
 
 def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAnswer:
