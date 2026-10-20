@@ -108,7 +108,7 @@ By capability, signed-in users rate answers, tag issues, comment, and author "go
 - `test_pricing_guard.py` checks the fail-closed price guard — with guardrails on, the app refuses to boot on a model it can't price (so the cost caps can't be silently bypassed).
 - `test_api_roles.py` / `test_api_domain_scope.py` cover the RBAC and per-user domain-scoping paths.
 
-[CI](.github/workflows/ci.yml) runs on every push and PR: the Python job resolves and installs the full dependency tree and runs pytest across **Python 3.11 / 3.12 / 3.13 / 3.14**; a separate web job runs `tsc` typecheck + `vite build`.
+[CI](.github/workflows/ci.yml) runs on every push and PR: the Python job resolves and installs the full dependency tree and runs pytest across **Python 3.11 / 3.14**; a separate web job runs `tsc` typecheck + `vite build`.
 
 ```bash
 uv run pytest
