@@ -8,8 +8,11 @@ contract, so a misconfigured or flaky GCS never breaks a request or boot.
 
 from __future__ import annotations
 
+import ast
 import sys
+from pathlib import Path
 
+import rulebook.interaction_log as interaction_log
 import rulebook.log_sync as log_sync
 
 
@@ -109,3 +112,59 @@ def test_persist_uploads_when_growing_or_new(monkeypatch, tmp_path):
     _fake_storage(monkeypatch, remote_size=None, uploads=uploads)
     log_sync.persist_log("gold.jsonl")
     assert len(uploads) == 1
+
+
+def _appended_filenames() -> set[str]:
+    """Every filename that interaction_log passes to ``_append``.
+
+    Parsed from the source so the check can't drift out of sync with a
+    logger that happens not to be exercised elsewhere. Resolves both string
+    literals (``_append("audit.jsonl", ...)``) and module-level string
+    constants (``_append(INDEX_BUILDS_LOG, ...)``); anything it can't resolve
+    fails loudly rather than being silently skipped.
+    """
+    tree = ast.parse(Path(interaction_log.__file__).read_text())
+    consts: dict[str, str] = {
+        target.id: node.value.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_append"
+            and node.args
+        ):
+            arg = node.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                names.add(arg.value)
+            elif isinstance(arg, ast.Name) and arg.id in consts:
+                names.add(consts[arg.id])
+            else:
+                raise AssertionError(
+                    f"test_every_appended_log_is_synced can't resolve the "
+                    f"filename in an _append() call: {ast.dump(arg)}"
+                )
+    return names
+
+
+def test_every_appended_log_is_synced():
+    """Regression guard for #241: ``audit.jsonl`` was written via ``_append``
+    but missing from ``LOG_FILES``, so it was never pulled at boot — and after
+    a cold start the shrink guard would eventually overwrite the remote with
+    only post-boot rows, losing audit history. Every log the app appends to
+    MUST be in ``LOG_FILES`` or it isn't durable on the GCS backend.
+    """
+    appended = _appended_filenames()
+    assert appended, "parsed no _append() filenames — the AST walk is broken"
+    missing = appended - set(log_sync.LOG_FILES)
+    assert not missing, (
+        f"these logs are appended but missing from log_sync.LOG_FILES, so they "
+        f"are never synced to/from GCS and will be lost on restart: {sorted(missing)}"
+    )
