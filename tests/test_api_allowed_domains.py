@@ -14,9 +14,14 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def client(monkeypatch):
+def client(monkeypatch, tmp_path):
     from rulebook.config import settings
 
+    # Isolate the index to an empty dir so /meta falls back to DEFAULT_DOMAINS
+    # (no built domains to intersect with). Without this the test depends on the
+    # ambient data/index — it goes red for anyone who has built a sample domain,
+    # which is now the documented key-free quickstart.
+    monkeypatch.setattr(settings, "index_path", tmp_path)
     monkeypatch.setattr(settings, "demo_mode", True)
     monkeypatch.setattr(settings, "state_backend_kind", "local")
     monkeypatch.setattr(settings, "gcs_state_bucket", None)
