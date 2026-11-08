@@ -33,12 +33,14 @@ rulebook/
 │   ├── pipeline.py            # end-to-end: question → answer + citations
 │   ├── ask.py                 # CLI: `python -m rulebook.ask` — retrieve + answer in the terminal
 │   ├── add.py                 # CLI: `python -m rulebook.add <slug> <file>` — one-command ingest
+│   ├── eval.py                # CLI + lib: `python -m rulebook.eval` — hit@k / MRR over a gold set
 │   ├── roles.py               # capability-based RBAC (suspended…superuser, ROLE_CAPABILITIES)
 │   ├── allowed_domains.py     # per-user domain scoping
 │   ├── registry.py            # per-domain metadata (display name, source URLs)
 │   ├── interaction_log.py     # append-only JSONL logs (qa / feedback / gold)
 │   └── {index,log,rules}_sync.py  # sync index / logs / rule docs with GCS (hosted)
 ├── scripts/build_index.py     # ingest every rules/<domain>/ → the vector index
+├── eval/gold/<domain>.jsonl   # labeled questions (question → rule_id) for retrieval eval
 ├── notebooks/walkthrough.ipynb # step-by-step RAG walkthrough on the sample domains
 ├── api/main.py                # FastAPI: /ask, /meta, /me, /feedback, /gold, /advanced/*
 ├── web/                       # React 19 + TypeScript + Tailwind v4 (Vite) — Ask + "Your activity"
@@ -95,6 +97,19 @@ See [`rules/SOURCES.md`](rules/SOURCES.md) for a menu of recognizable rulesets a
 ### Learning RAG
 
 New to RAG? Start with [`notebooks/walkthrough.ipynb`](notebooks/walkthrough.ipynb) — it runs a question through every stage (ingest → chunk → embed → retrieve → generate) on the sample domains, showing the intermediate values. Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
+
+### Evaluating retrieval
+
+Retrieval is the half of RAG you can measure without an LLM. Score it against a labeled gold set (`eval/gold/<domain>.jsonl` — ~a dozen hand-written questions per sample domain, each tagged with the rule_id that answers it):
+
+```bash
+uv run python -m rulebook.eval --domain checkers     # hit@k + MRR, per question
+```
+
+- **hit@k** — did a correct rule land in the top k? (Is the answer even in the context window?)
+- **MRR** — 1/(rank of the first correct rule). Rewards ranking the answer *high*, not just including it.
+
+The intended use is comparing embedders: run it on the local model, then set `EMBEDDING_PROVIDER=voyage`, **rebuild the index**, and run it again — the delta is the embedder upgrade as a number instead of a guess. On a small, clean corpus the two may tie; that's the lesson, not a failure. The same `evaluate()` lives in [`src/rulebook/eval.py`](src/rulebook/eval.py), so the notebook and CLI report identical numbers.
 
 ## Adding a domain
 

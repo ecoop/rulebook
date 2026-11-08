@@ -1,0 +1,12 @@
+{"domain": "checkers", "question": "How do you win a game of checkers?", "gold": ["5.1", "2.1"], "style": "literal"}
+{"domain": "checkers", "question": "What happens when a piece reaches the opponent's back row?", "gold": ["4.1"], "style": "literal"}
+{"domain": "checkers", "question": "Can an ordinary piece move backward?", "gold": ["2.4"], "style": "paraphrase"}
+{"domain": "checkers", "question": "Do I have to capture when I can, or is it my choice?", "gold": ["3.3"], "style": "paraphrase"}
+{"domain": "checkers", "question": "How does a king move?", "gold": ["4.2"], "style": "literal"}
+{"domain": "checkers", "question": "Which side takes the first turn?", "gold": ["2.2"], "style": "paraphrase"}
+{"domain": "checkers", "question": "How are the pieces set up at the start?", "gold": ["1.3"], "style": "literal"}
+{"domain": "checkers", "question": "How many pieces does each player start with?", "gold": ["1.2"], "style": "literal"}
+{"domain": "checkers", "question": "If I touch one of my own pieces, must I move it?", "gold": ["5.3"], "style": "literal"}
+{"domain": "checkers", "question": "When does a checkers game end in a tie?", "gold": ["5.2"], "style": "paraphrase"}
+{"domain": "checkers", "question": "Can one piece capture several times in a single turn?", "gold": ["3.2"], "style": "literal"}
+{"domain": "checkers", "question": "Which squares are the pieces played on?", "gold": ["1.1"], "style": "paraphrase"}
