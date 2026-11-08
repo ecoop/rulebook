@@ -11,13 +11,25 @@ Otherwise similarity search compares apples to oranges — the query vector
 lives in a different geometry from the stored vectors and nearest
 neighbors are essentially random.
 
-For instructional value we support two providers behind one small
+For instructional value we support three providers behind one small
 interface. The choice is driven by settings.embedding_provider so you can
 swap without touching retrieval or storage code.
 
+    local          A model2vec static model on your CPU. No API key, no
+                   network at query time, no cost, and no PyTorch/ONNX — so
+                   it installs where the heavy stacks don't (Intel macOS,
+                   new Python). THE DEFAULT, so a fresh clone can build an
+                   index and retrieve with zero keys — only *generation*
+                   needs an Anthropic key. The trade is a weaker (static)
+                   model than the hosted options; for clean, structured text
+                   like rulebooks it's usually plenty, and the eval harness
+                   is how you tell when it stops being enough.
+
     Voyage AI      Anthropic's recommended embedding partner. Works well
                    with Claude. Emits vectors normalized to unit length,
-                   which makes L2 and cosine ranking equivalent.
+                   which makes L2 and cosine ranking equivalent. The
+                   "upgrade" path: flip the provider, rebuild, and let
+                   hit@k/MRR show you whether it bought you anything.
 
     OpenAI         Cheaper still, similar quality on most tasks.
 
@@ -83,6 +95,51 @@ class Embedder(Protocol):
     def embed(self, texts: list[str], *, input_type: InputType) -> list[list[float]]: ...
 
 
+class LocalEmbedder:
+    """Embeddings from a local model2vec model — no API, no key, no cost, no torch.
+
+    This is the default, so a fresh clone can build an index and retrieve with
+    zero API keys (only *generation* needs an Anthropic key). model2vec embeddings
+    are STATIC: every token has a precomputed vector and a text's embedding is a
+    pooled average of its tokens — no neural forward pass at query time. That makes
+    it tiny and fast on CPU, and — crucially — free of PyTorch/ONNX, so it installs
+    on platforms the heavier local stacks have abandoned (Intel macOS, brand-new
+    Python versions). The first call downloads the model (tens of MB) and caches it.
+
+    The trade for that lightness is quality: a static model can't tell apart the
+    senses of a word from context the way a hosted contextual model (Voyage) can.
+    For clean, structured text like rulebooks it's usually enough — the eval harness
+    (hit@k/MRR) is how you tell when it stops being, and when a corpus is worth
+    switching to EMBEDDING_PROVIDER=voyage and rebuilding.
+
+    Static models are SYMMETRIC: there's no separate query vs document geometry, so
+    ``input_type`` is accepted (to satisfy the Embedder interface) but unused. No
+    usage is recorded — local embeddings are free and aren't in lcg's priced catalog.
+    """
+
+    def __init__(self, model: str):
+        try:
+            from model2vec import StaticModel
+        except ImportError as e:
+            raise RuntimeError(
+                "EMBEDDING_PROVIDER=local needs the 'model2vec' dependency. Install "
+                "it with `uv sync`, or switch to a hosted provider: set "
+                "EMBEDDING_PROVIDER=voyage (with VOYAGE_API_KEY) in your .env."
+            ) from e
+        self._model = StaticModel.from_pretrained(model)
+
+    def embed(self, texts, *, input_type):
+        import numpy as np
+
+        vectors = np.asarray(self._model.encode(list(texts)), dtype=np.float32)
+        # Unit-normalize so the stored vectors match Voyage's unit-length output and
+        # the store's cosine-as-dot-product holds. The store normalizes too, so this
+        # is belt-and-suspenders, but it keeps the raw .npy honest across providers.
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        return (vectors / norms).tolist()
+
+
 class VoyageEmbedder:
     def __init__(self, model: str, api_key: str):
         import voyageai
@@ -112,6 +169,8 @@ class OpenAIEmbedder:
 
 def get_embedder() -> Embedder:
     """Return the Embedder chosen by the EMBEDDING_PROVIDER env var."""
+    if settings.embedding_provider == "local":
+        return LocalEmbedder(settings.embedding_model)
     if settings.embedding_provider == "voyage":
         if not settings.voyage_api_key:
             raise RuntimeError("EMBEDDING_PROVIDER=voyage but VOYAGE_API_KEY is not set")
@@ -126,9 +185,9 @@ def get_embedder() -> Embedder:
 def probe_dimension(embedder: Embedder) -> int:
     """Ask the embedder to embed one short string and report the vector length.
 
-    Used by build_index.py to size the LanceDB schema — we let the model
-    tell us its dimension rather than hard-coding it, so swapping models
-    (even ones with different output sizes) just works.
+    We let the model report its own dimension rather than hard-coding it, so
+    swapping models (even across providers with different output sizes) just
+    works — the manifest records whatever the active model emits.
     """
     [v] = embedder.embed(["dimension probe"], input_type="document")
     return len(v)

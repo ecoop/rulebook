@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.14-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-_Last updated: 2026-11-07_
+_Last updated: 2026-11-08_
 
 A RAG (retrieval-augmented generation) app that answers questions about the rules of games, across several **domains**: the disc sports **ultimate** and **goaltimate**, plus **badminton**, **curling**, **hearts**, and **backgammon**. Ask a question, get an answer with citations back to the specific rule, and see the retrieved passages that produced it.
 
@@ -62,15 +62,15 @@ You need [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync                 # install deps into .venv
-cp .env.example .env    # then add your keys
+cp .env.example .env    # then add your Anthropic key
 ```
 
 Keys:
 
-- `ANTHROPIC_API_KEY` — generation (billed per token; Claude Max does **not** cover API use). Pennies per session.
-- `VOYAGE_API_KEY` — embeddings ([voyageai.com](https://www.voyageai.com/)); swap to OpenAI with `EMBEDDING_PROVIDER=openai` + `OPENAI_API_KEY`.
+- `ANTHROPIC_API_KEY` — **the only key you need.** Generation, billed per token (Claude Max does **not** cover API use). Pennies per session.
+- Embeddings default to a **local** model ([model2vec](https://github.com/MinishLab/model2vec) static embeddings — no key, no cost, no PyTorch, so it installs even on Intel macOS / new Python). For stronger embeddings on larger/messier corpora, set `EMBEDDING_PROVIDER=voyage` + `VOYAGE_API_KEY` (or `openai` + `OPENAI_API_KEY`) and rebuild. The eval harness is how you tell when it's worth it.
 
-**Two sample domains ship with the repo** — `checkers` and `cornhole`, written as original prose (see [`rules/SOURCES.md`](rules/SOURCES.md)) — so a fresh clone can build and ask with no downloads:
+**Two sample domains ship with the repo** — `checkers` and `cornhole`, written as original prose (see [`rules/SOURCES.md`](rules/SOURCES.md)) — so a fresh clone can build and ask with no downloads and no embedding key (the first build downloads the small local model once):
 
 ```bash
 uv run python scripts/build_index.py                       # ingest rules/<domain>/ → data/index/
