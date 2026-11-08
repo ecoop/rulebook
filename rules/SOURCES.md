@@ -20,11 +20,12 @@ rebuild the index.
 
 ## Bundled sample domains (committed — the exception)
 
-Two domains **do** ship in git, so a fresh clone can build an index and run the
+Three domains **do** ship in git, so a fresh clone can build an index and run the
 pipeline end-to-end with **no downloads**:
 
 - **`checkers`** — [`rules/checkers/checkers.md`](checkers/checkers.md) (a board game)
 - **`cornhole`** — [`rules/cornhole/cornhole.md`](cornhole/cornhole.md) (an outdoor game)
+- **`poker`** — [`rules/poker/poker.md`](poker/poker.md) (five variants — a deliberate **stress** corpus: the variants share almost all their vocabulary but differ in specifics, so retrieval has to disambiguate near-duplicates. Run `python -m rulebook.eval --domain poker` to watch hit@k/MRR fall, especially on the `label`-tagged questions.)
 
 These are **original prose written for this repo**, not copies of anyone's
 rulebook. The *games* are public-domain, and the *rules/method* of a game are not
