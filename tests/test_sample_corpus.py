@@ -22,6 +22,7 @@ RULES_ROOT = Path(__file__).resolve().parents[1] / "rules"
 SAMPLES = [
     ("checkers", {"1.1", "2.1", "3.3", "5.1"}),
     ("cornhole", {"1.1", "3.3", "3.4", "4.2"}),
+    ("poker", {"1.1", "3.2", "4.1", "5.4"}),
 ]
 
 
@@ -42,6 +43,6 @@ def test_sample_corpus_chunks_cleanly(domain: str, expected_ids: set[str]) -> No
     assert all(c.text.strip() for c in chunks)
 
 
-def test_both_sample_domains_present() -> None:
+def test_sample_domains_present() -> None:
     present = {p.name for p in RULES_ROOT.iterdir() if p.is_dir()}
-    assert {"checkers", "cornhole"} <= present
+    assert {"checkers", "cornhole", "poker"} <= present

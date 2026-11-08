@@ -25,7 +25,7 @@ from rulebook.eval import (
 from rulebook.ingest import extract_pages
 
 RULES_ROOT = Path(__file__).resolve().parents[1] / "rules"
-DOMAINS = ["checkers", "cornhole"]
+DOMAINS = ["checkers", "cornhole", "poker"]
 
 
 # --- pure metric functions (no index, no network) ---------------------------
