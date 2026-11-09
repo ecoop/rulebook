@@ -1,8 +1,9 @@
 [project]
 name = "rulebook"
 version = "0.1.0"
-description = "RAG prototype for disc sports rules — ultimate and goaltimate — with a FastAPI + React frontend. Built as an instructional example of retrieval-augmented generation over structured documents."
+description = "Retrieval-augmented Q&A over sports rulebooks across multiple domains, with a FastAPI + React frontend, invite auth, capability-based RBAC, human-in-the-loop feedback, and LLM cost governance."
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     # Generation: Claude via Anthropic's official SDK.
