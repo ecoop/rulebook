@@ -9,9 +9,15 @@ dependencies = [
     # Generation: Claude via Anthropic's official SDK.
     "anthropic>=0.40.0",
 
-    # Embeddings — one of these two is used at a time; both are installed so
-    # you can swap providers via the EMBEDDING_PROVIDER env var without a
-    # dependency change. See src/rulebook/embeddings.py.
+    # Embeddings — three providers behind one interface (src/rulebook/embeddings.py),
+    # chosen by EMBEDDING_PROVIDER. All three stay installed so you can swap with an
+    # env var, no dependency change.
+    #   local (DEFAULT): model2vec static embeddings. No key, no cost, and — unlike
+    #     sentence-transformers/ONNX — no torch, so it installs on Intel macOS and
+    #     new Python where those have no wheels. Light enough to be a core dep, which
+    #     keeps the zero-key path a plain `uv sync`.
+    #   voyage / openai: hosted, stronger on larger/messier corpora; need a key.
+    "model2vec>=0.3.0",
     "voyageai>=0.3.0",
     "openai>=1.55.0",
 
@@ -72,9 +78,12 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    # For the instructional notebook.
+    # For the instructional notebooks.
     "jupyter>=1.1.0",
     "ipykernel>=6.30.0",
+    # Strips notebook outputs/metadata on commit (see .gitattributes) so diffs stay
+    # readable. Run once after cloning: `uv run nbstripout --install`.
+    "nbstripout>=0.7.0",
     # Linter / formatter.
     "ruff>=0.7.0",
 ]

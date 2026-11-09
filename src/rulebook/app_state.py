@@ -65,10 +65,11 @@ def _assert_models_priceable(settings: Settings) -> None:
         )
         return
 
-    configured = {
-        "claude_model": settings.claude_model,
-        "embedding_model": settings.embedding_model,
-    }
+    configured = {"claude_model": settings.claude_model}
+    # Local embeddings are free and deliberately absent from lcg's priced
+    # catalog — there's no spend to govern, so don't flag a $0 price for them.
+    if settings.embedding_provider != "local":
+        configured["embedding_model"] = settings.embedding_model
     unpriced = []
     for field, model in configured.items():
         try:
@@ -113,7 +114,9 @@ def _assert_model_roles(settings: Settings) -> None:
     problems = []
     if settings.claude_model not in chat_ids:
         problems.append(f"claude_model={settings.claude_model!r} is not a chat model")
-    if settings.embedding_model not in embed_ids:
+    # A local embedding model (e.g. a HF id like minishlab/potion-retrieval-32M)
+    # isn't in lcg's catalog by design — only check role for the hosted providers.
+    if settings.embedding_provider != "local" and settings.embedding_model not in embed_ids:
         problems.append(f"embedding_model={settings.embedding_model!r} is not an embedding model")
 
     if not problems:

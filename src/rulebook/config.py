@@ -32,8 +32,14 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
 
     # --- Provider / model selection ---------------------------------------
-    embedding_provider: str = Field(default="voyage", pattern="^(voyage|openai)$")
-    embedding_model: str = "voyage-4"
+    # Default to LOCAL embeddings (a model2vec static model) so a fresh clone needs
+    # no embedding key — only generation needs ANTHROPIC_API_KEY. model2vec has no
+    # torch/ONNX dependency, so it installs even on platforms the heavy local stacks
+    # dropped (Intel macOS, new Python). provider+model are one coupled knob:
+    # switching to a hosted provider means setting BOTH (e.g. EMBEDDING_PROVIDER=voyage
+    # EMBEDDING_MODEL=voyage-4), because query and stored vectors must share a model.
+    embedding_provider: str = Field(default="local", pattern="^(local|voyage|openai)$")
+    embedding_model: str = "minishlab/potion-retrieval-32M"
     claude_model: str = "claude-sonnet-5"
     # Effort for answer generation (output_config.effort): how much the model
     # thinks before answering. "low" measured ~17% cheaper than the model

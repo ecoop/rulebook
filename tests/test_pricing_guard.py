@@ -18,10 +18,14 @@ import pytest
 from rulebook.app_state import _assert_models_priceable
 
 
-def _settings(*, claude, embedding, guardrails):
-    # The guard only reads these three attributes.
+def _settings(*, claude, embedding, guardrails, provider="voyage"):
+    # The guards read these four attributes. provider defaults to a hosted one so
+    # the embedding-model checks apply; pass provider="local" to exercise the skip.
     return SimpleNamespace(
-        claude_model=claude, embedding_model=embedding, guardrails_enabled=guardrails,
+        claude_model=claude,
+        embedding_model=embedding,
+        guardrails_enabled=guardrails,
+        embedding_provider=provider,
     )
 
 
@@ -75,3 +79,28 @@ def test_chat_id_in_embedding_slot_fails_closed():
 def test_role_mismatch_only_warns_when_guardrails_off():
     s = _settings(claude="voyage-4", embedding="voyage-4", guardrails=False)
     _assert_model_roles(s)  # must not raise
+
+
+# --- local provider: free embeddings aren't in lcg's catalog, so skip both ----
+# embedding-model guards for it (a HF model id prices at $0 and is the wrong
+# "kind" to lcg, but there's no hosted call to govern).
+
+
+def test_local_provider_skips_embedding_price_check():
+    s = _settings(
+        claude="claude-sonnet-5",
+        embedding="minishlab/potion-retrieval-32M",
+        guardrails=True,
+        provider="local",
+    )
+    _assert_models_priceable(s)  # must not raise despite the $0 embedding price
+
+
+def test_local_provider_skips_embedding_role_check():
+    s = _settings(
+        claude="claude-sonnet-5",
+        embedding="minishlab/potion-retrieval-32M",
+        guardrails=True,
+        provider="local",
+    )
+    _assert_model_roles(s)  # must not raise despite the non-catalog embedding id
