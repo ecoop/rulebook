@@ -25,6 +25,9 @@ the local model, run this; set EMBEDDING_PROVIDER=voyage, rebuild, run it again.
 The delta in hit@k/MRR is the embedder upgrade expressed as a number instead of a
 vibe. On a small, clean corpus the two may tie — which is itself the lesson: you
 now have evidence, not a guess, and you'll see the gap grow on a harder corpus.
+For local models there's a shortcut: ``build_scratch_index(domain, model)`` embeds a
+domain into a throwaway store, so several models can be scored side by side with
+``evaluate(..., index=...)`` without touching the real index.
 
 THE GOLD SET. One JSONL file per domain under eval/gold/<domain>.jsonl, one
 question per line:
@@ -45,11 +48,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .chunking import chunk_pages
 from .config import settings
+from .embeddings import LocalEmbedder
+from .ingest import extract_pages
 from .retrieve import retrieve
+from .store import Store, write_store
 
 
 def gold_dir() -> Path:
@@ -134,6 +142,14 @@ class EvalResult:
     def mrr(self) -> float:
         return _mean([r.rr for r in self.items])
 
+    def hit_rate_at(self, k: int) -> float:
+        """hit@k for any k up to the k these results were retrieved at."""
+        if k > self.k:
+            raise ValueError(f"retrieved only the top {self.k}; can't score hit@{k}")
+        return _mean(
+            [1.0 if hit_at_k(r.retrieved_ids, r.item.gold, k) else 0.0 for r in self.items]
+        )
+
     def by_style(self) -> dict[str, tuple[int, float, float]]:
         """{style: (n, hit_rate, mrr)} for each style present — slices easy vs hard."""
         styles = sorted({r.item.style for r in self.items})
@@ -148,18 +164,91 @@ class EvalResult:
         return out
 
 
-def evaluate(items: list[GoldItem], *, k: int = 5) -> EvalResult:
+@dataclass
+class ScratchIndex:
+    """One domain embedded with one LOCAL model, in a throwaway store.
+
+    For side-by-side embedder comparisons: build one per model, then pass it as
+    ``index=`` to :func:`evaluate` or :func:`rank_of`. The store lives in a temp
+    directory, so the real index under ``data/index`` is never touched.
+    """
+
+    domain: str
+    model: str
+    embedder: LocalEmbedder
+    store: Store
+
+
+_SOURCE_SUFFIXES = {".pdf", ".md", ".txt"}  # the same suffixes build_index.py ingests
+
+
+def build_scratch_index(domain: str, model: str) -> ScratchIndex:
+    """Chunk a domain's rule docs and embed them with a local model2vec ``model``.
+
+    Rule documents only (no gold-answer chunks), which is all the sample domains
+    have. The first call for a model downloads it once (tens of MB) and caches it.
+    """
+    docs = sorted(
+        p
+        for p in (settings.rules_dir / domain).iterdir()
+        if p.is_file() and p.suffix.lower() in _SOURCE_SUFFIXES
+    )
+    chunks = [
+        c for d in docs for c in chunk_pages(extract_pages(d), source=d.name, domain=domain)
+    ]
+    embedder = LocalEmbedder(model)
+    vectors = embedder.embed([c.text for c in chunks], input_type="document")
+    path = Path(tempfile.mkdtemp(prefix=f"rulebook-scratch-{domain}-"))
+    write_store(path, chunks, vectors, provider="local", model=model)
+    return ScratchIndex(domain=domain, model=model, embedder=embedder, store=Store(path).load())
+
+
+def _retrieved_ids(
+    question: str, domain: str, k: int, index: ScratchIndex | None
+) -> list[str]:
+    """Top-k rule_ids from the built index — or from ``index`` when one is given."""
+    if index is None:
+        return [c.rule_id for c in retrieve(question, domain=domain, k=k)]
+    if domain != index.domain:
+        raise ValueError(f"scratch index is for {index.domain!r}, not {domain!r}")
+    [q_vec] = index.embedder.embed([question], input_type="query")
+    return [row["rule_id"] for row in index.store.search(q_vec, k=k)]
+
+
+def rank_of(
+    question: str,
+    gold: tuple[str, ...],
+    *,
+    domain: str | None = None,
+    k: int = 5,
+    index: ScratchIndex | None = None,
+) -> int | None:
+    """1-indexed rank of the first acceptable gold rule in the top-k; None if absent."""
+    if index is not None:
+        if domain is not None and domain != index.domain:
+            raise ValueError(f"scratch index is for {index.domain!r}, not {domain!r}")
+        domain = index.domain
+    if domain is None:
+        raise ValueError("rank_of needs a domain (or a scratch index)")
+    rr = reciprocal_rank(_retrieved_ids(question, domain, k, index), gold)
+    return round(1 / rr) if rr else None
+
+
+def evaluate(
+    items: list[GoldItem], *, k: int = 5, index: ScratchIndex | None = None
+) -> EvalResult:
     """Retrieve top-k for each gold question and score hit@k + reciprocal rank.
 
-    Requires the index to be built for each item's domain (same embedder the
-    index was built with — a mismatched provider compares different geometries
-    and the numbers are meaningless). Retrieval errors propagate; the CLI checks
+    By default this searches the built index for each item's domain, so it needs
+    that index built with the active embedder (a mismatched provider compares
+    different geometries and the numbers are meaningless). Pass ``index`` to
+    search a :class:`ScratchIndex` instead — handy for comparing local models
+    without rebuilding anything. Retrieval errors propagate; the CLI checks
     which domains are built before calling this.
     """
     result = EvalResult(k=k)
     for item in items:
-        chunks = retrieve(item.question, domain=item.domain, k=k)
-        rids = [c.rule_id for c in chunks]
+        rids = _retrieved_ids(item.question, item.domain, k, index)
         result.items.append(
             ItemResult(
                 item=item,

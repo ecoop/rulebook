@@ -17,9 +17,14 @@ import pytest
 
 from rulebook.chunking import chunk_pages
 from rulebook.eval import (
+    EvalResult,
+    GoldItem,
+    ItemResult,
+    build_scratch_index,
     evaluate,
     hit_at_k,
     load_gold,
+    rank_of,
     reciprocal_rank,
 )
 from rulebook.ingest import extract_pages
@@ -86,3 +91,40 @@ def test_evaluate_runs_against_a_built_index() -> None:
     assert 0.0 <= res.mrr <= 1.0
     # by-style keys cover exactly the styles present in the gold set.
     assert set(res.by_style()) == {s or "(unlabeled)" for s in (i.style for i in items)}
+
+
+def test_hit_rate_at_scores_any_k_up_to_the_retrieved_k():
+    item = GoldItem("checkers", "q", ("b",))
+    res = EvalResult(k=3, items=[ItemResult(item, ["a", "b", "c"], True, 0.5)])
+    assert res.hit_rate_at(1) == 0.0  # b is rank 2
+    assert res.hit_rate_at(2) == 1.0
+    with pytest.raises(ValueError):
+        res.hit_rate_at(4)  # only the top 3 were retrieved
+
+
+# --- scratch index: compare a local model without touching data/index -------
+
+
+def test_scratch_index_scores_without_touching_the_real_index(monkeypatch, tmp_path):
+    pytest.importorskip("model2vec")
+    from rulebook.config import settings
+
+    # Point the real index at an empty dir; the scratch build must not write there.
+    monkeypatch.setattr(settings, "index_path", tmp_path)
+    model = "minishlab/potion-retrieval-32M"  # same model test_local_embedder caches
+    try:
+        idx = build_scratch_index("checkers", model)
+    except Exception as e:  # noqa: BLE001 — model fetch failed (offline/rate-limited)
+        pytest.skip(f"local model {model!r} unavailable: {e}")
+    assert not any(tmp_path.iterdir()), "scratch build wrote into the real index"
+
+    items = load_gold("checkers")
+    res = evaluate(items, k=5, index=idx)
+    assert res.n == len(items)
+    assert 0.0 <= res.hit_rate_at(1) <= res.hit_rate_at(3) <= res.hit_rate_at(5)
+    assert res.hit_rate_at(5) == res.hit_rate
+
+    r = rank_of(items[0].question, items[0].gold, index=idx)
+    assert r is None or 1 <= r <= 5
+    with pytest.raises(ValueError):
+        rank_of("q", ("1.1",), domain="cornhole", index=idx)  # wrong domain for this index
