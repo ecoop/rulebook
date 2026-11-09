@@ -1,0 +1,9 @@
+# Jupyter notebooks: strip outputs + execution counts on commit so diffs stay
+# readable and no local paths / rendered outputs leak into git. The notebooks are
+# meant to be *run* (they're thin — logic lives in src/rulebook/), so committing
+# without outputs loses nothing.
+#
+# Activate once per clone (writes to .git/config, not committed):
+#     uv run nbstripout --install
+*.ipynb filter=nbstripout
+*.ipynb diff=ipynb

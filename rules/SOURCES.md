@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Eric Cooper. -->
 # Rules sources — point-and-download
 
-_Last updated: 2026-08-31_
+_Last updated: 2026-11-07_
 
 The rules text under `rules/<domain>/` is built into the vector index by
 [`scripts/build_index.py`](../scripts/build_index.py) (the directory name is the
@@ -17,6 +17,56 @@ rebuild the index.
 > not the built index (`chunks.jsonl` holds verbatim rule text). All three are
 > gitignored and produced locally; a hosted instance syncs them privately from
 > its own storage.
+
+## Bundled sample domains (committed — the exception)
+
+Three domains **do** ship in git, so a fresh clone can build an index and run the
+pipeline end-to-end with **no downloads**:
+
+- **`checkers`** — [`rules/checkers/checkers.md`](checkers/checkers.md) (a board game)
+- **`cornhole`** — [`rules/cornhole/cornhole.md`](cornhole/cornhole.md) (an outdoor game)
+- **`poker`** — [`rules/poker/poker.md`](poker/poker.md) (five variants — a deliberate **stress** corpus: the variants share almost all their vocabulary but differ in specifics, so retrieval has to disambiguate near-duplicates. Run `python -m rulebook.eval --domain poker` to watch hit@k/MRR fall, especially on the `label`-tagged questions.)
+
+These are **original prose written for this repo**, not copies of anyone's
+rulebook. The *games* are public-domain, and the *rules/method* of a game are not
+copyrightable (17 U.S.C. §102(b)); this particular wording is original and ships
+under the repo's MIT license. They exist to make the project a runnable teaching
+example — build them and ask away:
+
+```
+uv run python scripts/build_index.py                       # builds every rules/<domain>/, incl. the samples
+uv run python -m rulebook.ask "how do you win at checkers?" --domain checkers
+```
+
+Everything below is about the *copyrighted* domains, which stay untracked.
+
+## Starter packs — recognizable rulesets to ingest
+
+Want to point Rulebook at a real sport? Download the official rules yourself (you
+accept each publisher's terms — downloads are manual by design), drop the file in,
+and let the one-command ingester do the rest:
+
+```
+uv run python -m rulebook.add <slug> ~/Downloads/<the-file>.pdf
+uv run python -m rulebook.ask "..." --domain <slug>
+```
+
+`rulebook.add` copies the file into `rules/<slug>/` and runs the builder for just
+that domain. Official sources (grab the **current** edition from each hub):
+
+| Sport | Governing body | Official rules hub | Suggested slug |
+|-------|----------------|--------------------|----------------|
+| Soccer | IFAB | https://www.theifab.com/laws/ | `soccer` |
+| Baseball | MLB | https://www.mlb.com/glossary/rules | `baseball` |
+| Cricket | MCC | https://www.lords.org/mcc/laws | `cricket` |
+| Tennis | ITF | https://www.itftennis.com/en/about-us/governance/rules-and-regulations/ | `tennis` |
+| Badminton | BWF | see [badminton](#badminton--badminton-bwf) below | `badminton` |
+| Water polo | World Aquatics | https://www.worldaquatics.com/water-polo/rules | `water_polo` |
+| Goaltimate | USAG | see [goaltimate](#goaltimate--goaltimate-usag) below | `goaltimate` |
+
+These docs are copyrighted and **stay untracked** (same policy as the domains
+listed under [Domains](#domains)); only the committed samples above live in git.
+Some sites (e.g. BWF) block automated fetchers — download in a browser.
 
 ## Reproduce the shipped domains (quickstart)
 
