@@ -164,6 +164,12 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
     keeps our existing behavior of returning the truncated text and
     surfacing ``stop_reason`` to the UI instead of raising.
     """
+    if not settings.anthropic_api_key:
+        raise RuntimeError(
+            "Generation needs ANTHROPIC_API_KEY, but none is set. Retrieval, indexing, "
+            "and eval need no key — only answering does. Add it to your .env (or export "
+            "it) to use `ask` or the web app."
+        )
     client = Anthropic(api_key=settings.anthropic_api_key)
     context = format_context(chunks)
     # Distinct domains present in the retrieved context, in first-seen order,

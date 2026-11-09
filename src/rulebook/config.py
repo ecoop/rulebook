@@ -27,7 +27,12 @@ class Settings(BaseSettings):
     )
 
     # --- API keys ----------------------------------------------------------
-    anthropic_api_key: str = Field(..., description="Required. For generation.")
+    # OPTIONAL: needed ONLY for generation (the `ask` CLI and the web app's answer
+    # path). Retrieval, indexing, and eval never call Claude, so the whole key-free
+    # path — local embeddings, build_index, retrieve, eval, the notebook — runs with
+    # no key at all. generate_answer() enforces presence lazily, with a clear error,
+    # at the one place it's actually used.
+    anthropic_api_key: str | None = Field(default=None)
     voyage_api_key: str | None = None
     openai_api_key: str | None = None
 

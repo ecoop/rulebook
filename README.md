@@ -71,7 +71,8 @@ cp .env.example .env    # then add your Anthropic key
 
 Keys:
 
-- `ANTHROPIC_API_KEY` — **the only key you need.** Generation, billed per token (Claude Max does **not** cover API use). Pennies per session.
+- **No key is required to start.** Copied as-is, `.env` runs the whole key-free path — build an index, retrieve, and run `rulebook.eval` with zero keys.
+- `ANTHROPIC_API_KEY` — needed **only to generate answers** (`rulebook.ask` and the web app). Billed per token (Claude Max does **not** cover API use); pennies per session. Uncomment it in `.env` when you want generation; everything else works without it.
 - Embeddings default to a **local** model ([model2vec](https://github.com/MinishLab/model2vec) static embeddings — no key, no cost, no PyTorch, so it installs even on Intel macOS / new Python). For stronger embeddings on larger/messier corpora, set `EMBEDDING_PROVIDER=voyage` + `VOYAGE_API_KEY` (or `openai` + `OPENAI_API_KEY`) and rebuild. The eval harness is how you tell when it's worth it.
 
 **Three sample domains ship with the repo** — `checkers`, `cornhole`, and `poker` (five variants, a deliberate *stress* corpus for evaluation), written as original prose (see [`rules/SOURCES.md`](rules/SOURCES.md)) — so a fresh clone can build and ask with no downloads and no embedding key (the first build downloads the small local model once):
