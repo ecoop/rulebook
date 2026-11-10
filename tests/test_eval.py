@@ -21,6 +21,7 @@ from rulebook.eval import (
     GoldItem,
     ItemResult,
     build_scratch_index,
+    citation_rule_id,
     evaluate,
     hit_at_k,
     load_gold,
@@ -58,8 +59,37 @@ def test_reciprocal_rank_is_one_over_first_hit():
 def test_load_gold_parses_both_domains():
     items = load_gold()
     assert {i.domain for i in items} >= set(DOMAINS)
-    assert all(i.gold for i in items), "every gold item needs at least one rule_id"
-    assert all(isinstance(i.gold, tuple) for i in items)
+    assert all(i.citations for i in items), "every citation gold needs at least one citation"
+    assert all(isinstance(i.citations, tuple) for i in items)
+    # citations are domain-qualified, the same form answers cite them in
+    assert all(c.startswith(f"{i.domain} ") for i in items for c in i.citations)
+
+
+def test_citation_rule_id_parses_and_checks_the_domain():
+    assert citation_rule_id("checkers 5.1", "checkers") == "5.1"
+    assert citation_rule_id("ultimate II.B.1", "ultimate") == "II.B.1"
+    assert citation_rule_id("5.1", "checkers") == "5.1"  # bare id: already this domain
+    with pytest.raises(ValueError):
+        citation_rule_id("cornhole 1.1", "checkers")
+
+
+def test_load_gold_reads_citations_and_the_legacy_gold_key(tmp_path):
+    (tmp_path / "x.jsonl").write_text(
+        '{"domain": "checkers", "question": "new", "citations": ["checkers 5.1"]}\n'
+        '{"domain": "checkers", "question": "old", "gold": ["5.1", "2.1"]}\n'
+    )
+    new, old = load_gold(directory=tmp_path)
+    assert new.citations == ("checkers 5.1",) and new.rule_ids == ("5.1",)
+    assert old.citations == ("checkers 5.1", "checkers 2.1")
+    assert old.rule_ids == ("5.1", "2.1")
+
+
+def test_load_gold_rejects_a_citation_into_another_domain(tmp_path):
+    (tmp_path / "x.jsonl").write_text(
+        '{"domain": "checkers", "question": "q", "citations": ["cornhole 1.1"]}\n'
+    )
+    with pytest.raises(ValueError):
+        load_gold(directory=tmp_path)
 
 
 @pytest.mark.parametrize("domain", DOMAINS)
@@ -69,8 +99,8 @@ def test_gold_ids_exist_in_corpus(domain: str) -> None:
     items = load_gold(domain)
     assert items, f"no gold for {domain}"
     for item in items:
-        missing = set(item.gold) - ids
-        assert not missing, f"{domain}: gold {missing} for {item.question!r} not a real rule_id"
+        missing = set(item.rule_ids) - ids
+        assert not missing, f"{domain}: cited {missing} for {item.question!r} not a real rule_id"
 
 
 # --- integration: run against a locally built index (skipped in CI) ----------
@@ -124,7 +154,7 @@ def test_scratch_index_scores_without_touching_the_real_index(monkeypatch, tmp_p
     assert 0.0 <= res.hit_rate_at(1) <= res.hit_rate_at(3) <= res.hit_rate_at(5)
     assert res.hit_rate_at(5) == res.hit_rate
 
-    r = rank_of(items[0].question, items[0].gold, index=idx)
+    r = rank_of(items[0].question, items[0].citations, index=idx)
     assert r is None or 1 <= r <= 5
     with pytest.raises(ValueError):
         rank_of("q", ("1.1",), domain="cornhole", index=idx)  # wrong domain for this index

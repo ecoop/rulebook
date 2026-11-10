@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.14-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-_Last updated: 2026-11-08_
+_Last updated: 2026-11-09_
 
 A RAG (retrieval-augmented generation) app that answers questions about the rules of games, across several **domains**: the disc sports **ultimate** and **goaltimate**, plus **badminton**, **curling**, **hearts**, and **backgammon**. Ask a question, get an answer with citations back to the specific rule, and see the retrieved passages that produced it.
 
@@ -41,7 +41,7 @@ rulebook/
 │   ├── interaction_log.py     # append-only JSONL logs (qa / feedback / gold)
 │   └── {index,log,rules}_sync.py  # sync index / logs / rule docs with GCS (hosted)
 ├── scripts/build_index.py     # ingest every rules/<domain>/ → the vector index
-├── eval/gold/<domain>.jsonl   # labeled questions (question → rule_id) for retrieval eval
+├── eval/gold/<domain>.jsonl   # citation golds (question → cited rules) for retrieval eval
 ├── notebooks/walkthrough.ipynb # step-by-step RAG walkthrough on the sample domains
 ├── notebooks/embeddings_and_eval.ipynb # embeddings + hit@k/MRR eval (local vs Voyage)
 ├── api/main.py                # FastAPI: /ask, /meta, /me, /feedback, /gold, /advanced/*
@@ -105,7 +105,7 @@ New to RAG? Start with [`notebooks/walkthrough.ipynb`](notebooks/walkthrough.ipy
 
 ### Evaluating retrieval
 
-Retrieval is the half of RAG you can measure without an LLM. Score it against a labeled gold set (`eval/gold/<domain>.jsonl` — ~a dozen hand-written questions per sample domain, each tagged with the rule_id that answers it):
+Retrieval is the half of RAG you can measure without an LLM. Score it against a set of **citation golds** (`eval/gold/<domain>.jsonl` — ~a dozen hand-written questions per sample domain, each with citations to the rules that answer it, e.g. `"citations": ["checkers 5.1", "checkers 2.1"]`):
 
 ```bash
 uv run python -m rulebook.eval --domain checkers     # hit@k + MRR, per question

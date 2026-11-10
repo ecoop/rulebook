@@ -32,11 +32,21 @@ class PageText:
 
 _TEXT_SUFFIXES = {".md", ".txt"}
 
+# HTML comments in Markdown (license headers, editor notes) are invisible when
+# the file is rendered, so they shouldn't be searchable either: left in, a
+# copyright header becomes part of the first chunk and can outrank real rules.
+# Stripped from the RAW text — _clean's hyphen rejoin would otherwise turn a
+# "<!--" at the end of a line into "<!-" and the comment would no longer match.
+_HTML_COMMENT = re.compile(r"<!--.*?-->[ \t]*\n?", re.DOTALL)
+
 
 def extract_pages(source_path: Path) -> list[PageText]:
     """Return one PageText per non-empty page (or one per text file)."""
     if source_path.suffix.lower() in _TEXT_SUFFIXES:
-        cleaned = _clean(source_path.read_text(encoding="utf-8"))
+        raw = source_path.read_text(encoding="utf-8")
+        if source_path.suffix.lower() == ".md":
+            raw = _HTML_COMMENT.sub("", raw)
+        cleaned = _clean(raw)
         return [PageText(page_number=1, text=cleaned)] if cleaned.strip() else []
 
     reader = PdfReader(source_path)
