@@ -1,0 +1,97 @@
+name: Notebook page
+
+# Runs notebooks/embeddings_and_eval.ipynb key-free and publishes the result, with
+# every output, as https://ecoop.github.io/rulebook/embeddings_and_eval.html.
+# The notebook stays committed without outputs (so Colab and Jupyter open it
+# un-run); this page is the "read it with results" view. It's built here and
+# deployed straight to Pages, never committed.
+#
+# Runs only on pushes to main that touch something the notebook uses, plus a
+# manual "Run workflow" button. A failed run leaves the last good page up.
+on:
+  push:
+    branches: [main]
+    paths:
+      - notebooks/embeddings_and_eval.ipynb
+      - eval/gold/**
+      - rules/checkers/**
+      - rules/cornhole/**
+      - rules/poker/**
+      - scripts/build_index.py
+      - src/rulebook/app_state.py
+      - src/rulebook/chunking.py
+      - src/rulebook/config.py
+      - src/rulebook/embeddings.py
+      - src/rulebook/eval.py
+      - src/rulebook/ingest.py
+      - src/rulebook/retrieve.py
+      - src/rulebook/store.py
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/notebook-page.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a newer push replaces a queued one.
+concurrency:
+  group: notebook-page
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install (project + notebook deps)
+        run: uv sync --group dev
+
+      # The local embedding models (a few tens of MB) come from Hugging Face;
+      # cache them so each run doesn't download them again.
+      - name: Cache embedding models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-${{ hashFiles('notebooks/embeddings_and_eval.ipynb', 'src/rulebook/config.py') }}
+          restore-keys: hf-
+
+      # No API keys are set, so this proves the notebook really is key-free.
+      # The "github-only" cell (the read-only banner) is dropped from the page.
+      - name: Run the notebook and render it
+        run: |
+          uv run --no-sync jupyter nbconvert notebooks/embeddings_and_eval.ipynb \
+            --execute --to html \
+            --ExecutePreprocessor.timeout=600 \
+            --TagRemovePreprocessor.enabled=True \
+            --TagRemovePreprocessor.remove_cell_tags='["github-only"]' \
+            --output-dir _site --output embeddings_and_eval
+          cat > _site/index.html <<'EOF'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>Rulebook notebooks</title>
+          <meta http-equiv="refresh" content="0; url=embeddings_and_eval.html">
+          <a href="embeddings_and_eval.html">Embeddings &amp; evaluation</a>
+          EOF
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}embeddings_and_eval.html
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
