@@ -50,3 +50,33 @@ def test_query_and_document_paths_both_work(embedder: LocalEmbedder) -> None:
     [as_doc] = embedder.embed(["how do you win the game?"], input_type="document")
     [as_query] = embedder.embed(["how do you win the game?"], input_type="query")
     assert len(as_doc) == len(as_query) > 0
+
+
+def test_hf_token_nag_is_hidden_while_loading_but_other_warnings_show(monkeypatch, caplog):
+    """huggingface_hub's "set a HF_TOKEN" nag is dropped; anything else still shows."""
+    import logging
+    import warnings
+
+    import model2vec
+
+    from rulebook.embeddings import LocalEmbedder
+
+    nag = ("You are sending unauthenticated requests to the HF Hub. "
+           "Please set a HF_TOKEN to enable higher rate limits.")
+    log = logging.getLogger("huggingface_hub.utils._http")
+
+    def fake_from_pretrained(name):
+        warnings.warn(nag, stacklevel=2)
+        log.warning(nag)
+        warnings.warn("some other warning", stacklevel=2)
+        log.warning("some other log line")
+        return object()
+
+    monkeypatch.setattr(model2vec.StaticModel, "from_pretrained", staticmethod(fake_from_pretrained))
+    with warnings.catch_warnings(record=True) as seen, caplog.at_level(logging.WARNING):
+        warnings.simplefilter("always")
+        LocalEmbedder("any/model")
+    messages = [str(w.message) for w in seen]
+    assert nag not in messages and "some other warning" in messages
+    assert nag not in caplog.text and "some other log line" in caplog.text
+    assert not log.filters, "the filter must be removed after loading"

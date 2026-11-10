@@ -44,6 +44,9 @@ INPUT TYPE
     flag there.
 """
 
+import contextlib
+import logging
+import warnings
 from typing import Literal, Protocol
 
 from llm_cost_governor.budget import RequirePricedModelHook
@@ -95,6 +98,34 @@ class Embedder(Protocol):
     def embed(self, texts: list[str], *, input_type: InputType) -> list[list[float]]: ...
 
 
+_HF_TOKEN_NAG = "unauthenticated requests to the HF Hub"
+
+
+class _DropTokenNag(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return _HF_TOKEN_NAG not in record.getMessage()
+
+
+@contextlib.contextmanager
+def _quiet_hf_token_nag():
+    """Hide huggingface_hub's "set a HF_TOKEN" nag while a local model loads.
+
+    The local models are public and small; they download fine without a Hugging
+    Face token. Newer huggingface_hub versions warn about the missing token on
+    every download, both as a Python warning and as a log line. Only that one
+    message is dropped, and only during the load; other warnings still show.
+    """
+    log = logging.getLogger("huggingface_hub.utils._http")
+    drop = _DropTokenNag()
+    log.addFilter(drop)
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=f".*{_HF_TOKEN_NAG}.*")
+            yield
+    finally:
+        log.removeFilter(drop)
+
+
 class LocalEmbedder:
     """Embeddings from a local model2vec model — no API, no key, no cost, no torch.
 
@@ -126,7 +157,8 @@ class LocalEmbedder:
                 "it with `uv sync`, or switch to a hosted provider: set "
                 "EMBEDDING_PROVIDER=voyage (with VOYAGE_API_KEY) in your .env."
             ) from e
-        self._model = StaticModel.from_pretrained(model)
+        with _quiet_hf_token_nag():
+            self._model = StaticModel.from_pretrained(model)
 
     def embed(self, texts, *, input_type):
         import numpy as np

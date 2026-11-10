@@ -12,6 +12,8 @@ It started as a hands-on way to **learn RAG** and has grown into a small gated p
 
 > New here? The in-app **"How it works"** panel walks the live pipeline. Deeper topics have their own docs — see [Documentation](#documentation).
 
+> **Learning RAG?** Start with the notebooks. [**Embeddings & evaluation**](https://ecoop.github.io/rulebook/embeddings_and_eval.html) — read it with every result filled in, or [open it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb) to run it in your browser: no install, no API key. The [**end-to-end walkthrough**](notebooks/walkthrough.ipynb) follows one question through the whole pipeline (needs an Anthropic key). More under [Learning RAG](#learning-rag).
+
 ## What's in here
 
 ```
@@ -27,7 +29,7 @@ rulebook/
 │   ├── config.py              # env/config + model selection
 │   ├── ingest.py              # PDF → text with page numbers (Claude vision for image pages)
 │   ├── chunking.py            # rule-number / heading-aware chunker
-│   ├── embeddings.py          # pluggable Voyage / OpenAI embeddings
+│   ├── embeddings.py          # pluggable embeddings: local (default) / Voyage / OpenAI
 │   ├── store.py               # in-memory numpy vector store (.npy matrix + .jsonl records)
 │   ├── retrieve.py            # single-domain and cross-domain retrieval
 │   ├── generate.py            # Claude call with a citation-forcing prompt
@@ -103,9 +105,9 @@ New to RAG? Start with [`notebooks/walkthrough.ipynb`](notebooks/walkthrough.ipy
 
 **No install? Run it in your browser.**
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb)
-opens the embeddings/eval notebook on Google's free machines (key-free; its first cell installs the repo).
+opens the embeddings/eval notebook on Google's free machines (key-free; its first cell installs the repo). To read it with results instead, see its [results page](https://ecoop.github.io/rulebook/embeddings_and_eval.html), which CI rebuilds from the notebook whenever the code it uses changes ([`notebook-page.yml`](.github/workflows/notebook-page.yml)).
 
-> The notebooks are committed with outputs stripped ([`.gitattributes`](.gitattributes) + nbstripout) — they're meant to be run. The exception is `embeddings_and_eval.ipynb`, which keeps its outputs (`"keep_output": true` in its notebook metadata) so GitHub shows its results; if you change it, re-run it top to bottom before committing. After cloning, run `uv run nbstripout --install` once so your commits stay clean too.
+> The notebooks are committed with outputs stripped ([`.gitattributes`](.gitattributes) + nbstripout) — they're meant to be run. After cloning, run `uv run nbstripout --install` once so your commits stay clean too.
 
 ### Evaluating retrieval
 
