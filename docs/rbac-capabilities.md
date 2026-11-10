@@ -108,7 +108,7 @@ table lists only **what each level adds**.
 | **7** | admin | `users.view`, `users.change_role`, `users.add` |
 | **8** | superuser | `users.remove`, `users.rename`, `roles.manage` |
 
-Role ids are descriptive (`suspended` … `superuser`); legacy `level0`…`level8` ids still resolve via aliases during migration.
+Role ids are descriptive (`suspended` … `superuser`). The legacy `level0`…`level8` (and `novice` / `evaluator`) ids were migrated out of the seed and overrides and are no longer accepted — an old id now resolves to no capabilities (fail-closed), same as any unknown role (#199).
 
 Reference matrix (✓ = has it; columns are cumulative left→right, by level):
 

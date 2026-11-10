@@ -53,8 +53,7 @@ mint a fresh token and suspend the old one (set role `suspended`) instead.
 - `RULEBOOK_DEMO_MODE=true`.
 - **Bootstrap a superuser** (only way to seed the first one):
   `RULEBOOK_INITIAL_ROLES='{"tok_you":"superuser"}'`. (An unknown role id
-  resolves to *no* capabilities, fail-closed, so a typo locks the user out;
-  legacy `level0`…`level8` ids still resolve via aliases.)
+  resolves to *no* capabilities, fail-closed, so a typo locks the user out.)
 - `--max-instances=1` — the cost counter is per-instance in-memory; more
   instances under-count caps.
 - Keep seed roles/tokens in **Secret Manager → env** (`--set-secrets`), never
