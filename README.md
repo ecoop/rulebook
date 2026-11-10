@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.14-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-_Last updated: 2026-11-09_
+_Last updated: 2026-11-10_
 
 A RAG (retrieval-augmented generation) app that answers questions about the rules of games, across several **domains**: the disc sports **ultimate** and **goaltimate**, plus **badminton**, **curling**, **hearts**, and **backgammon**. Ask a question, get an answer with citations back to the specific rule, and see the retrieved passages that produced it.
 
@@ -100,6 +100,12 @@ See [`rules/SOURCES.md`](rules/SOURCES.md) for a menu of recognizable rulesets a
 ### Learning RAG
 
 New to RAG? Start with [`notebooks/walkthrough.ipynb`](notebooks/walkthrough.ipynb) — it runs a question through every stage (ingest → chunk → embed → retrieve → generate) on the sample domains, showing the intermediate values. Then [`notebooks/embeddings_and_eval.ipynb`](notebooks/embeddings_and_eval.ipynb) zooms in on what an embedding is and how to *measure* retrieval (hit@k/MRR, local-vs-Voyage). Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
+
+**No install? Run them in your browser.**
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb)
+opens the embeddings/eval notebook on Google's free machines (key-free; its first cell installs the repo).
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ecoop/rulebook?quickstart=1)
+opens the whole repo in VS Code in the browser, installed and ready ([`.devcontainer/`](.devcontainer/devcontainer.json)). The walkthrough's answer step needs an `ANTHROPIC_API_KEY`; in Codespaces, add it as a [Codespaces secret](https://docs.github.com/en/codespaces/managing-your-codespaces/managing-your-account-specific-secrets-for-github-codespaces).
 
 > The notebooks are committed with outputs stripped ([`.gitattributes`](.gitattributes) + nbstripout) — they're meant to be run. After cloning, run `uv run nbstripout --install` once so your commits stay clean too.
 
