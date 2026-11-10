@@ -1,12 +1,12 @@
-{"domain": "cornhole", "question": "How many points do you need to win?", "gold": ["3.4"], "style": "literal"}
-{"domain": "cornhole", "question": "How does scoring work after both teams have thrown?", "gold": ["3.3"], "style": "paraphrase"}
-{"domain": "cornhole", "question": "How many points is it worth to sink a bag in the hole?", "gold": ["3.2"], "style": "literal"}
-{"domain": "cornhole", "question": "What is a bag that lands and stays on the board worth?", "gold": ["3.1"], "style": "literal"}
-{"domain": "cornhole", "question": "How far apart are the two boards?", "gold": ["1.3"], "style": "literal"}
-{"domain": "cornhole", "question": "What makes a throw a foul?", "gold": ["2.3"], "style": "paraphrase"}
-{"domain": "cornhole", "question": "How many bags does each team get?", "gold": ["1.2"], "style": "literal"}
-{"domain": "cornhole", "question": "What is the goal of cornhole?", "gold": ["2.1"], "style": "paraphrase"}
-{"domain": "cornhole", "question": "How are you supposed to throw the bag?", "gold": ["2.2"], "style": "paraphrase"}
-{"domain": "cornhole", "question": "What does cancellation scoring mean?", "gold": ["3.3"], "style": "literal"}
-{"domain": "cornhole", "question": "What is one round of play called?", "gold": ["4.1"], "style": "paraphrase"}
-{"domain": "cornhole", "question": "What do the boards look like?", "gold": ["1.1"], "style": "literal"}
+{"domain": "cornhole", "question": "How many points do you need to win?", "citations": ["cornhole 3.4"], "style": "literal"}
+{"domain": "cornhole", "question": "How does scoring work after both teams have thrown?", "citations": ["cornhole 3.3"], "style": "paraphrase"}
+{"domain": "cornhole", "question": "How many points is it worth to sink a bag in the hole?", "citations": ["cornhole 3.2"], "style": "literal"}
+{"domain": "cornhole", "question": "What is a bag that lands and stays on the board worth?", "citations": ["cornhole 3.1"], "style": "literal"}
+{"domain": "cornhole", "question": "How far apart are the two boards?", "citations": ["cornhole 1.3"], "style": "literal"}
+{"domain": "cornhole", "question": "What makes a throw a foul?", "citations": ["cornhole 2.3"], "style": "paraphrase"}
+{"domain": "cornhole", "question": "How many bags does each team get?", "citations": ["cornhole 1.2"], "style": "literal"}
+{"domain": "cornhole", "question": "What is the goal of cornhole?", "citations": ["cornhole 2.1"], "style": "paraphrase"}
+{"domain": "cornhole", "question": "How are you supposed to throw the bag?", "citations": ["cornhole 2.2"], "style": "paraphrase"}
+{"domain": "cornhole", "question": "What does cancellation scoring mean?", "citations": ["cornhole 3.3"], "style": "literal"}
+{"domain": "cornhole", "question": "What is one round of play called?", "citations": ["cornhole 4.1"], "style": "paraphrase"}
+{"domain": "cornhole", "question": "What do the boards look like?", "citations": ["cornhole 1.1"], "style": "literal"}

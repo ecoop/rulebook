@@ -29,14 +29,17 @@ For local models there's a shortcut: ``build_scratch_index(domain, model)`` embe
 domain into a throwaway store, so several models can be scored side by side with
 ``evaluate(..., index=...)`` without touching the real index.
 
-THE GOLD SET. One JSONL file per domain under eval/gold/<domain>.jsonl, one
-question per line:
+THE GOLD SET. A *gold* is a question plus its right answer. The ones here are
+**citation golds**: the answer is given as citations into the rules, in the same
+"<domain> <rule>" form answers cite them. (The app also has **written golds** —
+answers as text, authored in the UI and indexed alongside the rules; see #254.)
+One JSONL file per domain under eval/gold/<domain>.jsonl, one question per line:
 
     {"domain": "checkers", "question": "How does a king move?",
-     "gold": ["4.2"], "style": "literal"}
+     "citations": ["checkers 4.2"], "style": "literal"}
 
-`gold` is the list of acceptable rule_ids — retrieving ANY of them counts as a
-hit (a question can have more than one right passage). `style` ("literal" vs
+`citations` lists every acceptable passage — retrieving ANY of them counts as a
+hit (a rulebook can say the same thing in two places). `style` ("literal" vs
 "paraphrase") is optional and only drives the by-style breakdown; paraphrased
 questions, which don't reuse the rule's wording, are where a weak embedder
 actually shows its seams. Labeling is the real cost of evaluation: ~a dozen
@@ -65,12 +68,32 @@ def gold_dir() -> Path:
     return settings.repo_root / "eval" / "gold"
 
 
+def citation_rule_id(citation: str, domain: str) -> str:
+    """The rule_id in a citation like ``"checkers 5.1"``, checked against ``domain``.
+
+    A bare rule_id (``"5.1"``) is accepted as already belonging to ``domain``.
+    Citations into another domain are rejected: retrieval eval searches one
+    domain's index per question (cross-domain golds are #254's to add).
+    """
+    head, sep, rule_id = citation.strip().partition(" ")
+    if not sep:
+        return head
+    if head != domain:
+        raise ValueError(f"citation {citation!r} is not in domain {domain!r}")
+    return rule_id.strip()
+
+
 @dataclass(frozen=True)
 class GoldItem:
     domain: str
     question: str
-    gold: tuple[str, ...]  # acceptable rule_ids; retrieving ANY of them is a hit
-    style: str = ""        # "literal" | "paraphrase" | "" — optional, for slicing
+    citations: tuple[str, ...]  # "<domain> <rule>"; retrieving ANY of them is a hit
+    style: str = ""             # "literal" | "paraphrase" | "" — optional, for slicing
+
+    @property
+    def rule_ids(self) -> tuple[str, ...]:
+        """The cited rule_ids — what retrieval results are compared against."""
+        return tuple(citation_rule_id(c, self.domain) for c in self.citations)
 
 
 def load_gold(domain: str | None = None, *, directory: Path | None = None) -> list[GoldItem]:
@@ -88,19 +111,24 @@ def load_gold(domain: str | None = None, *, directory: Path | None = None) -> li
             if not line:
                 continue
             row = json.loads(line)
-            items.append(
-                GoldItem(
-                    domain=row["domain"],
-                    question=row["question"],
-                    gold=tuple(row["gold"]),
-                    style=row.get("style", ""),
-                )
+            domain_ = row["domain"]
+            # "gold" (bare rule_ids) is the pre-#254 key; read it as citations.
+            cites = row["citations"] if "citations" in row else row["gold"]
+            item = GoldItem(
+                domain=domain_,
+                question=row["question"],
+                citations=tuple(
+                    c if " " in c.strip() else f"{domain_} {c.strip()}" for c in cites
+                ),
+                style=row.get("style", ""),
             )
+            item.rule_ids  # noqa: B018 — validate every citation is in this domain
+            items.append(item)
     return items
 
 
 def hit_at_k(retrieved_ids: list[str], gold: tuple[str, ...], k: int) -> bool:
-    """Did any acceptable gold id appear in the top-k retrieved ids?"""
+    """Did any acceptable id (a gold's cited rule_ids) appear in the top-k?"""
     top = retrieved_ids[:k]
     return any(g in top for g in gold)
 
@@ -147,7 +175,7 @@ class EvalResult:
         if k > self.k:
             raise ValueError(f"retrieved only the top {self.k}; can't score hit@{k}")
         return _mean(
-            [1.0 if hit_at_k(r.retrieved_ids, r.item.gold, k) else 0.0 for r in self.items]
+            [1.0 if hit_at_k(r.retrieved_ids, r.item.rule_ids, k) else 0.0 for r in self.items]
         )
 
     def by_style(self) -> dict[str, tuple[int, float, float]]:
@@ -217,20 +245,25 @@ def _retrieved_ids(
 
 def rank_of(
     question: str,
-    gold: tuple[str, ...],
+    citations: tuple[str, ...],
     *,
     domain: str | None = None,
     k: int = 5,
     index: ScratchIndex | None = None,
 ) -> int | None:
-    """1-indexed rank of the first acceptable gold rule in the top-k; None if absent."""
+    """1-indexed rank of the first cited rule in the top-k; None if absent.
+
+    ``citations`` take the gold-file form (``"checkers 5.1"``); bare rule_ids
+    are accepted too.
+    """
     if index is not None:
         if domain is not None and domain != index.domain:
             raise ValueError(f"scratch index is for {index.domain!r}, not {domain!r}")
         domain = index.domain
     if domain is None:
         raise ValueError("rank_of needs a domain (or a scratch index)")
-    rr = reciprocal_rank(_retrieved_ids(question, domain, k, index), gold)
+    rule_ids = tuple(citation_rule_id(c, domain) for c in citations)
+    rr = reciprocal_rank(_retrieved_ids(question, domain, k, index), rule_ids)
     return round(1 / rr) if rr else None
 
 
@@ -253,8 +286,8 @@ def evaluate(
             ItemResult(
                 item=item,
                 retrieved_ids=rids,
-                hit=hit_at_k(rids, item.gold, k),
-                rr=reciprocal_rank(rids, item.gold),
+                hit=hit_at_k(rids, item.rule_ids, k),
+                rr=reciprocal_rank(rids, item.rule_ids),
             )
         )
     return result
@@ -297,15 +330,15 @@ def _print_domain(domain: str, res: EvalResult) -> None:
         mark = "✓" if r.hit else "✗"
         top = ",".join(r.retrieved_ids[:5]) or "(none)"
         print(
-            f"   {mark} {r.rr:.2f} [{_first_hit(r.retrieved_ids, r.item.gold):>3}]  "
-            f"{r.item.question[:52]:<52}  gold={','.join(r.item.gold)}  top={top}"
+            f"   {mark} {r.rr:.2f} [{_first_hit(r.retrieved_ids, r.item.rule_ids):>3}]  "
+            f"{r.item.question[:52]:<52}  cites={','.join(r.item.rule_ids)}  top={top}"
         )
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m rulebook.eval",
-        description="Score retrieval (hit@k, MRR) against the labeled gold set.",
+        description="Score retrieval (hit@k, MRR) against the citation golds in eval/gold/.",
     )
     parser.add_argument("--domain", help="evaluate only this domain (default: all with gold + a built index)")
     parser.add_argument("-k", type=int, default=5, help="top-k to retrieve (default: 5)")

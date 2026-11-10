@@ -1,22 +1,22 @@
-{"domain": "poker", "question": "In Razz, does the highest or the lowest hand win the pot?", "gold": ["4.1"], "style": "semantic"}
-{"domain": "poker", "question": "Which of these poker variants is played for the lowest hand?", "gold": ["4.1"], "style": "semantic"}
-{"domain": "poker", "question": "In Razz, does the high card or the low card post the bring-in?", "gold": ["4.3"], "style": "semantic"}
-{"domain": "poker", "question": "In Omaha, how many of your own cards must you use in your final hand?", "gold": ["5.4"], "style": "semantic"}
-{"domain": "poker", "question": "How many private hole cards does each player get in Omaha?", "gold": ["5.2"], "style": "semantic"}
-{"domain": "poker", "question": "In five-card draw, may you exchange some of your cards?", "gold": ["1.5"], "style": "semantic"}
-{"domain": "poker", "question": "What is the best possible hand in Razz?", "gold": ["4.1"], "style": "semantic"}
-{"domain": "poker", "question": "In Omaha, where do the shared cards come from?", "gold": ["5.3"], "style": "semantic"}
-{"domain": "poker", "question": "In seven-card stud, how many of each player's cards are dealt face down?", "gold": ["3.2"], "style": "label"}
-{"domain": "poker", "question": "How many betting rounds are there in seven-card stud?", "gold": ["3.4"], "style": "label"}
-{"domain": "poker", "question": "How many betting rounds are there in Razz?", "gold": ["4.4"], "style": "label"}
-{"domain": "poker", "question": "How many betting rounds are there in five-card stud?", "gold": ["2.4"], "style": "label"}
-{"domain": "poker", "question": "How many betting rounds are there in five-card draw?", "gold": ["1.4"], "style": "label"}
-{"domain": "poker", "question": "How many betting rounds are there in Omaha?", "gold": ["5.5"], "style": "label"}
-{"domain": "poker", "question": "In five-card stud, who posts the forced bring-in?", "gold": ["2.3"], "style": "label"}
-{"domain": "poker", "question": "In seven-card stud, who opens the betting on third street?", "gold": ["3.3"], "style": "label"}
-{"domain": "poker", "question": "In Razz, how is the hand dealt?", "gold": ["4.2"], "style": "label"}
-{"domain": "poker", "question": "How is the deal structured in five-card stud?", "gold": ["2.2"], "style": "label"}
-{"domain": "poker", "question": "In five-card draw, how many cards may you discard?", "gold": ["1.5"], "style": "label"}
-{"domain": "poker", "question": "What is the object of seven-card stud?", "gold": ["3.1"], "style": "label"}
-{"domain": "poker", "question": "How does the betting open in Omaha?", "gold": ["5.6"], "style": "label"}
-{"domain": "poker", "question": "Do the stud games allow drawing new cards?", "gold": ["2.5", "3.5", "4.5"], "style": "label"}
+{"domain": "poker", "question": "In Razz, does the highest or the lowest hand win the pot?", "citations": ["poker 4.1"], "style": "semantic"}
+{"domain": "poker", "question": "Which of these poker variants is played for the lowest hand?", "citations": ["poker 4.1"], "style": "semantic"}
+{"domain": "poker", "question": "In Razz, does the high card or the low card post the bring-in?", "citations": ["poker 4.3"], "style": "semantic"}
+{"domain": "poker", "question": "In Omaha, how many of your own cards must you use in your final hand?", "citations": ["poker 5.4"], "style": "semantic"}
+{"domain": "poker", "question": "How many private hole cards does each player get in Omaha?", "citations": ["poker 5.2"], "style": "semantic"}
+{"domain": "poker", "question": "In five-card draw, may you exchange some of your cards?", "citations": ["poker 1.5"], "style": "semantic"}
+{"domain": "poker", "question": "What is the best possible hand in Razz?", "citations": ["poker 4.1"], "style": "semantic"}
+{"domain": "poker", "question": "In Omaha, where do the shared cards come from?", "citations": ["poker 5.3"], "style": "semantic"}
+{"domain": "poker", "question": "In seven-card stud, how many of each player's cards are dealt face down?", "citations": ["poker 3.2"], "style": "label"}
+{"domain": "poker", "question": "How many betting rounds are there in seven-card stud?", "citations": ["poker 3.4"], "style": "label"}
+{"domain": "poker", "question": "How many betting rounds are there in Razz?", "citations": ["poker 4.4"], "style": "label"}
+{"domain": "poker", "question": "How many betting rounds are there in five-card stud?", "citations": ["poker 2.4"], "style": "label"}
+{"domain": "poker", "question": "How many betting rounds are there in five-card draw?", "citations": ["poker 1.4"], "style": "label"}
+{"domain": "poker", "question": "How many betting rounds are there in Omaha?", "citations": ["poker 5.5"], "style": "label"}
+{"domain": "poker", "question": "In five-card stud, who posts the forced bring-in?", "citations": ["poker 2.3"], "style": "label"}
+{"domain": "poker", "question": "In seven-card stud, who opens the betting on third street?", "citations": ["poker 3.3"], "style": "label"}
+{"domain": "poker", "question": "In Razz, how is the hand dealt?", "citations": ["poker 4.2"], "style": "label"}
+{"domain": "poker", "question": "How is the deal structured in five-card stud?", "citations": ["poker 2.2"], "style": "label"}
+{"domain": "poker", "question": "In five-card draw, how many cards may you discard?", "citations": ["poker 1.5"], "style": "label"}
+{"domain": "poker", "question": "What is the object of seven-card stud?", "citations": ["poker 3.1"], "style": "label"}
+{"domain": "poker", "question": "How does the betting open in Omaha?", "citations": ["poker 5.6"], "style": "label"}
+{"domain": "poker", "question": "Do the stud games allow drawing new cards?", "citations": ["poker 2.5", "poker 3.5", "poker 4.5"], "style": "label"}
