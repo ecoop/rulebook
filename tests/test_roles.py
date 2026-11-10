@@ -42,26 +42,28 @@ def test_ordered_roles():
     )
 
 
-def test_legacy_ids_alias_to_canonical():
-    # Old assignments (level ids + pre-level names) still resolve after the rename.
-    assert roles.canonical_role("level8") == "superuser"
-    assert roles.canonical_role("level3") == "contributor"
-    assert roles.canonical_role("evaluator") == "contributor"
-    assert roles.canonical_role("novice") == "beginner"
-    assert roles.canonical_role("superuser") == "superuser"   # already canonical
-    assert roles.canonical_role("wizard") == "wizard"         # unknown passes through
-    # validity / caps / order all honor the alias
-    assert roles.is_valid_role("level7")
-    assert roles.capabilities_for("level5") == roles.capabilities_for("reviewer")
-    assert roles.role_order("level0") == 0
-    # append-only rows carrying legacy ids replay to canonical ids
-    rows = [{"token": "t", "role": "level8"}, {"token": "u", "role": "evaluator"}]
-    assert roles.overrides_from_rows(rows) == {"t": "superuser", "u": "contributor"}
+def test_legacy_ids_are_no_longer_aliased():
+    # #199: the legacy level ids + pre-level names were migrated out of prod (the
+    # seed and roles.jsonl) and the alias table dropped. They are now just unknown
+    # roles — not mapped, invalid, and fail closed to no capabilities.
+    assert roles.canonical_role("level3") == "level3"         # identity, no mapping
+    assert roles.canonical_role("evaluator") == "evaluator"
+    assert roles.canonical_role("superuser") == "superuser"   # a real id passes through
+    assert not roles.is_valid_role("level7")
+    assert not roles.is_valid_role("novice")
+    assert roles.capabilities_for("level5") == frozenset()    # fail closed, not reviewer
+    assert roles.role_order("level0") == 0                     # unknown floors to 0
+    # append-only rows carrying legacy ids are skipped as invalid on replay
+    rows = [{"token": "t", "role": "level8"}, {"token": "u", "role": "superuser"}]
+    assert roles.overrides_from_rows(rows) == {"u": "superuser"}
 
 
-def test_resolve_canonicalizes_legacy_seed(local_backend, monkeypatch):
+def test_resolve_does_not_rescue_a_legacy_seed(local_backend, monkeypatch):
+    # A legacy seed id is no longer canonicalized: it resolves unmapped and grants
+    # nothing (fail closed). Seeds must use descriptive ids now.
     monkeypatch.setattr(roles.settings, "initial_roles", {"tok_old": "level7"})
-    assert roles.resolve_role("tok_old") == "admin"
+    assert roles.resolve_role("tok_old") == "level7"
+    assert roles.capabilities_for(roles.resolve_role("tok_old")) == frozenset()
 
 
 def test_overrides_from_rows_replay():

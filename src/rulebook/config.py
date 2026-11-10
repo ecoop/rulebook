@@ -125,10 +125,9 @@ class Settings(BaseSettings):
 
     # --- Roles / RBAC (see docs/roles.md, rulebook.roles) -----------------
     # Seed role assignments {token: role}. Roles are descriptive ids, suspended
-    # (no access) … superuser; see rulebook.roles.ROLE_LEVELS (legacy level0…8
-    # ids are still accepted via ROLE_ALIASES). Baseline resolved under the live
-    # roles.jsonl overrides; must include at least one `superuser` to bootstrap
-    # (no self-promotion endpoint). Redeploy to change.
+    # (no access) … superuser; see rulebook.roles.ROLE_LEVELS. Baseline resolved
+    # under the live roles.jsonl overrides; must include at least one `superuser`
+    # to bootstrap (no self-promotion endpoint). Redeploy to change.
     #   RULEBOOK_INITIAL_ROLES='{"tok_alice": "superuser"}'
     initial_roles: dict[str, str] = Field(
         default_factory=dict,

@@ -17,11 +17,10 @@ from two sources:
                written by the superuser API. Latest row per token wins; a
                `reset` row falls back to the seed.
 
-Role ids are descriptive — suspended, beginner, … superuser (see ROLE_LEVELS);
-legacy level0…8 ids still resolve via ROLE_ALIASES. Endpoints gate on a named
-capability via `require_capability`; a role is a bundle of capabilities
-(ROLE_CAPABILITIES). Gating is a no-op when demo_mode is off (a public deploy has
-no identities to authorize) — it fails closed to the public tier.
+Role ids are descriptive — suspended, beginner, … superuser (see ROLE_LEVELS).
+Endpoints gate on a named capability via `require_capability`; a role is a bundle
+of capabilities (ROLE_CAPABILITIES). Gating is a no-op when demo_mode is off (a
+public deploy has no identities to authorize) — it fails closed to the public tier.
 """
 
 from __future__ import annotations
@@ -166,37 +165,22 @@ ROLE_LEVELS: dict[str, dict[str, object]] = {
     "superuser":   {"order": 8, "name": "Superuser", "color": "#C4272E", "description": "Remove/rename users; RBAC config"},
 }
 
-# Legacy → canonical id aliases (#199 migration). The role ids were the numbered
-# level0…level8; they are now descriptive (suspended…superuser). Old assignments
-# still stored in roles.jsonl or the seed keep resolving through this map, so the
-# deploy needs NO data rewrite. Drop these once the stored ids are rewritten.
-ROLE_ALIASES: dict[str, str] = {
-    "level0": "suspended",
-    "level1": "beginner",
-    "level2": "annotator",
-    "level3": "contributor",
-    "level4": "builder",
-    "level5": "reviewer",
-    "level6": "director",
-    "level7": "admin",
-    "level8": "superuser",
-    # pre-level* names still lurking in old rows:
-    "novice": "beginner",
-    "evaluator": "contributor",
-}
+# The legacy → descriptive id aliases (level0…8 / novice / evaluator) were dropped
+# in #199 once the stored ids in prod — the seed and the roles.jsonl overrides —
+# were rewritten to descriptive ids. There is no alias table any more: a legacy id
+# is now just an unknown role (invalid; fails closed to no capabilities).
 
 
 # ── The capability model (role-capabilities) ─────────────────────────────────
 #
 # One CapabilityModel built from the declarations above owns the mechanism:
-# alias resolution, capability lookups, fingerprints, and role ordering. The
-# `order` is derived from ROLE_LEVELS so the model's role_order matches the
-# badge/picker order 0…8.
+# capability lookups, fingerprints, and role ordering. The `order` is derived
+# from ROLE_LEVELS so the model's role_order matches the badge/picker order 0…8.
+# Rulebook declares no aliases (#199), so canonical_role is an identity map.
 _MODEL = CapabilityModel(
     capabilities=CAPABILITIES,
     roles=ROLE_CAPABILITIES,
     default_role=DEFAULT_ROLE,
-    aliases=ROLE_ALIASES,
     order=tuple(sorted(ROLE_LEVELS, key=lambda r: int(ROLE_LEVELS[r]["order"]))),
 )
 
@@ -214,7 +198,12 @@ _overrides_cache: dict[tuple[str, str], tuple[float, dict[str, str]]] = {}
 
 
 def canonical_role(role: str) -> str:
-    """Map a legacy role id to its current canonical id; pass others through."""
+    """Resolve a role id through the model's aliases; identity when none declared.
+
+    Rulebook declares no aliases now (the legacy level0…8 / novice / evaluator ids
+    were migrated out of the seed and overrides in #199), so this is an identity
+    map today — kept as the stable seam the library offers alias-carrying consumers.
+    """
     return _MODEL.canonical_role(role)
 
 
@@ -259,10 +248,7 @@ def ordered_roles() -> tuple[str, ...]:
 
 
 def resolve_role(token: str | None) -> str:
-    """Effective role for a token: override ▸ seed ▸ default (beginner).
-
-    Legacy ids (level0…8, novice, evaluator) are canonicalized (ROLE_ALIASES).
-    """
+    """Effective role for a token: override ▸ seed ▸ default (beginner)."""
     if token is None:
         return DEFAULT_ROLE
     overrides = _effective_overrides()
