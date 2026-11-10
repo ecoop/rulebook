@@ -13,6 +13,7 @@ on:
     branches: [main]
     paths:
       - notebooks/embeddings_and_eval.ipynb
+      - notebooks/page_template/**
       - eval/gold/**
       - rules/checkers/**
       - rules/cornhole/**
@@ -65,14 +66,17 @@ jobs:
           restore-keys: hf-
 
       # No API keys are set, so this proves the notebook really is key-free.
-      # The "github-only" cell (the read-only banner) is dropped from the page.
+      # The "hide-on-results-page" cell (how-to-use box) is dropped from the page.
+      # notebooks/page_template/ adds the page's layout (column width, spacing).
       - name: Run the notebook and render it
         run: |
           uv run --no-sync jupyter nbconvert notebooks/embeddings_and_eval.ipynb \
             --execute --to html \
+            --TemplateExporter.extra_template_basedirs=notebooks \
+            --template page_template --no-prompt \
             --ExecutePreprocessor.timeout=600 \
             --TagRemovePreprocessor.enabled=True \
-            --TagRemovePreprocessor.remove_cell_tags='["github-only"]' \
+            --TagRemovePreprocessor.remove_cell_tags='["hide-on-results-page"]' \
             --output-dir _site --output embeddings_and_eval
           cat > _site/index.html <<'EOF'
           <!doctype html>

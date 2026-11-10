@@ -1,0 +1,31 @@
+{#- Copyright (c) 2026 Eric Cooper. -#}
+{#-
+  The results page's look: nbconvert's standard "lab" page plus a few layout
+  rules, so it reads like an article rather than a full-width notebook dump.
+  Used by .github/workflows/notebook-page.yml (`--template page_template`).
+-#}
+{%- extends 'lab/index.html.j2' -%}
+
+{%- block html_head_css -%}
+{{ super() }}
+<style>
+  /* One readable column, centred, with room at the edges. */
+  body {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 20px 96px;
+  }
+  /* Space between cells, and a little more before each heading. */
+  .jp-Cell + .jp-Cell { margin-top: 18px; }
+  .jp-MarkdownCell:has(h2) { margin-top: 40px; }
+  /* Body text: comfortable line height. */
+  .jp-RenderedMarkdown { font-size: 15px; line-height: 1.6; }
+  .jp-RenderedMarkdown p, .jp-RenderedMarkdown li { margin-bottom: 0.6em; }
+  /* Code: set off from the text, with breathing room around outputs. */
+  .jp-InputArea-editor { border-radius: 6px; padding: 4px 6px; }
+  .jp-OutputArea { margin-top: 8px; }
+  .jp-OutputArea-output pre { line-height: 1.45; }
+  /* Output tables line up with output text and get some air. */
+  .jp-OutputArea-output table { margin: 6px 0 4px 0; }
+</style>
+{%- endblock html_head_css -%}
