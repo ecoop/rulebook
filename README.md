@@ -12,6 +12,8 @@ It started as a hands-on way to **learn RAG** and has grown into a small gated p
 
 > New here? The in-app **"How it works"** panel walks the live pipeline. Deeper topics have their own docs — see [Documentation](#documentation).
 
+> **Learning RAG?** Start with the notebooks. [**Embeddings & evaluation**](notebooks/embeddings_and_eval.ipynb) shows its results right here on GitHub, and [Open in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb) runs it in your browser — no install, no API key. The [**end-to-end walkthrough**](notebooks/walkthrough.ipynb) follows one question through the whole pipeline (needs an Anthropic key). More under [Learning RAG](#learning-rag).
+
 ## What's in here
 
 ```
@@ -27,7 +29,7 @@ rulebook/
 │   ├── config.py              # env/config + model selection
 │   ├── ingest.py              # PDF → text with page numbers (Claude vision for image pages)
 │   ├── chunking.py            # rule-number / heading-aware chunker
-│   ├── embeddings.py          # pluggable Voyage / OpenAI embeddings
+│   ├── embeddings.py          # pluggable embeddings: local (default) / Voyage / OpenAI
 │   ├── store.py               # in-memory numpy vector store (.npy matrix + .jsonl records)
 │   ├── retrieve.py            # single-domain and cross-domain retrieval
 │   ├── generate.py            # Claude call with a citation-forcing prompt
