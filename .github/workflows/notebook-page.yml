@@ -2,13 +2,13 @@ name: Notebook page
 
 # Runs the notebooks and publishes them, with every output, as results pages:
 #   https://ecoop.github.io/rulebook/embeddings_and_eval.html  (key-free)
-#   https://ecoop.github.io/rulebook/walkthrough.html          (needs a key)
+#   https://ecoop.github.io/rulebook/rag_at_a_glance.html      (needs a key)
 # The notebooks stay committed without outputs (so Colab and Jupyter open them
 # un-run); these pages are the "read it with results" view. They're built here
 # and deployed straight to Pages, never committed.
 #
-# The walkthrough asks Claude three questions (about a cent each), so it needs
-# the ANTHROPIC_API_KEY repo secret. Without the secret, the walkthrough page is
+# RAG at a glance asks Claude three questions (about a cent each), so it needs
+# the ANTHROPIC_API_KEY repo secret. Without the secret, that page is
 # skipped and only the eval page is published.
 #
 # Runs only on pushes to main that touch something the notebooks use, plus a
@@ -18,7 +18,7 @@ on:
     branches: [main]
     paths:
       - notebooks/embeddings_and_eval.ipynb
-      - notebooks/walkthrough.ipynb
+      - notebooks/rag_at_a_glance.ipynb
       - notebooks/page_template/**
       - src/rulebook/notebook.py
       - eval/gold/**
@@ -56,7 +56,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # true/false only; the key itself is given to the walkthrough step alone.
+      # true/false only; the key itself is given to the RAG at a glance step alone.
       HAS_ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       # Same rendering for both pages: the page_template layout, no In/Out
       # prompts, and the "hide-on-results-page" cell (how-to-use box) dropped.
@@ -92,13 +92,13 @@ jobs:
       - name: Eval notebook page
         run: uv run --no-sync jupyter nbconvert notebooks/embeddings_and_eval.ipynb $RENDER --output embeddings_and_eval
 
-      - name: Walkthrough page
+      - name: RAG at a glance page
         if: env.HAS_ANTHROPIC_KEY == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           uv run --no-sync python scripts/build_index.py --domain cornhole
-          uv run --no-sync jupyter nbconvert notebooks/walkthrough.ipynb $RENDER --output walkthrough
+          uv run --no-sync jupyter nbconvert notebooks/rag_at_a_glance.ipynb $RENDER --output rag_at_a_glance
 
       - name: Landing page
         run: |
@@ -108,10 +108,10 @@ jobs:
             echo '<style>body{font:16px/1.6 system-ui,sans-serif;max-width:640px;margin:48px auto;padding:0 20px}li{margin:.8em 0}</style>'
             echo '<h1>Rulebook notebooks</h1>'
             echo '<p>Notebooks from <a href="https://github.com/ecoop/rulebook">ecoop/rulebook</a>, shown after a fresh run.</p><ul>'
-            if [ -f _site/walkthrough.html ]; then
-              echo '<li><a href="walkthrough.html"><b>RAG walkthrough: start here</b></a>. A short tour of the whole pipeline, from chunking to Claude'"'"'s cited answer.</li>'
+            if [ -f _site/rag_at_a_glance.html ]; then
+              echo '<li><a href="rag_at_a_glance.html"><b>RAG at a glance</b></a> (start here). A short tour of the whole pipeline, from chunking to Claude'"'"'s cited answer.</li>'
             fi
-            echo '<li><a href="embeddings_and_eval.html"><b>Deep dive 1: Embeddings &amp; evaluation</b></a>. What an embedding is, and how to measure retrieval.</li>'
+            echo '<li>Go further: <a href="embeddings_and_eval.html"><b>Embeddings &amp; evaluation</b></a>. What an embedding is, and how to measure retrieval.</li>'
             echo '</ul>'
           } > _site/index.html
 
