@@ -1,21 +1,61 @@
 # Copyright (c) 2026 Eric Cooper.
-"""Small helpers shared by the notebooks: building the sample index and showing tables.
+"""Notebook support: one `setup()` call and a table helper, so the teaching notebooks
+can start with two lines instead of a screen of boilerplate.
 
-These are for the notebooks only; they aren't part of the `rulebook` package.
+    from rulebook.notebook import setup, show_table
+    setup("checkers")
+
+Nothing in the app imports this module. IPython is imported only inside `show_table`,
+so importing the module works without the notebook dependencies installed.
 """
 
 from __future__ import annotations
 
 import html
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-from IPython.display import HTML, display
+from dotenv import load_dotenv
 
-from rulebook.config import settings
-from rulebook.store import list_domains
+from . import app_state
+from .config import Settings, settings
+from .store import list_domains
+
+
+def setup(*domains: str) -> Path:
+    """Get a notebook ready to run, from wherever Jupyter (or Colab) was started.
+
+    - Work from the repo root, so `rules/`, `data/` and `eval/` resolve.
+    - Load the repo's `.env` if there is one. setup() never reads API keys from
+      anywhere else; a notebook that needs one asks for it in a visible cell.
+    - Start the cost tracking that embedding and generation calls report to.
+    - Build each named sample domain's index if it isn't built yet.
+
+    Returns the repo root.
+    """
+    root = settings.repo_root
+    os.chdir(root)
+    if load_dotenv(root / ".env"):
+        _reload_settings()
+    app_state.initialize(settings)
+    print(f"ready: working in {root.name}/")
+    ensure_index(*domains)
+    return root
+
+
+def _reload_settings() -> None:
+    """Re-read settings now that `.env` is loaded.
+
+    `settings` was created when `rulebook` was first imported, possibly before the
+    working directory was the repo root, so it may have missed `.env`. Update it in
+    place, because other modules hold a reference to this same object.
+    """
+    fresh = Settings()  # type: ignore[call-arg]
+    for name in Settings.model_fields:
+        setattr(settings, name, getattr(fresh, name))
 
 
 def ensure_index(*domains: str) -> None:
@@ -41,6 +81,8 @@ def show_table(headers, rows) -> None:
     it looks like a table in JupyterLab, Colab, VS Code and on GitHub alike.
     A value written as **like this** is shown in bold.
     """
+    from IPython.display import HTML, display
+
     def is_number(v):
         try:
             float(str(v))
