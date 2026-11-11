@@ -6,15 +6,20 @@
 
 _Last updated: 2026-11-11_
 
-A RAG (retrieval-augmented generation) app that answers questions about the rules of games, across several **domains**: the disc sports **ultimate** and **goaltimate**, plus **badminton**, **curling**, **hearts**, and **backgammon**. Ask a question, get an answer with citations back to the specific rule, and see the retrieved passages that produced it.
+**Rulebook** is a RAG (retrieval-augmented generation) app that answers questions about a set of rules. Give it a rulebook (PDF, Markdown or plain text) and it starts answering questions about it: each claim cites the rule it comes from, and you see the passages it drew on. Adding a rule set is one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)); nothing in the pipeline is specific to a game or sport.
+
+The rule sets it carries now are examples, chosen to show the range: **ultimate**, **goaltimate**, **badminton**, **curling**, **hearts** and **backgammon** on the hosted demo, plus **checkers**, **cornhole** and **poker** as samples in this repo that run without downloading anything.
 
 It started as a hands-on way to **learn RAG** and has grown into a small gated product: per-user invite auth, capability-based roles (RBAC), a human-in-the-loop review loop (rate answers, author "gold" answers, curate sources, rebuild the index), and cost governance. Each pipeline stage still lives in its own small, commented module.
 
-> **Learning RAG?** Start with the notebooks. You can read each one with every result filled in, no install needed:
-> - [**RAG at a glance**](https://ecoop.github.io/rulebook/rag_at_a_glance.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer. Its last section calls Claude with your own Anthropic API key; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb) with the key stored as a Colab secret.
-> - **Go further:** [**Embeddings & evaluation**](https://ecoop.github.io/rulebook/embeddings_and_eval.html): what an embedding is, and how to measure retrieval. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb).
->
-> More *Go further* notebooks are coming: chunking, reranking, and generation & citations. More under [Learning RAG](#learning-rag).
+## Learn RAG with the notebooks
+
+The notebooks run real questions through Rulebook's own pipeline, one stage at a time. You can read each one with every result filled in, no install needed, or run it yourself in Colab:
+
+- [**RAG at a glance**](https://ecoop.github.io/rulebook/rag_at_a_glance.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer. Its last section calls Claude with your own Anthropic API key; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb) with the key stored as a Colab secret.
+- **Go further:** [**Embeddings & evaluation**](https://ecoop.github.io/rulebook/embeddings_and_eval.html): what an embedding is, and how to measure retrieval. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb).
+
+More *Go further* notebooks are coming: chunking, reranking, and generation & citations. To run them on your own machine, and for what to read after them, see [Learning RAG](#learning-rag).
 
 ## What's in here
 
