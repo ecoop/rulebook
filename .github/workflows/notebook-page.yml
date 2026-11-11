@@ -20,6 +20,7 @@ on:
       - notebooks/embeddings_and_eval.ipynb
       - notebooks/walkthrough.ipynb
       - notebooks/page_template/**
+      - notebooks/nb_helpers.py
       - eval/gold/**
       - rules/checkers/**
       - rules/cornhole/**
@@ -108,9 +109,9 @@ jobs:
             echo '<h1>Rulebook notebooks</h1>'
             echo '<p>Notebooks from <a href="https://github.com/ecoop/rulebook">ecoop/rulebook</a>, shown after a fresh run.</p><ul>'
             if [ -f _site/walkthrough.html ]; then
-              echo '<li><a href="walkthrough.html"><b>RAG walkthrough</b></a>: one question through the whole pipeline, from chunking to Claude'"'"'s cited answer.</li>'
+              echo '<li><a href="walkthrough.html"><b>RAG walkthrough: start here</b></a>. A short tour of the whole pipeline, from chunking to Claude'"'"'s cited answer.</li>'
             fi
-            echo '<li><a href="embeddings_and_eval.html"><b>Embeddings &amp; evaluation</b></a>: what an embedding is, and how to measure retrieval.</li>'
+            echo '<li><a href="embeddings_and_eval.html"><b>Deep dive 1: Embeddings &amp; evaluation</b></a>. What an embedding is, and how to measure retrieval.</li>'
             echo '</ul>'
           } > _site/index.html
 
