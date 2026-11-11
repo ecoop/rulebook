@@ -119,8 +119,11 @@ jobs:
         with:
           path: _site
 
+  # Only main publishes. A manual run on another branch (to test a PR before
+  # merging) builds the pages and stops here, instead of failing at the deploy.
   deploy:
     needs: build
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
