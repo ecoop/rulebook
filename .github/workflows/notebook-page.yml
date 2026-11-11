@@ -20,7 +20,7 @@ on:
       - notebooks/embeddings_and_eval.ipynb
       - notebooks/walkthrough.ipynb
       - notebooks/page_template/**
-      - notebooks/nb_helpers.py
+      - src/rulebook/notebook.py
       - eval/gold/**
       - rules/checkers/**
       - rules/cornhole/**

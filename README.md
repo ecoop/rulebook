@@ -13,7 +13,7 @@ It started as a hands-on way to **learn RAG** and has grown into a small gated p
 > New here? The in-app **"How it works"** panel walks the live pipeline. Deeper topics have their own docs — see [Documentation](#documentation).
 
 > **Learning RAG?** Start with the notebooks. You can read each one with every result filled in, no install needed:
-> - [**RAG walkthrough**](https://ecoop.github.io/rulebook/walkthrough.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer, with pointers to the deep dives. Running it yourself needs an Anthropic API key.
+> - [**RAG walkthrough**](https://ecoop.github.io/rulebook/walkthrough.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer, with pointers to the deep dives. Running its last section needs an Anthropic API key; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/walkthrough.ipynb) with the key stored as a Colab secret.
 > - [**Deep dive 1: Embeddings & evaluation**](https://ecoop.github.io/rulebook/embeddings_and_eval.html): what an embedding is, and how to measure retrieval. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb).
 >
 > More deep dives (chunking, reranking, generation and citations) are planned. More under [Learning RAG](#learning-rag).
