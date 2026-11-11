@@ -10,8 +10,6 @@ A RAG (retrieval-augmented generation) app that answers questions about the rule
 
 It started as a hands-on way to **learn RAG** and has grown into a small gated product: per-user invite auth, capability-based roles (RBAC), a human-in-the-loop review loop (rate answers, author "gold" answers, curate sources, rebuild the index), and cost governance. Each pipeline stage still lives in its own small, commented module.
 
-> New here? The in-app **"How it works"** panel walks the live pipeline. Deeper topics have their own docs — see [Documentation](#documentation).
-
 > **Learning RAG?** Start with the notebooks. You can read each one with every result filled in, no install needed:
 > - [**RAG at a glance**](https://ecoop.github.io/rulebook/rag_at_a_glance.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer. Its last section calls Claude with your own Anthropic API key; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb) with the key stored as a Colab secret.
 > - **Go further:** [**Embeddings & evaluation**](https://ecoop.github.io/rulebook/embeddings_and_eval.html): what an embedding is, and how to measure retrieval. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb).
@@ -59,12 +57,12 @@ rulebook/
 
 1. **Ingest** — pull text from each rule doc, keeping page numbers; image-only pages are transcribed by Claude vision.
 2. **Chunk** — split on rule numbering / headings so citations map to real rules, not mid-clause fragments.
-3. **Embed** — each chunk → a vector via Voyage AI.
+3. **Embed** — each chunk → a vector. The default is a small local model (no key needed); Voyage AI and OpenAI are options.
 4. **Store** — vectors + metadata in `data/index/<domain>/` (a `.npy` matrix + a `.jsonl` of chunk records). At query time it all loads into memory; the corpus is small enough that a brute-force numpy dot product handles retrieval without a dedicated vector database.
 5. **Retrieve** — embed the question, pull top-_k_ nearest chunks; for cross-domain questions, top-_k_ per domain.
 6. **Generate** — Claude answers using only the retrieved chunks, forced to cite each claim as `[domain rule_id]` and to refuse rules not in context.
 
-The `/ask` response returns the retrieved passages alongside the answer, so the UI shows exactly what the model was given.
+The `/ask` response returns the retrieved passages alongside the answer, so the UI shows exactly what the model was given. In the app, the **How it works** button opens a plain-language version of these steps.
 
 ## Setup (local)
 
