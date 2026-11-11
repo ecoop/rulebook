@@ -12,11 +12,11 @@ It started as a hands-on way to **learn RAG** and has grown into a small gated p
 
 > New here? The in-app **"How it works"** panel walks the live pipeline. Deeper topics have their own docs — see [Documentation](#documentation).
 
-> **Learning RAG?** Start with the two notebooks. You can read both with every result filled in, no install needed:
-> 1. [**RAG walkthrough**](https://ecoop.github.io/rulebook/walkthrough.html) follows one question through the whole pipeline, from chunking to Claude's cited answer. Running it yourself needs an Anthropic API key.
-> 2. [**Embeddings & evaluation**](https://ecoop.github.io/rulebook/embeddings_and_eval.html) zooms in on what an embedding is and how to measure retrieval. It needs no key, and you can [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb).
+> **Learning RAG?** Start with the notebooks. You can read each one with every result filled in, no install needed:
+> - [**RAG walkthrough**](https://ecoop.github.io/rulebook/walkthrough.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer, with pointers to the deep dives. Running it yourself needs an Anthropic API key.
+> - [**Deep dive 1: Embeddings & evaluation**](https://ecoop.github.io/rulebook/embeddings_and_eval.html): what an embedding is, and how to measure retrieval. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb).
 >
-> More under [Learning RAG](#learning-rag).
+> More deep dives (chunking, reranking, generation and citations) are planned. More under [Learning RAG](#learning-rag).
 
 ## What's in here
 
@@ -48,8 +48,8 @@ rulebook/
 │   └── {index,log,rules}_sync.py  # sync index / logs / rule docs with GCS (hosted)
 ├── scripts/build_index.py     # ingest every rules/<domain>/ → the vector index
 ├── eval/gold/<domain>.jsonl   # citation golds (question → cited rules) for retrieval eval
-├── notebooks/walkthrough.ipynb # step-by-step RAG walkthrough on the sample domains
-├── notebooks/embeddings_and_eval.ipynb # embeddings + hit@k/MRR eval (local vs Voyage)
+├── notebooks/walkthrough.ipynb # start here: a short tour of the RAG pipeline
+├── notebooks/embeddings_and_eval.ipynb # deep dive 1: embeddings + hit@k/MRR eval
 ├── api/main.py                # FastAPI: /ask, /meta, /me, /feedback, /gold, /advanced/*
 ├── web/                       # React 19 + TypeScript + Tailwind v4 (Vite) — Ask + "Your activity"
 └── docs/                      # deploy, RBAC, roles, sources… (see Documentation)
@@ -105,7 +105,7 @@ See [`rules/SOURCES.md`](rules/SOURCES.md) for a menu of recognizable rulesets a
 
 ### Learning RAG
 
-New to RAG? Start with [`notebooks/walkthrough.ipynb`](notebooks/walkthrough.ipynb) ([results page](https://ecoop.github.io/rulebook/walkthrough.html)) — it runs a question through every stage (ingest → chunk → embed → retrieve → generate) on the sample domains, showing the intermediate values. Then [`notebooks/embeddings_and_eval.ipynb`](notebooks/embeddings_and_eval.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings_and_eval.html)) zooms in on what an embedding is and how to *measure* retrieval (hit@k/MRR, local-vs-Voyage). Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
+New to RAG? Start with [`notebooks/walkthrough.ipynb`](notebooks/walkthrough.ipynb) ([results page](https://ecoop.github.io/rulebook/walkthrough.html)), a short tour that runs a question through every stage (chunk → embed and retrieve → generate) on the sample domains. Each stage points to a deep dive; the first is [`notebooks/embeddings_and_eval.ipynb`](notebooks/embeddings_and_eval.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings_and_eval.html)), on what an embedding is and how to *measure* retrieval (hit@k/MRR, local-vs-Voyage). Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
 
 **No install? Run it in your browser.**
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb)

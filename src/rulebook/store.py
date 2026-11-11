@@ -35,8 +35,9 @@ SEARCH
     metadata list BEFORE the matmul, so a filtered search doesn't waste
     work on other domains.
 
-    We report `_distance` on returned rows as L2 distance on unit
-    vectors (which equals 2 - 2·cos_sim). The field name matches the
+    We report `_distance` on returned rows as the squared L2 distance
+    between unit vectors, which equals 2 - 2·cos_sim: 0 = identical,
+    2 = unrelated (orthogonal), 4 = opposite. The field name matches the
     convention used by LanceDB and friends, so downstream code doesn't
     care what backend it's talking to.
 """
@@ -132,7 +133,7 @@ class Store:
         out = []
         for row_ix, sim in zip(picked.tolist(), sims_picked.tolist(), strict=True):
             row = dict(self.metadata[row_ix])
-            # L2 on unit vectors. Lower = more similar, same convention
+            # Squared L2 on unit vectors. Lower = more similar, same convention
             # as LanceDB so retrieve.py's naming stays stable if we swap.
             row["_distance"] = float(2.0 - 2.0 * sim)
             out.append(row)

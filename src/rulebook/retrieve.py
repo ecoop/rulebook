@@ -58,7 +58,7 @@ class RetrievedChunk:
     rule_id: str
     page_start: int
     page_end: int
-    distance: float   # L2 distance on unit vectors; smaller = more similar
+    distance: float   # squared L2 on unit vectors (2 - 2·cos); smaller = more similar
 
 
 def _row_to_chunk(row: dict) -> RetrievedChunk:
