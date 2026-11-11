@@ -29,8 +29,8 @@ def setup(*domains: str) -> Path:
     """Get a notebook ready to run, from wherever Jupyter (or Colab) was started.
 
     - Work from the repo root, so `rules/`, `data/` and `eval/` resolve.
-    - Load the repo's `.env` if there is one (e.g. for an `ANTHROPIC_API_KEY`). On Colab,
-      read `ANTHROPIC_API_KEY` from Colab's Secrets panel instead, if it's stored there.
+    - Load the repo's `.env` if there is one. setup() never reads API keys from
+      anywhere else; a notebook that needs one asks for it in a visible cell.
     - Start the cost tracking that embedding and generation calls report to.
     - Build each named sample domain's index if it isn't built yet.
 
@@ -38,31 +38,12 @@ def setup(*domains: str) -> Path:
     """
     root = settings.repo_root
     os.chdir(root)
-    found_env = load_dotenv(root / ".env")
-    found_secret = _key_from_colab_secrets()
-    if found_env or found_secret:
+    if load_dotenv(root / ".env"):
         _reload_settings()
     app_state.initialize(settings)
     print(f"ready: working in {root.name}/")
     ensure_index(*domains)
     return root
-
-
-def _key_from_colab_secrets() -> bool:
-    """On Colab, copy ANTHROPIC_API_KEY from the Secrets panel (the key icon) into the
-    environment. Returns True if it did. Not on Colab, or no such secret: does nothing."""
-    if "google.colab" not in sys.modules or os.getenv("ANTHROPIC_API_KEY"):
-        return False
-    try:
-        from google.colab import userdata  # type: ignore[import-not-found]
-
-        key = userdata.get("ANTHROPIC_API_KEY")
-    except Exception:  # not stored, or this notebook wasn't given access to it
-        return False
-    if not key:
-        return False
-    os.environ["ANTHROPIC_API_KEY"] = key
-    return True
 
 
 def _reload_settings() -> None:
