@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.14-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-_Last updated: 2026-11-10_
+_Last updated: 2026-11-11_
 
 A RAG (retrieval-augmented generation) app that answers questions about the rules of games, across several **domains**: the disc sports **ultimate** and **goaltimate**, plus **badminton**, **curling**, **hearts**, and **backgammon**. Ask a question, get an answer with citations back to the specific rule, and see the retrieved passages that produced it.
 
@@ -12,7 +12,11 @@ It started as a hands-on way to **learn RAG** and has grown into a small gated p
 
 > New here? The in-app **"How it works"** panel walks the live pipeline. Deeper topics have their own docs — see [Documentation](#documentation).
 
-> **Learning RAG?** Start with the notebooks. [**Embeddings & evaluation**](https://ecoop.github.io/rulebook/embeddings_and_eval.html) — read it with every result filled in, or [open it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb) to run it in your browser: no install, no API key. The [**end-to-end walkthrough**](notebooks/walkthrough.ipynb) follows one question through the whole pipeline (needs an Anthropic key). More under [Learning RAG](#learning-rag).
+> **Learning RAG?** Start with the two notebooks. You can read both with every result filled in, no install needed:
+> 1. [**RAG walkthrough**](https://ecoop.github.io/rulebook/walkthrough.html) follows one question through the whole pipeline, from chunking to Claude's cited answer. Running it yourself needs an Anthropic API key.
+> 2. [**Embeddings & evaluation**](https://ecoop.github.io/rulebook/embeddings_and_eval.html) zooms in on what an embedding is and how to measure retrieval. It needs no key, and you can [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb).
+>
+> More under [Learning RAG](#learning-rag).
 
 ## What's in here
 
@@ -101,11 +105,11 @@ See [`rules/SOURCES.md`](rules/SOURCES.md) for a menu of recognizable rulesets a
 
 ### Learning RAG
 
-New to RAG? Start with [`notebooks/walkthrough.ipynb`](notebooks/walkthrough.ipynb) — it runs a question through every stage (ingest → chunk → embed → retrieve → generate) on the sample domains, showing the intermediate values. Then [`notebooks/embeddings_and_eval.ipynb`](notebooks/embeddings_and_eval.ipynb) zooms in on what an embedding is and how to *measure* retrieval (hit@k/MRR, local-vs-Voyage). Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
+New to RAG? Start with [`notebooks/walkthrough.ipynb`](notebooks/walkthrough.ipynb) ([results page](https://ecoop.github.io/rulebook/walkthrough.html)) — it runs a question through every stage (ingest → chunk → embed → retrieve → generate) on the sample domains, showing the intermediate values. Then [`notebooks/embeddings_and_eval.ipynb`](notebooks/embeddings_and_eval.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings_and_eval.html)) zooms in on what an embedding is and how to *measure* retrieval (hit@k/MRR, local-vs-Voyage). Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
 
 **No install? Run it in your browser.**
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb)
-opens the embeddings/eval notebook on Google's free machines (key-free; its first cell installs the repo). To read it with results instead, see its [results page](https://ecoop.github.io/rulebook/embeddings_and_eval.html), which CI rebuilds from the notebook whenever the code it uses changes ([`notebook-page.yml`](.github/workflows/notebook-page.yml)).
+opens the embeddings/eval notebook on Google's free machines (key-free; its first cell installs the repo). Both notebooks also have a results page, linked above, showing them after a fresh run; CI rebuilds them whenever the code they use changes ([`notebook-page.yml`](.github/workflows/notebook-page.yml)).
 
 > The notebooks are committed with outputs stripped ([`.gitattributes`](.gitattributes) + nbstripout) — they're meant to be run. After cloning, run `uv run nbstripout --install` once so your commits stay clean too.
 

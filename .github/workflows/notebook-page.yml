@@ -1,18 +1,25 @@
 name: Notebook page
 
-# Runs notebooks/embeddings_and_eval.ipynb key-free and publishes the result, with
-# every output, as https://ecoop.github.io/rulebook/embeddings_and_eval.html.
-# The notebook stays committed without outputs (so Colab and Jupyter open it
-# un-run); this page is the "read it with results" view. It's built here and
-# deployed straight to Pages, never committed.
+# Runs the notebooks and publishes them, with every output, as results pages:
+#   https://ecoop.github.io/rulebook/embeddings_and_eval.html  (key-free)
+#   https://ecoop.github.io/rulebook/walkthrough.html          (needs a key)
+# The notebooks stay committed without outputs (so Colab and Jupyter open them
+# un-run); these pages are the "read it with results" view. They're built here
+# and deployed straight to Pages, never committed.
 #
-# Runs only on pushes to main that touch something the notebook uses, plus a
-# manual "Run workflow" button. A failed run leaves the last good page up.
+# The walkthrough asks Claude three questions (about a cent each), so it needs
+# the ANTHROPIC_API_KEY repo secret. Without the secret, the walkthrough page is
+# skipped and only the eval page is published.
+#
+# Runs only on pushes to main that touch something the notebooks use, plus a
+# manual "Run workflow" button. A failed run leaves the last good pages up.
 on:
   push:
     branches: [main]
     paths:
       - notebooks/embeddings_and_eval.ipynb
+      - notebooks/walkthrough.ipynb
+      - notebooks/page_template/**
       - eval/gold/**
       - rules/checkers/**
       - rules/cornhole/**
@@ -23,7 +30,10 @@ on:
       - src/rulebook/config.py
       - src/rulebook/embeddings.py
       - src/rulebook/eval.py
+      - src/rulebook/generate.py
       - src/rulebook/ingest.py
+      - src/rulebook/pipeline.py
+      - src/rulebook/registry.py
       - src/rulebook/retrieve.py
       - src/rulebook/store.py
       - pyproject.toml
@@ -44,6 +54,19 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # true/false only; the key itself is given to the walkthrough step alone.
+      HAS_ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      # Same rendering for both pages: the page_template layout, no In/Out
+      # prompts, and the "hide-on-results-page" cell (how-to-use box) dropped.
+      RENDER: >-
+        --execute --to html
+        --TemplateExporter.extra_template_basedirs=notebooks
+        --template page_template --no-prompt
+        --ExecutePreprocessor.timeout=600
+        --TagRemovePreprocessor.enabled=True
+        --TagRemovePreprocessor.remove_cell_tags=hide-on-results-page
+        --output-dir _site
     steps:
       - uses: actions/checkout@v4
 
@@ -61,26 +84,35 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
-          key: hf-${{ hashFiles('notebooks/embeddings_and_eval.ipynb', 'src/rulebook/config.py') }}
+          key: hf-${{ hashFiles('notebooks/*.ipynb', 'src/rulebook/config.py') }}
           restore-keys: hf-
 
-      # No API keys are set, so this proves the notebook really is key-free.
-      # The "github-only" cell (the read-only banner) is dropped from the page.
-      - name: Run the notebook and render it
+      # No API key is set here, so this proves the eval notebook is key-free.
+      - name: Eval notebook page
+        run: uv run --no-sync jupyter nbconvert notebooks/embeddings_and_eval.ipynb $RENDER --output embeddings_and_eval
+
+      - name: Walkthrough page
+        if: env.HAS_ANTHROPIC_KEY == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          uv run --no-sync jupyter nbconvert notebooks/embeddings_and_eval.ipynb \
-            --execute --to html \
-            --ExecutePreprocessor.timeout=600 \
-            --TagRemovePreprocessor.enabled=True \
-            --TagRemovePreprocessor.remove_cell_tags='["github-only"]' \
-            --output-dir _site --output embeddings_and_eval
-          cat > _site/index.html <<'EOF'
-          <!doctype html>
-          <meta charset="utf-8">
-          <title>Rulebook notebooks</title>
-          <meta http-equiv="refresh" content="0; url=embeddings_and_eval.html">
-          <a href="embeddings_and_eval.html">Embeddings &amp; evaluation</a>
-          EOF
+          uv run --no-sync python scripts/build_index.py --domain cornhole
+          uv run --no-sync jupyter nbconvert notebooks/walkthrough.ipynb $RENDER --output walkthrough
+
+      - name: Landing page
+        run: |
+          {
+            echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            echo '<title>Rulebook notebooks</title>'
+            echo '<style>body{font:16px/1.6 system-ui,sans-serif;max-width:640px;margin:48px auto;padding:0 20px}li{margin:.8em 0}</style>'
+            echo '<h1>Rulebook notebooks</h1>'
+            echo '<p>Notebooks from <a href="https://github.com/ecoop/rulebook">ecoop/rulebook</a>, shown after a fresh run.</p><ul>'
+            if [ -f _site/walkthrough.html ]; then
+              echo '<li><a href="walkthrough.html"><b>RAG walkthrough</b></a>: one question through the whole pipeline, from chunking to Claude'"'"'s cited answer.</li>'
+            fi
+            echo '<li><a href="embeddings_and_eval.html"><b>Embeddings &amp; evaluation</b></a>: what an embedding is, and how to measure retrieval.</li>'
+            echo '</ul>'
+          } > _site/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -91,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}embeddings_and_eval.html
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
