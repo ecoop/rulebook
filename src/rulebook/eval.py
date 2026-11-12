@@ -59,7 +59,8 @@ from .chunking import chunk_pages
 from .config import settings
 from .embeddings import LocalEmbedder
 from .ingest import extract_pages
-from .retrieve import retrieve
+from .rerank import Reranker, make_reranker, reorder
+from .retrieve import _normalize_ws, retrieve
 from .store import Store, write_store
 
 
@@ -232,15 +233,27 @@ def build_scratch_index(domain: str, model: str) -> ScratchIndex:
 
 
 def _retrieved_ids(
-    question: str, domain: str, k: int, index: ScratchIndex | None
+    question: str,
+    domain: str,
+    k: int,
+    index: ScratchIndex | None,
+    reranker: Reranker | None = None,
+    candidates: int = 20,
 ) -> list[str]:
-    """Top-k rule_ids from the built index — or from ``index`` when one is given."""
+    """Top-k rule_ids from the built index — or from ``index`` when one is given.
+
+    With a ``reranker``, the top ``candidates`` are reranked and the first k kept.
+    """
     if index is None:
-        return [c.rule_id for c in retrieve(question, domain=domain, k=k)]
+        chunks = retrieve(question, domain=domain, k=k, reranker=reranker, candidates=candidates)
+        return [c.rule_id for c in chunks]
     if domain != index.domain:
         raise ValueError(f"scratch index is for {index.domain!r}, not {domain!r}")
     [q_vec] = index.embedder.embed([question], input_type="query")
-    return [row["rule_id"] for row in index.store.search(q_vec, k=k)]
+    rows = index.store.search(q_vec, k=max(k, candidates) if reranker else k)
+    if reranker is not None:
+        rows = reorder(question, rows, [_normalize_ws(r["text"]) for r in rows], reranker)
+    return [row["rule_id"] for row in rows[:k]]
 
 
 def rank_of(
@@ -250,6 +263,8 @@ def rank_of(
     domain: str | None = None,
     k: int = 5,
     index: ScratchIndex | None = None,
+    reranker: Reranker | None = None,
+    candidates: int = 20,
 ) -> int | None:
     """1-indexed rank of the first cited rule in the top-k; None if absent.
 
@@ -263,12 +278,17 @@ def rank_of(
     if domain is None:
         raise ValueError("rank_of needs a domain (or a scratch index)")
     rule_ids = tuple(citation_rule_id(c, domain) for c in citations)
-    rr = reciprocal_rank(_retrieved_ids(question, domain, k, index), rule_ids)
+    rr = reciprocal_rank(_retrieved_ids(question, domain, k, index, reranker, candidates), rule_ids)
     return round(1 / rr) if rr else None
 
 
 def evaluate(
-    items: list[GoldItem], *, k: int = 5, index: ScratchIndex | None = None
+    items: list[GoldItem],
+    *,
+    k: int = 5,
+    index: ScratchIndex | None = None,
+    reranker: Reranker | None = None,
+    candidates: int = 20,
 ) -> EvalResult:
     """Retrieve top-k for each gold question and score hit@k + reciprocal rank.
 
@@ -276,12 +296,14 @@ def evaluate(
     that index built with the active embedder (a mismatched provider compares
     different geometries and the numbers are meaningless). Pass ``index`` to
     search a :class:`ScratchIndex` instead — handy for comparing local models
-    without rebuilding anything. Retrieval errors propagate; the CLI checks
+    without rebuilding anything. Pass ``reranker`` to rerank the top ``candidates``
+    first (see rerank.py); the default, None, scores retrieval alone, whatever
+    RERANK_PROVIDER says. Retrieval errors propagate; the CLI checks
     which domains are built before calling this.
     """
     result = EvalResult(k=k)
     for item in items:
-        rids = _retrieved_ids(item.question, item.domain, k, index)
+        rids = _retrieved_ids(item.question, item.domain, k, index, reranker, candidates)
         result.items.append(
             ItemResult(
                 item=item,
@@ -293,7 +315,7 @@ def evaluate(
     return result
 
 
-# --- CLI: `python -m rulebook.eval [--domain X] [-k N]` ----------------------
+# --- CLI: `python -m rulebook.eval [--domain X] [-k N] [--rerank P]` ----------
 
 
 def _first_hit(ids: list[str], gold: tuple[str, ...]) -> str:
@@ -342,7 +364,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--domain", help="evaluate only this domain (default: all with gold + a built index)")
     parser.add_argument("-k", type=int, default=5, help="top-k to retrieve (default: 5)")
+    parser.add_argument(
+        "--rerank",
+        choices=["none", "bm25", "hybrid", "local"],
+        default="none",
+        help="rerank the top --candidates before scoring (default: none; see rerank.py)",
+    )
+    parser.add_argument(
+        "--candidates", type=int, default=20, help="candidates to rerank (default: 20)"
+    )
     args = parser.parse_args(argv)
+    reranker = make_reranker(args.rerank)
 
     from . import app_state
     from .store import list_domains
@@ -366,7 +398,14 @@ def main(argv: list[str] | None = None) -> int:
                 f"`python -m rulebook.add {domain} ...` or scripts/build_index.py)"
             )
             continue
-        res = evaluate([it for it in items if it.domain == domain], k=args.k)
+        res = evaluate(
+            [it for it in items if it.domain == domain],
+            k=args.k,
+            reranker=reranker,
+            candidates=args.candidates,
+        )
+        if reranker is not None:
+            print(f"\n(reranked: {reranker.name}, top {args.candidates} candidates)")
         _print_domain(domain, res)
         overall.items.extend(res.items)
         evaluated += 1

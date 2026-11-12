@@ -16,7 +16,9 @@ Two flavors:
 We keep this layer deliberately thin. The "clever" happens either in
 chunking (before) or in the prompt (after). Retrieval itself is dumb —
 which makes it easy to reason about and easy to swap for something
-smarter (reranking, hybrid BM25) later.
+smarter. Reranking (src/rulebook/rerank.py) is that: when RERANK_PROVIDER
+is set, retrieve() takes a wider candidate set and lets the reranker pick
+the top k.
 
 PERFORMANCE NOTE
 
@@ -31,6 +33,7 @@ from dataclasses import dataclass
 
 from .config import settings
 from .embeddings import get_embedder
+from .rerank import Reranker, get_reranker, reorder
 from .store import list_domains, open_domain_store
 
 _WHITESPACE_RUN = re.compile(r"\s+")
@@ -73,13 +76,37 @@ def _row_to_chunk(row: dict) -> RetrievedChunk:
     )
 
 
-def retrieve(question: str, *, domain: str, k: int = 5) -> list[RetrievedChunk]:
+# Default for retrieve()'s ``reranker``: use whatever RERANK_PROVIDER selects.
+FROM_SETTINGS = object()
+
+
+def retrieve(
+    question: str,
+    *,
+    domain: str,
+    k: int = 5,
+    reranker: Reranker | None | object = FROM_SETTINGS,
+    candidates: int | None = None,
+) -> list[RetrievedChunk]:
+    """Top-k passages for ``question`` from ``domain``'s index.
+
+    With a reranker (RERANK_PROVIDER, or passed in; ``None`` turns it off), the
+    store returns ``candidates`` passages (default RERANK_CANDIDATES) and the
+    reranker picks the top k from those. ``distance`` stays the embedding
+    distance either way.
+    """
+    if reranker is FROM_SETTINGS:
+        reranker = get_reranker()
     # Per-domain index (#128): each domain has its own store, so there's no
     # masking — the store IS the domain.
     embedder = get_embedder()
     [q_vec] = embedder.embed([question], input_type="query")
     store = open_domain_store(settings.resolved_index_path, domain)
-    return [_row_to_chunk(r) for r in store.search(q_vec, k=k)]
+    if reranker is None:
+        return [_row_to_chunk(r) for r in store.search(q_vec, k=k)]
+    n = max(k, candidates or settings.rerank_candidates)
+    pool = [_row_to_chunk(r) for r in store.search(q_vec, k=n)]
+    return reorder(question, pool, [c.text for c in pool], reranker)[:k]
 
 
 # Cap on total passages returned across a cross-domain query, so N selected
