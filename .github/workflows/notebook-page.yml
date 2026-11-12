@@ -1,15 +1,16 @@
 name: Notebook page
 
 # Runs the notebooks and publishes them, with every output, as results pages:
-#   https://ecoop.github.io/rulebook/embeddings_and_eval.html  (key-free)
-#   https://ecoop.github.io/rulebook/rag_at_a_glance.html      (needs a key)
+#   https://ecoop.github.io/rulebook/rag_at_a_glance.html  (needs a key)
+#   https://ecoop.github.io/rulebook/embeddings.html       (key-free)
+#   https://ecoop.github.io/rulebook/evaluation.html       (key-free)
 # The notebooks stay committed without outputs (so Colab and Jupyter open them
 # un-run); these pages are the "read it with results" view. They're built here
 # and deployed straight to Pages, never committed.
 #
 # RAG at a glance asks Claude three questions (about a cent each), so it needs
 # the ANTHROPIC_API_KEY repo secret. Without the secret, that page is
-# skipped and only the eval page is published.
+# skipped and only the key-free pages are published.
 #
 # Runs only on pushes to main that touch something the notebooks use, plus a
 # manual "Run workflow" button. A failed run leaves the last good pages up.
@@ -17,8 +18,9 @@ on:
   push:
     branches: [main]
     paths:
-      - notebooks/embeddings_and_eval.ipynb
       - notebooks/rag_at_a_glance.ipynb
+      - notebooks/embeddings.ipynb
+      - notebooks/evaluation.ipynb
       - notebooks/page_template/**
       - src/rulebook/notebook.py
       - eval/gold/**
@@ -88,9 +90,12 @@ jobs:
           key: hf-${{ hashFiles('notebooks/*.ipynb', 'src/rulebook/config.py') }}
           restore-keys: hf-
 
-      # No API key is set here, so this proves the eval notebook is key-free.
-      - name: Eval notebook page
-        run: uv run --no-sync jupyter nbconvert notebooks/embeddings_and_eval.ipynb $RENDER --output embeddings_and_eval
+      # No API key is set in these two steps, so they prove both notebooks are key-free.
+      - name: Embeddings page
+        run: uv run --no-sync jupyter nbconvert notebooks/embeddings.ipynb $RENDER --output embeddings
+
+      - name: Evaluation page
+        run: uv run --no-sync jupyter nbconvert notebooks/evaluation.ipynb $RENDER --output evaluation
 
       - name: RAG at a glance page
         if: env.HAS_ANTHROPIC_KEY == 'true'
@@ -111,7 +116,8 @@ jobs:
             if [ -f _site/rag_at_a_glance.html ]; then
               echo '<li><a href="rag_at_a_glance.html"><b>RAG at a glance</b></a> (start here). A short tour of the whole pipeline, from chunking to Claude'"'"'s cited answer.</li>'
             fi
-            echo '<li>Go further: <a href="embeddings_and_eval.html"><b>Embeddings &amp; evaluation</b></a>. What an embedding is, and how to measure retrieval.</li>'
+            echo '<li>Go further: <a href="embeddings.html"><b>Embeddings</b></a>. What an embedding is, how retrieval uses it, and what changes when you swap the model.</li>'
+            echo '<li>Go further: <a href="evaluation.html"><b>Evaluation</b></a>. How to measure retrieval: write the right answers down once, then score any setup against them, on checkers and on poker.</li>'
             echo '</ul>'
           } > _site/index.html
 

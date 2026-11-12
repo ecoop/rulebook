@@ -6,17 +6,21 @@
 
 _Last updated: 2026-11-11_
 
-A RAG (retrieval-augmented generation) app that answers questions about the rules of games, across several **domains**: the disc sports **ultimate** and **goaltimate**, plus **badminton**, **curling**, **hearts**, and **backgammon**. Ask a question, get an answer with citations back to the specific rule, and see the retrieved passages that produced it.
+**Rulebook** is a RAG (retrieval-augmented generation) app that answers questions about a set of rules. Give it a rulebook (PDF, Markdown or plain text) and it starts answering questions about it: each claim cites the rule it comes from, and you see the passages it drew on. Adding a rule set is one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)); nothing in the pipeline is specific to a game or sport.
+
+This repo comes with three sample rule sets, ready as soon as you clone, with nothing to download: **checkers**, **cornhole** and **poker**. The notebooks use all three; poker's five variants use nearly the same wording, which makes it a harder test for retrieval. From there, add the rulebooks you want to ask about. (The invite-only hosted demo carries ultimate, goaltimate, badminton, curling, hearts and backgammon.)
 
 It started as a hands-on way to **learn RAG** and has grown into a small gated product: per-user invite auth, capability-based roles (RBAC), a human-in-the-loop review loop (rate answers, author "gold" answers, curate sources, rebuild the index), and cost governance. Each pipeline stage still lives in its own small, commented module.
 
-> New here? The in-app **"How it works"** panel walks the live pipeline. Deeper topics have their own docs — see [Documentation](#documentation).
+## Learn RAG with the notebooks
 
-> **Learning RAG?** Start with the notebooks. You can read each one with every result filled in, no install needed:
-> - [**RAG at a glance**](https://ecoop.github.io/rulebook/rag_at_a_glance.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer. Its last section calls Claude with your own Anthropic API key; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb) with the key stored as a Colab secret.
-> - **Go further:** [**Embeddings & evaluation**](https://ecoop.github.io/rulebook/embeddings_and_eval.html): what an embedding is, and how to measure retrieval. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb).
->
-> More *Go further* notebooks are coming: chunking, reranking, and generation & citations. More under [Learning RAG](#learning-rag).
+The notebooks run real questions through Rulebook's own pipeline, one stage at a time. You can read each one with every result filled in, no install needed, or run it yourself in Colab:
+
+- [**RAG at a glance**](https://ecoop.github.io/rulebook/rag_at_a_glance.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer. Its last section calls Claude with your own Anthropic API key; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb) with the key stored as a Colab secret.
+- **Go further:** [**Embeddings**](https://ecoop.github.io/rulebook/embeddings.html): what an embedding is, how retrieval uses it, and what changes when you swap the model. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb).
+- **Go further:** [**Evaluation**](https://ecoop.github.io/rulebook/evaluation.html): how to measure retrieval. Write the right answers down once, then score any setup against them, on checkers and then on poker. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/evaluation.ipynb).
+
+More *Go further* notebooks are coming: chunking, reranking, and generation & citations. To run them on your own machine, and for what to read after them, see [Learning RAG](#learning-rag).
 
 ## What's in here
 
@@ -49,7 +53,8 @@ rulebook/
 ├── scripts/build_index.py     # ingest every rules/<domain>/ → the vector index
 ├── eval/gold/<domain>.jsonl   # citation golds (question → cited rules) for retrieval eval
 ├── notebooks/rag_at_a_glance.ipynb # start here: a short tour of the RAG pipeline
-├── notebooks/embeddings_and_eval.ipynb # go further: embeddings + hit@k/MRR eval
+├── notebooks/embeddings.ipynb # go further: what an embedding is, swapping the embedder
+├── notebooks/evaluation.ipynb # go further: golds + hit@k/MRR, checkers then poker
 ├── api/main.py                # FastAPI: /ask, /meta, /me, /feedback, /gold, /advanced/*
 ├── web/                       # React 19 + TypeScript + Tailwind v4 (Vite) — Ask + "Your activity"
 └── docs/                      # deploy, RBAC, roles, sources… (see Documentation)
@@ -59,12 +64,12 @@ rulebook/
 
 1. **Ingest** — pull text from each rule doc, keeping page numbers; image-only pages are transcribed by Claude vision.
 2. **Chunk** — split on rule numbering / headings so citations map to real rules, not mid-clause fragments.
-3. **Embed** — each chunk → a vector via Voyage AI.
+3. **Embed** — each chunk → a vector. The default is a small local model (no key needed); Voyage AI and OpenAI are options.
 4. **Store** — vectors + metadata in `data/index/<domain>/` (a `.npy` matrix + a `.jsonl` of chunk records). At query time it all loads into memory; the corpus is small enough that a brute-force numpy dot product handles retrieval without a dedicated vector database.
 5. **Retrieve** — embed the question, pull top-_k_ nearest chunks; for cross-domain questions, top-_k_ per domain.
 6. **Generate** — Claude answers using only the retrieved chunks, forced to cite each claim as `[domain rule_id]` and to refuse rules not in context.
 
-The `/ask` response returns the retrieved passages alongside the answer, so the UI shows exactly what the model was given.
+The `/ask` response returns the retrieved passages alongside the answer, so the UI shows exactly what the model was given. In the app, the **How it works** button opens a plain-language version of these steps.
 
 ## Setup (local)
 
@@ -105,11 +110,11 @@ See [`rules/SOURCES.md`](rules/SOURCES.md) for a menu of recognizable rulesets a
 
 ### Learning RAG
 
-New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_glance.ipynb) ([results page](https://ecoop.github.io/rulebook/rag_at_a_glance.html)), a short tour that runs a question through every stage (chunk → embed and retrieve → generate) on the sample domains. Each stage points to a *Go further* notebook; the first is [`notebooks/embeddings_and_eval.ipynb`](notebooks/embeddings_and_eval.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings_and_eval.html)), on what an embedding is and how to *measure* retrieval (hit@k/MRR, local-vs-Voyage). Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
+New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_glance.ipynb) ([results page](https://ecoop.github.io/rulebook/rag_at_a_glance.html)), a short tour that runs a question through every stage (chunk → embed and retrieve → generate) on the sample domains. Each stage points to a *Go further* notebook. The first two are [`notebooks/embeddings.ipynb`](notebooks/embeddings.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings.html)), on what an embedding is, and [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb) ([results page](https://ecoop.github.io/rulebook/evaluation.html)), on how to *measure* retrieval (hit@k/MRR, checkers then poker, local vs Voyage). Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
 
 **No install? Run it in your browser.**
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_and_eval.ipynb)
-opens the embeddings/eval notebook on Google's free machines (key-free; its first cell installs the repo). Both notebooks also have a results page, linked above, showing them after a fresh run; CI rebuilds them whenever the code they use changes ([`notebook-page.yml`](.github/workflows/notebook-page.yml)).
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb)
+opens the Embeddings notebook on Google's free machines (key-free; its first cell installs the repo). Every notebook has an Open in Colab badge at its top, and a results page, linked above, showing them after a fresh run; CI rebuilds them whenever the code they use changes ([`notebook-page.yml`](.github/workflows/notebook-page.yml)).
 
 > The notebooks are committed with outputs stripped ([`.gitattributes`](.gitattributes) + nbstripout) — they're meant to be run. After cloning, run `uv run nbstripout --install` once so your commits stay clean too.
 
@@ -139,7 +144,7 @@ done
 
 A useful surprise from running this: a *bigger, retrieval-tuned* model (`potion-retrieval-32M`) does **not** reliably beat a plain base model (`potion-base-8M`) here — only the tiniest (`potion-base-2M`) clearly lags. "Fancier embedder = better" is a hypothesis to **measure**, not assume; that's the whole point of the harness.
 
-For a visual, cell-by-cell version of all this — what an embedding is, retrieval, hit@k/MRR, and the local-vs-Voyage comparison — see [`notebooks/embeddings_and_eval.ipynb`](notebooks/embeddings_and_eval.ipynb).
+For a cell-by-cell version of all this (golds, hit@k/MRR, the poker misses, and the local-vs-Voyage comparison), see [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb); for what an embedding is, [`notebooks/embeddings.ipynb`](notebooks/embeddings.ipynb).
 
 ## Adding a domain
 
