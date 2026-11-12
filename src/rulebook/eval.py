@@ -171,13 +171,15 @@ class EvalResult:
     def mrr(self) -> float:
         return _mean([r.rr for r in self.items])
 
-    def hit_rate_at(self, k: int) -> float:
-        """hit@k for any k up to the k these results were retrieved at."""
+    def hits_at(self, k: int) -> int:
+        """How many questions have a cited rule in the top k: hit@k as a count."""
         if k > self.k:
             raise ValueError(f"retrieved only the top {self.k}; can't score hit@{k}")
-        return _mean(
-            [1.0 if hit_at_k(r.retrieved_ids, r.item.rule_ids, k) else 0.0 for r in self.items]
-        )
+        return sum(hit_at_k(r.retrieved_ids, r.item.rule_ids, k) for r in self.items)
+
+    def hit_rate_at(self, k: int) -> float:
+        """hit@k for any k up to the k these results were retrieved at."""
+        return self.hits_at(k) / self.n if self.n else 0.0
 
     def by_style(self) -> dict[str, tuple[int, float, float]]:
         """{style: (n, hit_rate, mrr)} for each style present — slices easy vs hard."""
