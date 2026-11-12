@@ -8,7 +8,7 @@ _Last updated: 2026-11-11_
 
 **Rulebook** is a RAG (retrieval-augmented generation) app that answers questions about a set of rules. Give it a rulebook (PDF, Markdown or plain text) and it starts answering questions about it: each claim cites the rule it comes from, and you see the passages it drew on. Adding a rule set is one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)); nothing in the pipeline is specific to a game or sport.
 
-This repo comes with three sample rule sets, which the notebooks use and which work as soon as you clone, with nothing to download: **checkers**, **cornhole**, and **poker**, whose five variants use nearly the same wording, a harder test for retrieval. From there, add the rulebooks you want to ask about. (The invite-only hosted demo carries ultimate, goaltimate, badminton, curling, hearts and backgammon.)
+This repo comes with three sample rule sets, ready as soon as you clone, with nothing to download: **checkers**, **cornhole** and **poker**. The notebooks use all three; poker's five variants use nearly the same wording, which makes it a harder test for retrieval. From there, add the rulebooks you want to ask about. (The invite-only hosted demo carries ultimate, goaltimate, badminton, curling, hearts and backgammon.)
 
 It started as a hands-on way to **learn RAG** and has grown into a small gated product: per-user invite auth, capability-based roles (RBAC), a human-in-the-loop review loop (rate answers, author "gold" answers, curate sources, rebuild the index), and cost governance. Each pipeline stage still lives in its own small, commented module.
 
