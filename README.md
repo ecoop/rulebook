@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.14-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-_Last updated: 2026-11-11_
+_Last updated: 2026-11-12_
 
 **Rulebook** is a RAG (retrieval-augmented generation) app that answers questions about a set of rules. Give it a rulebook (PDF, Markdown or plain text) and it starts answering questions about it: each claim cites the rule it comes from, and you see the passages it drew on. Adding a rule set is one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)); nothing in the pipeline is specific to a game or sport.
 
@@ -19,8 +19,9 @@ The notebooks run real questions through Rulebook's own pipeline, one stage at a
 - [**RAG at a glance**](https://ecoop.github.io/rulebook/rag_at_a_glance.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer. Its last section calls Claude with your own Anthropic API key; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb) with the key stored as a Colab secret.
 - **Go further:** [**Embeddings**](https://ecoop.github.io/rulebook/embeddings.html): what an embedding is, how retrieval uses it, and what changes when you swap the model. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb).
 - **Go further:** [**Evaluation**](https://ecoop.github.io/rulebook/evaluation.html): how to measure retrieval. Write the right answers down once, then score any setup against them, on checkers and then on poker. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/evaluation.ipynb).
+- **Go further:** [**Reranking**](https://ecoop.github.io/rulebook/reranking.html): why retrieval finds passages *about* the question rather than ones that *answer* it, and a second stage that fixes the order: BM25, hybrid, and a cross-encoder, scored on poker and checkers. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/reranking.ipynb).
 
-More *Go further* notebooks are coming: chunking, reranking, and generation & citations. To run them on your own machine, and for what to read after them, see [Learning RAG](#learning-rag).
+More *Go further* notebooks are coming: chunking, and generation & citations. To run them on your own machine, and for what to read after them, see [Learning RAG](#learning-rag).
 
 ## What's in here
 
@@ -55,6 +56,7 @@ rulebook/
 ├── notebooks/rag_at_a_glance.ipynb # start here: a short tour of the RAG pipeline
 ├── notebooks/embeddings.ipynb # go further: what an embedding is, swapping the embedder
 ├── notebooks/evaluation.ipynb # go further: golds + hit@k/MRR, checkers then poker
+├── notebooks/reranking.ipynb  # go further: BM25, hybrid, cross-encoder reranking
 ├── api/main.py                # FastAPI: /ask, /meta, /me, /feedback, /gold, /advanced/*
 ├── web/                       # React 19 + TypeScript + Tailwind v4 (Vite) — Ask + "Your activity"
 └── docs/                      # deploy, RBAC, roles, sources… (see Documentation)
@@ -110,7 +112,7 @@ See [`rules/SOURCES.md`](rules/SOURCES.md) for a menu of recognizable rulesets a
 
 ### Learning RAG
 
-New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_glance.ipynb) ([results page](https://ecoop.github.io/rulebook/rag_at_a_glance.html)), a short tour that runs a question through every stage (chunk → embed and retrieve → generate) on the sample domains. Each stage points to a *Go further* notebook. The first two are [`notebooks/embeddings.ipynb`](notebooks/embeddings.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings.html)), on what an embedding is, and [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb) ([results page](https://ecoop.github.io/rulebook/evaluation.html)), on how to *measure* retrieval (hit@k/MRR, checkers then poker, local vs Voyage). Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
+New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_glance.ipynb) ([results page](https://ecoop.github.io/rulebook/rag_at_a_glance.html)), a short tour that runs a question through every stage (chunk → embed and retrieve → generate) on the sample domains. Each stage points to a *Go further* notebook. The first two are [`notebooks/embeddings.ipynb`](notebooks/embeddings.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings.html)), on what an embedding is, and [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb) ([results page](https://ecoop.github.io/rulebook/evaluation.html)), on how to *measure* retrieval (hit@k/MRR, checkers then poker, local vs Voyage), and [`notebooks/reranking.ipynb`](notebooks/reranking.ipynb) ([results page](https://ecoop.github.io/rulebook/reranking.html)), on reordering what retrieval found. Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
 
 **No install? Run it in your browser.**
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb)
@@ -145,6 +147,16 @@ done
 A useful surprise from running this: a *bigger, retrieval-tuned* model (`potion-retrieval-32M`) does **not** reliably beat a plain base model (`potion-base-8M`) here — only the tiniest (`potion-base-2M`) clearly lags. "Fancier embedder = better" is a hypothesis to **measure**, not assume; that's the whole point of the harness.
 
 For a cell-by-cell version of all this (golds, hit@k/MRR, the poker misses, and the local-vs-Voyage comparison), see [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb); for what an embedding is, [`notebooks/embeddings.ipynb`](notebooks/embeddings.ipynb).
+
+### Reranking
+
+Retrieval embeds the question and each passage separately, so it finds passages *about* the question; on poker that includes the same rule from the wrong variant. An optional reranker takes the nearest `RERANK_CANDIDATES` passages (default 20) and reorders them before the top _k_ go to Claude. `RERANK_PROVIDER` picks it (default `none`): `bm25` (word overlap), `hybrid` (embedding order fused with BM25), or `local`, a cross-encoder that reads the question and each passage together (needs `uv sync --extra rerank-local`; onnxruntime has no Intel Mac wheels). Score one before turning it on:
+
+```bash
+uv run python -m rulebook.eval --domain poker --rerank hybrid
+```
+
+[`notebooks/reranking.ipynb`](notebooks/reranking.ipynb) walks through all three on poker and checkers. Hosted rerankers and Claude as a reranker are tracked in [#258](https://github.com/ecoop/rulebook/issues/258).
 
 ## Adding a domain
 
@@ -193,7 +205,7 @@ uv run pytest
 
 ## Not done (yet)
 
-Reranking (baseline top-_k_ only), hybrid/BM25 retrieval, streaming answers, and an automated eval harness — each left as a clear next step.
+Hosted rerankers (and Claude as a reranker, #258), streaming answers, and an automated eval harness — each left as a clear next step.
 
 ## License
 

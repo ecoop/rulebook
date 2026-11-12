@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     # EMBEDDING_MODEL=voyage-4), because query and stored vectors must share a model.
     embedding_provider: str = Field(default="local", pattern="^(local|voyage|openai)$")
     embedding_model: str = "minishlab/potion-retrieval-32M"
+    # Optional second pass over a wider candidate set (src/rulebook/rerank.py).
+    # "none" (default) leaves retrieval unchanged; bm25/hybrid need nothing extra;
+    # "local" is a cross-encoder and needs `uv sync --extra rerank-local`.
+    # rerank_model applies to "local" only.
+    rerank_provider: str = Field(default="none", pattern="^(none|bm25|hybrid|local)$")
+    rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+    rerank_candidates: int = Field(default=20, ge=1)
     claude_model: str = "claude-sonnet-5"
     # Effort for answer generation (output_config.effort): how much the model
     # thinks before answering. "low" measured ~17% cheaper than the model

@@ -74,6 +74,19 @@ def ensure_index(*domains: str) -> None:
             raise RuntimeError(build.stderr)
 
 
+def hit_cell(result, k: int) -> str:
+    """A hit@k table cell with the count behind it: ``"0.59 (13/22)"``.
+
+    ``result`` is an :class:`rulebook.eval.EvalResult`. The count reads more
+    plainly than the fraction on a small gold set: 13 of 22 questions had a cited
+    rule in the top k.
+    """
+    # Pad the count with figure spaces (as wide as a digit), so "( 6/12)" and
+    # "(10/12)" line up in a right-aligned column.
+    hits = str(result.hits_at(k)).rjust(len(str(result.n)), "\u2007")
+    return f"{result.hit_rate_at(k):.2f} ({hits}/{result.n})"
+
+
 def show_table(headers, rows) -> None:
     """Render rows as a real table: a grid of cells, numeric columns right-aligned.
 
@@ -84,8 +97,9 @@ def show_table(headers, rows) -> None:
     from IPython.display import HTML, display
 
     def is_number(v):
+        # A number, or a number followed by a note: "0.59 (13/22)".
         try:
-            float(str(v))
+            float(str(v).split(" (")[0])
             return True
         except ValueError:
             return False

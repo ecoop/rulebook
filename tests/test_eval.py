@@ -158,3 +158,19 @@ def test_scratch_index_scores_without_touching_the_real_index(monkeypatch, tmp_p
     assert r is None or 1 <= r <= 5
     with pytest.raises(ValueError):
         rank_of("q", ("1.1",), domain="cornhole", index=idx)  # wrong domain for this index
+
+
+def test_hits_at_counts_and_hit_cell_shows_both():
+    from rulebook.notebook import hit_cell
+
+    a, b = GoldItem("checkers", "q1", ("x",)), GoldItem("checkers", "q2", ("y",))
+    res = EvalResult(
+        k=3,
+        items=[ItemResult(a, ["x", "p", "q"], True, 1.0), ItemResult(b, ["p", "q", "y"], True, 1 / 3)],
+    )
+    assert (res.hits_at(1), res.hits_at(3)) == (1, 2)
+    assert res.hit_rate_at(1) == 0.5
+    assert hit_cell(res, 1) == "0.50 (1/2)"
+    many = EvalResult(k=1, items=[ItemResult(a, ["p"], False, 0.0)] * 12)
+    assert hit_cell(many, 1) == "0.00 (\u20070/12)"  # padded to line up with "(10/12)"
+    assert EvalResult(k=5).hit_rate_at(1) == 0.0  # empty result, no division by zero

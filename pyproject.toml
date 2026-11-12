@@ -76,6 +76,15 @@ dependencies = [
     "jsonl-log>=0.1.1",
 ]
 
+[project.optional-dependencies]
+# Local cross-encoder reranker (src/rulebook/rerank.py, RERANK_PROVIDER=local):
+# fastembed runs it on ONNX, no torch. Optional because onnxruntime publishes no
+# wheels for Intel Macs; bm25 and hybrid reranking need nothing extra.
+#   uv sync --extra rerank-local
+rerank-local = [
+    "fastembed>=0.9.1",
+]
+
 [dependency-groups]
 dev = [
     # For the instructional notebooks.
