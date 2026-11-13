@@ -67,15 +67,12 @@ jobs:
       FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
       # true/false only; the key itself is given to the RAG at a glance step alone.
       HAS_ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
-      # Same rendering for both pages: the page_template layout, no In/Out
-      # prompts, and the "hide-on-results-page" cell (how-to-use box) dropped.
+      # Same rendering for every page: the page_template layout, no In/Out prompts.
       RENDER: >-
         --execute --to html
         --TemplateExporter.extra_template_basedirs=notebooks
         --template page_template --no-prompt
         --ExecutePreprocessor.timeout=600
-        --TagRemovePreprocessor.enabled=True
-        --TagRemovePreprocessor.remove_cell_tags=hide-on-results-page
         --output-dir _site
     steps:
       - uses: actions/checkout@v4

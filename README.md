@@ -118,7 +118,7 @@ New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_gl
 
 **No install? Run it in your browser.**
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb)
-opens the Embeddings notebook on Google's free machines (key-free; its first cell installs the repo). Every notebook has an Open in Colab badge at its top, and a results page, linked above and from the [notebooks landing page](https://ecoop.github.io/rulebook/), showing them after a fresh run; CI rebuilds them whenever the code they use changes ([`notebook-page.yml`](.github/workflows/notebook-page.yml)).
+opens the Embeddings notebook on Google's free machines (key-free; its first cell installs the repo). Every notebook has a results page, linked above and from the [notebooks landing page](https://ecoop.github.io/rulebook/), showing it after a fresh run, with a Run it in Colab link at the top; CI rebuilds them whenever the code they use changes ([`notebook-page.yml`](.github/workflows/notebook-page.yml)).
 
 > The notebooks are committed with outputs stripped ([`.gitattributes`](.gitattributes) + nbstripout) — they're meant to be run. After cloning, run `uv run nbstripout --install` once so your commits stay clean too.
 
