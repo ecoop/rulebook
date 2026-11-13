@@ -153,16 +153,17 @@ def cards(sk: Sketch, x, y, s, hand, spread=30):
 
 
 # --- chess -----------------------------------------------------------------------
-def piece(sk: Sketch, name: str, x: float, y: float, s: float) -> str:
+def piece(sk: Sketch, name: str, x: float, y: float, s: float, hatch_scale: float | None = None) -> str:
     outline, detail = PIECES[name]
+    hs = s if hatch_scale is None else hatch_scale
     clip = sk.uid("clip")
     detail_fill = "#fff" if name in ("king", "queen") else "none"
     inner = (
         f'<clipPath id="{clip}"><path d="{outline}"/></clipPath>'
-        f'<ellipse cx="4" cy="1" rx="44" ry="5" fill="{sk.hatch("light", s)}" stroke="none" opacity="0.4"/>'
+        f'<ellipse cx="4" cy="1" rx="44" ry="5" fill="{sk.hatch("light", hs)}" stroke="none" opacity="0.4"/>'
         f'<path d="{outline}" fill="#fff" stroke="none"/>'
-        f'<rect x="6" y="-170" width="40" height="175" fill="{sk.hatch("light", s)}" clip-path="url(#{clip})" stroke="none"/>'
-        f'<rect x="18" y="-170" width="30" height="175" fill="{sk.hatch("cross", s)}" clip-path="url(#{clip})" stroke="none"/>'
+        f'<rect x="6" y="-170" width="40" height="175" fill="{sk.hatch("light", hs)}" clip-path="url(#{clip})" stroke="none"/>'
+        f'<rect x="18" y="-170" width="30" height="175" fill="{sk.hatch("cross", hs)}" clip-path="url(#{clip})" stroke="none"/>'
         f'<path d="{outline}" stroke-width="1.7"/>'
         + (f'<path d="{detail}" stroke-width="1.3" fill="{detail_fill}"/>' if detail else "")
     )
@@ -170,7 +171,7 @@ def piece(sk: Sketch, name: str, x: float, y: float, s: float) -> str:
 
 
 # --- checkers: an 8x8 board in perspective, checkers inside the dark squares ------
-def board(sk: Sketch, x, y, s, checkers, front=125, back=72, depth=62, edge=6):
+def board(sk: Sketch, x, y, s, checkers, front=125, back=72, depth=62, edge=6, pieces=(), squares="fine"):
     """Front edge centred on (0, 0), ``front`` and ``back`` half-widths, ``depth`` tall."""
     k = 0.55  # rows get shallower toward the back
 
@@ -193,7 +194,8 @@ def board(sk: Sketch, x, y, s, checkers, front=125, back=72, depth=62, edge=6):
     out = [
         f'<path d="M{-front} 0 L{-front} {edge} L{front} {edge} L{front} 0" fill="{sk.hatch("light", s)}" stroke-width="1.3"/>',
         f'<path d="M{-front} 0 L{front} 0 L{back} {-depth} L{-back} {-depth} Z" fill="#fff" stroke-width="1.5"/>',
-        f'<path d="{" ".join(dark)}" fill="{sk.hatch("fine", s)}" stroke="none"/>',
+        f'<path d="{" ".join(dark)}" stroke="none" '
+        + (f'fill="{INK}" fill-opacity="0.3"/>' if squares == "tone" else f'fill="{sk.hatch(squares, s)}"/>'),
     ]
     for i, j, filled in checkers:
         yc = (row_y(j) + row_y(j + 1)) / 2
@@ -206,6 +208,12 @@ def board(sk: Sketch, x, y, s, checkers, front=125, back=72, depth=62, edge=6):
                    f'A{rx:.1f} {ry:.1f} 0 0 1 {xc - rx:.1f} {yc:.1f} Z" fill="#fff" stroke-width="1"/>')
         out.append(f'<ellipse cx="{xc:.1f}" cy="{yc - side:.1f}" rx="{rx:.1f}" ry="{ry:.1f}" '
                    f'fill="{fill}" stroke-width="1"/>')
+    # chess pieces, back rows first so nearer pieces overlap them
+    for name, i, j in sorted(pieces, key=lambda p: -p[2]):
+        yc = (row_y(j) + row_y(j + 1)) / 2
+        xc = (x_at(i, yc) + x_at(i + 1, yc)) / 2
+        ps = (x_at(i + 1, yc) - x_at(i, yc)) * 0.85 / 60  # a piece's base is about 60 wide
+        out.append(piece(sk, name, round(xc, 1), round(yc + 2, 1), round(ps, 3), hatch_scale=s * ps))
     return place(x, y, s, "".join(out))
 
 
@@ -271,38 +279,17 @@ def reranking() -> str:
 
 
 def chunking() -> str:
-    """One poker hand, cut two ways: at the cards (above) and at fixed widths (below)."""
-    sk = Sketch(320, 200, "Sketch of a poker hand cut into chunks two ways: one card per piece, "
-                          "and in equal widths that cut through the cards")
-    s, gap, x0 = 0.48, 8, 15
-    w, h = CARD_W * s, CARD_H * s
-    top_y, low_y = 14, 112
-
-    # Above: each card its own piece, with a cut line around it.
-    above = []
-    for i, (rank, suit) in enumerate(FULL_HOUSE):
-        x = x0 + i * (w + gap)
-        above.append(card(sk, x, top_y, s, rank, suit))
-        above.append(f'<rect x="{x - 3:.1f}" y="{top_y - 3}" width="{w + 6:.1f}" height="{h + 6:.1f}" rx="4" '
-                     f'stroke-width="1" stroke-dasharray="4 4" opacity="0.65"/>')
-
-    # Below: the same row, cut into four equal windows that ignore the card edges.
-    row = "".join(card(sk, x0 + i * (w + gap), 0, s, r, su) for i, (r, su) in enumerate(FULL_HOUSE))
-    sk.defs["row"] = f'<g id="row">{row}</g>'
-    span = 5 * w + 4 * gap
-    cut_w, spread = span / 4, 7
-    below = []
-    for i in range(4):
-        clip = sk.uid("cut")
-        cx = x0 + i * cut_w
-        dx = (i - 1.5) * spread
-        below.append(
-            f'<clipPath id="{clip}"><rect x="{cx:.1f}" y="-4" width="{cut_w:.1f}" height="{h + 8:.1f}"/></clipPath>'
-            f'<g transform="translate({dx:.1f} {low_y})"><use href="#row" clip-path="url(#{clip})"/>'
-            f'<rect x="{cx:.1f}" y="-3" width="{cut_w:.1f}" height="{h + 6:.1f}" rx="2" stroke-width="1" '
-            f'stroke-dasharray="4 4" opacity="0.65"/></g>'
-        )
-    return sk.render("".join(above) + "".join(below))
+    """Two rule sets, each its own piece: the poker hand, and chess pieces on a board."""
+    sk = Sketch(320, 132, "Sketch of two separate pieces: a poker hand, and chess pieces on a board")
+    hand = cards(sk, 66, 136, 0.36, FULL_HOUSE, spread=24)
+    chess = board(sk, 222, 112, 0.66, [], front=118, back=76, depth=78, edge=6, squares="tone",
+                  pieces=[("rook", 0, 0), ("king", 4, 0), ("pawn", 2, 1), ("knight", 6, 1),
+                          ("queen", 3, 3), ("bishop", 5, 4), ("pawn", 1, 5)])
+    frames = []
+    for x, w, turn in ((8, 118, -1.5), (136, 176, 1.2)):
+        frames.append(f'<rect x="{x}" y="8" width="{w}" height="116" rx="5" stroke-width="1.1" '
+                      f'stroke-dasharray="5 5" opacity="0.7" transform="rotate({turn} {x + w / 2} 66)"/>')
+    return sk.render(hand + chess + "".join(frames))
 
 
 VIGNETTES = {"rag_at_a_glance": glance, "embeddings": embeddings, "evaluation": evaluation,
