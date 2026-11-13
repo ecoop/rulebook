@@ -12,7 +12,6 @@ rewrites img/*.svg. Everything is drawn here from scratch: no source images.
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
 OUT = Path(__file__).parent / "img"
@@ -215,147 +214,95 @@ GAME = [(1, 0, True), (3, 0, True), (5, 0, True), (0, 1, True), (2, 1, True), (6
         (4, 7, False), (6, 7, False), (3, 4, False)]
 
 
-# --- cornhole: a 24" x 48" board seen mostly from the side, front end on the left -----
-# The near long edge runs from A (front, on the ground) up to B (back, on its legs);
-# W is the board's width going away from us, a little shorter at the back.
-A, B, W = (-82.0, 0.0), (62.0, -52.0), (36.0, -48.0)
-
-
-def _board_pt(X: float, Y: float) -> tuple[float, float]:
-    """A point on the board's top, in inches: X across (0 near, 24 far), Y along (0 front, 48 back)."""
-    t, u = Y / 48, X / 24
-    shrink = 1 - 0.15 * t
-    return (A[0] + t * (B[0] - A[0]) + u * W[0] * shrink,
-            A[1] + t * (B[1] - A[1]) + u * W[1] * shrink)
-
-
-def _loop(points) -> str:
-    return "M" + " L".join(f"{px:.1f} {py:.1f}" for px, py in points) + " Z"
-
-
-def _bag_outline(cx, cy, size, turn, to_screen, n=40):
-    """A bean bag: a soft square (a superellipse), ``size`` inches across."""
-    pts = []
-    for t in range(n):
-        a = 2 * math.pi * t / n
-        c, s_ = math.cos(a), math.sin(a)
-        r = size / 2
-        bx = r * math.copysign(abs(c) ** 0.45, c)
-        by = r * math.copysign(abs(s_) ** 0.45, s_)
-        rx = bx * math.cos(turn) - by * math.sin(turn)
-        ry = bx * math.sin(turn) + by * math.cos(turn)
-        pts.append(to_screen(cx + rx, cy + ry))
-    return _loop(pts)
-
-
-def cornhole(sk: Sketch, x, y, s, bag_on_board=True, bag_on_ground=True):
-    th = 10  # the frame's depth, as drawn
-    corners = [_board_pt(0, 0), _board_pt(0, 48), _board_pt(24, 48), _board_pt(24, 0)]
-    near_front, near_back, far_back, far_front = corners
-    floor_front = (near_front[0], near_front[1] + th)
-    floor_back = (near_back[0] - 3, near_back[1] + 52)
-    hole = [_board_pt(12 + 3 * math.cos(2 * math.pi * t / 36), 39 + 3 * math.sin(2 * math.pi * t / 36))
-            for t in range(36)]
-
-    def pt(p):
-        return f"{p[0]:.1f} {p[1]:.1f}"
-
-    out = [
-        # the floor under the board, and the far leg glimpsed through the gap
-        f'<path d="M{floor_front[0] - 6} {floor_front[1] + 1} L{floor_back[0] + 26} {floor_back[1] - 8}" '
-        f'stroke-width="1" opacity="0.4"/>',
-        f'<path d="M{far_back[0] - 5:.1f} {far_back[1] + th:.1f} L{floor_back[0] + W[0] * 0.85:.1f} '
-        f'{floor_back[1] + W[1] * 0.85:.1f}" stroke-width="1.2" opacity="0.5"/>',
-        # the top, then the side frame and front frame under its edges
-        f'<path d="M{pt(near_front)} L{pt(near_back)} L{pt(far_back)} L{pt(far_front)} Z" fill="#fff" stroke-width="1.8"/>',
-        f'<path d="M{pt(near_front)} L{pt(near_back)} L{near_back[0]:.1f} {near_back[1] + th:.1f} '
-        f'L{floor_front[0]:.1f} {floor_front[1]:.1f} Z" fill="{sk.hatch("light", s)}" stroke-width="1.6"/>',
-        f'<path d="M{pt(near_front)} L{pt(far_front)} L{far_front[0]:.1f} {far_front[1] + th - 2:.1f} '
-        f'L{floor_front[0]:.1f} {floor_front[1]:.1f} Z" fill="{sk.hatch("tight", s)}" stroke-width="1.5"/>',
-        # the near back leg, folded down to the floor
-        f'<path d="M{near_back[0] - 5:.1f} {near_back[1] + th:.1f} L{floor_back[0]:.1f} {floor_back[1]:.1f} '
-        f'L{floor_back[0] + 7:.1f} {floor_back[1]:.1f} L{near_back[0] + 1:.1f} {near_back[1] + th:.1f}" '
-        f'fill="{sk.hatch("light", s)}" stroke-width="1.5"/>',
-        # the hole: 6 inches across, 9 inches from the back
-        f'<path d="{_loop(hole)}" fill="{DEEP}" fill-opacity="0.85" stroke="{DEEP}" stroke-width="1.5"/>',
-    ]
-    if bag_on_board:  # a 6-inch bag, the same size as the hole
-        out.append(f'<path d="{_bag_outline(11, 17, 6, 0.4, _board_pt)}" fill="{sk.hatch("fine", s)}" '
-                   f'stroke="{DEEP}" stroke-width="1.6"/>')
-        out.append(f'<path d="{_bag_outline(11, 17, 4.6, 0.4, _board_pt)}" stroke-width="0.9" '
-                   f'stroke-dasharray="2 3" opacity="0.8"/>')
-    if bag_on_ground:  # on the floor in front, nearer to us
-        def ground(gx, gy):
-            return (A[0] - 2 + gx * 4.0 + gy * 1.6, A[1] + 36 + gx * 0.6 - gy * 2.2)
-        out.append(f'<path d="{_bag_outline(0, 0, 6, 0.2, ground)}" fill="{sk.hatch("fine", s)}" '
-                   f'stroke="{DEEP}" stroke-width="1.6"/>')
-        out.append(f'<path d="{_bag_outline(0, 0, 4.6, 0.2, ground)}" stroke-width="0.9" '
-                   f'stroke-dasharray="2 3" opacity="0.8"/>')
-    return place(x, y, s, "".join(out))
-
-
 # --- the vignettes ---------------------------------------------------------------
 FULL_HOUSE = [("K", "S"), ("K", "H"), ("K", "D"), ("7", "C"), ("7", "S")]
+CARD_W, CARD_H = 104, 150
+
+
+def card(sk: Sketch, x, y, s, rank, suit) -> str:
+    """One card face up, its top-left corner at (x, y), drawn at scale ``s``."""
+    tight = sk.hatch("tight", s)
+    inner = (
+        f'<rect x="0" y="0" width="{CARD_W}" height="{CARD_H}" rx="10" fill="#fff" stroke-width="1.7"/>'
+        f'<text x="15" y="27" text-anchor="middle" font-family="Georgia, serif" font-size="22" '
+        f'fill="{INK}" stroke="none">{rank}</text>'
+        f'<path d="{SUIT[suit]}" transform="translate(15 42) scale(0.5)" fill="{tight}" stroke-width="1.2"/>'
+        f'<path d="{SUIT[suit]}" transform="translate({CARD_W / 2} {CARD_H / 2 + 4}) scale(1.7)" '
+        f'fill="{tight}" stroke-width="1.3"/>'
+        f'<text x="{CARD_W - 15}" y="{CARD_H - 12}" text-anchor="middle" font-family="Georgia, serif" '
+        f'font-size="22" fill="{INK}" stroke="none" transform="rotate(180 {CARD_W - 15} {CARD_H - 19})">{rank}</text>'
+    )
+    return place(x, y, s, inner)
 
 
 def glance() -> str:
-    sk = Sketch(320, 200, "Sketch of the three sample games: playing cards, a checkerboard and a cornhole board")
+    sk = Sketch(320, 170, "Sketch of a poker hand beside a checkerboard with checkers")
     return sk.render(
-        board(sk, 168, 112, 0.5, GAME[::2], front=125, back=72, depth=62)
-        + cards(sk, 84, 196, 0.5, [("K", "S"), ("7", "H"), ("2", "C")], spread=20)
-        + cornhole(sk, 250, 168, 0.62, bag_on_ground=False)
+        board(sk, 212, 150, 0.68, GAME[::2], front=125, back=72, depth=70)
+        + cards(sk, 86, 178, 0.5, [("K", "S"), ("7", "H"), ("2", "C")], spread=20)
     )
 
 
 def embeddings() -> str:
-    sk = Sketch(320, 200, "Sketch of a checkerboard with checkers, and a small cornhole board")
-    return sk.render(
-        board(sk, 128, 172, 0.95, GAME, front=125, back=72, depth=86, edge=7)
-        + cornhole(sk, 282, 150, 0.42, bag_on_ground=False)
-    )
+    sk = Sketch(320, 170, "Sketch of a checkerboard with checkers")
+    return sk.render(board(sk, 160, 158, 1.1, GAME, front=125, back=78, depth=92, edge=7))
 
 
 def evaluation() -> str:
-    sk = Sketch(320, 200, "Sketch of a full house in poker beside a checkerboard")
+    sk = Sketch(320, 170, "Sketch of a full house in poker beside a checkerboard")
     return sk.render(
-        board(sk, 222, 160, 0.68, GAME[:9], front=125, back=72, depth=70)
-        + cards(sk, 104, 206, 0.58, FULL_HOUSE, spread=26)
+        board(sk, 222, 150, 0.68, GAME[:9], front=125, back=72, depth=70)
+        + cards(sk, 100, 190, 0.56, FULL_HOUSE, spread=26)
     )
 
 
 def reranking() -> str:
-    sk = Sketch(320, 200, "Sketch of chess pieces in front of a fanned poker hand")
+    """The poker hand up front; chess pieces small and faint behind it."""
+    sk = Sketch(320, 170, "Sketch of a poker hand, with chess pieces small in the background")
+    behind = (
+        piece(sk, "knight", 238, 108, 0.36) + piece(sk, "queen", 259, 102, 0.36)
+        + piece(sk, "king", 281, 99, 0.38) + piece(sk, "bishop", 302, 104, 0.34)
+        + piece(sk, "pawn", 270, 116, 0.28)
+    )
     return sk.render(
-        cards(sk, 96, 186, 0.5, FULL_HOUSE, spread=24)
-        + piece(sk, "king", 205, 168, 0.72) + piece(sk, "queen", 166, 176, 0.68)
-        + piece(sk, "bishop", 246, 178, 0.66) + piece(sk, "knight", 134, 190, 0.66)
-        + piece(sk, "rook", 282, 188, 0.62) + piece(sk, "pawn", 210, 196, 0.56)
+        f'<g opacity="0.55">{behind}</g>'
+        + cards(sk, 128, 200, 0.6, FULL_HOUSE, spread=26)
     )
 
 
 def chunking() -> str:
-    """The whole set, cut into four pieces with gaps between them, like chunks."""
-    sk = Sketch(320, 200, "Sketch of cards, chess pieces, a checkerboard and a cornhole board, cut into four pieces")
-    scene = (
-        board(sk, 168, 92, 0.42, GAME[::3], front=125, back=72, depth=62)
-        + cards(sk, 70, 186, 0.44, FULL_HOUSE, spread=24)
-        + piece(sk, "king", 160, 176, 0.55) + piece(sk, "knight", 128, 186, 0.52)
-        + piece(sk, "rook", 190, 184, 0.5)
-        + cornhole(sk, 262, 168, 0.55, bag_on_ground=False)
-    )
-    sk.defs["scene"] = f'<g id="scene">{scene}</g>'
-    pieces = []
-    cuts = [(0, 0, 110, 200, -3, -2.0), (110, 0, 60, 200, 0, 1.2), (170, 0, 50, 200, 3, -1.0), (220, 0, 100, 200, 7, 1.5)]
-    for cx, cy, cw, ch, dx, turn in cuts:
+    """One poker hand, cut two ways: at the cards (above) and at fixed widths (below)."""
+    sk = Sketch(320, 200, "Sketch of a poker hand cut into chunks two ways: one card per piece, "
+                          "and in equal widths that cut through the cards")
+    s, gap, x0 = 0.48, 8, 15
+    w, h = CARD_W * s, CARD_H * s
+    top_y, low_y = 14, 112
+
+    # Above: each card its own piece, with a cut line around it.
+    above = []
+    for i, (rank, suit) in enumerate(FULL_HOUSE):
+        x = x0 + i * (w + gap)
+        above.append(card(sk, x, top_y, s, rank, suit))
+        above.append(f'<rect x="{x - 3:.1f}" y="{top_y - 3}" width="{w + 6:.1f}" height="{h + 6:.1f}" rx="4" '
+                     f'stroke-width="1" stroke-dasharray="4 4" opacity="0.65"/>')
+
+    # Below: the same row, cut into four equal windows that ignore the card edges.
+    row = "".join(card(sk, x0 + i * (w + gap), 0, s, r, su) for i, (r, su) in enumerate(FULL_HOUSE))
+    sk.defs["row"] = f'<g id="row">{row}</g>'
+    span = 5 * w + 4 * gap
+    cut_w, spread = span / 4, 7
+    below = []
+    for i in range(4):
         clip = sk.uid("cut")
-        pieces.append(
-            f'<clipPath id="{clip}"><rect x="{cx}" y="{cy}" width="{cw}" height="{ch}"/></clipPath>'
-            f'<g transform="translate({dx} 0) rotate({turn} {cx + cw / 2} 100)">'
-            f'<use href="#scene" clip-path="url(#{clip})"/>'
-            f'<rect x="{cx + 1}" y="{cy + 6}" width="{cw - 2}" height="{ch - 10}" rx="4" '
-            f'stroke-width="1" stroke-dasharray="4 4" opacity="0.6"/></g>'
+        cx = x0 + i * cut_w
+        dx = (i - 1.5) * spread
+        below.append(
+            f'<clipPath id="{clip}"><rect x="{cx:.1f}" y="-4" width="{cut_w:.1f}" height="{h + 8:.1f}"/></clipPath>'
+            f'<g transform="translate({dx:.1f} {low_y})"><use href="#row" clip-path="url(#{clip})"/>'
+            f'<rect x="{cx:.1f}" y="-3" width="{cut_w:.1f}" height="{h + 6:.1f}" rx="2" stroke-width="1" '
+            f'stroke-dasharray="4 4" opacity="0.65"/></g>'
         )
-    return sk.render("".join(pieces))
+    return sk.render("".join(above) + "".join(below))
 
 
 VIGNETTES = {"rag_at_a_glance": glance, "embeddings": embeddings, "evaluation": evaluation,
