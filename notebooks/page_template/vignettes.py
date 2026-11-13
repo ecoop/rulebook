@@ -305,10 +305,11 @@ def embeddings() -> str:
 
 
 def evaluation() -> str:
-    sk = Sketch(320, 170, "Sketch of a full house in poker beside a checkerboard")
+    """Checkers up front on the left, where the notebook starts; poker behind it on the right."""
+    sk = Sketch(320, 170, "Sketch of a checkerboard in front, with a full house in poker behind it")
     return sk.render(
-        board(sk, 222, 150, 0.68, GAME[:9], front=125, back=72, depth=70)
-        + cards(sk, 100, 190, 0.56, FULL_HOUSE, spread=26)
+        cards(sk, 222, 170, 0.46, FULL_HOUSE, spread=26)
+        + board(sk, 114, 164, 0.78, GAME[:9], front=125, back=72, depth=70)
     )
 
 
