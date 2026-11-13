@@ -2,8 +2,8 @@
 """Command-line `ask`: retrieval + answer, with the internals shown.
 
     uv run python -m rulebook.ask "how do you win at checkers?"
-    uv run python -m rulebook.ask "does cornhole use forced captures?" --domain cornhole
-    uv run python -m rulebook.ask "how is each game won?" --domains checkers,cornhole
+    uv run python -m rulebook.ask "what is a let?" --domain tennis
+    uv run python -m rulebook.ask "how is each game won?" --domains checkers,tennis
 
 This is the smallest possible front door to the pipeline — no web server, no
 React build. It prints the retrieved chunks *with their similarity distances*

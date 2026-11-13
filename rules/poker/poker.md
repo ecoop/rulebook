@@ -5,10 +5,10 @@ ORIGINAL PROSE — SAFE TO COMMIT. A from-scratch description of five public-dom
 poker variants (five-card draw, five-card stud, seven-card stud, Razz, and Omaha).
 The games are in the public domain, and the rules/method of a game are not
 copyrightable (17 U.S.C. §102(b)); this wording is original and ships under the
-repo's MIT license. Like rules/checkers/ and rules/cornhole/ it is the deliberate
+repo's MIT license. Like rules/checkers/ and rules/tennis/ it is the deliberate
 exception to the "no rule docs in git" policy in rules/SOURCES.md.
 
-WHY IT EXISTS — a STRESS corpus for retrieval evaluation. Unlike checkers/cornhole
+WHY IT EXISTS — a STRESS corpus for retrieval evaluation. Unlike checkers/tennis
 (clean, easy), these five variants share almost all their vocabulary (ante, bring-in,
 betting round, showdown, hole cards) but differ in specifics, so their rules are
 near-duplicates that differ mainly in the variant each one names. That is exactly the

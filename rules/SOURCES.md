@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Eric Cooper. -->
 # Rules sources — point-and-download
 
-_Last updated: 2026-11-07_
+_Last updated: 2026-11-13_
 
 The rules text under `rules/<domain>/` is built into the vector index by
 [`scripts/build_index.py`](../scripts/build_index.py) (the directory name is the
@@ -24,7 +24,7 @@ Three domains **do** ship in git, so a fresh clone can build an index and run th
 pipeline end-to-end with **no downloads**:
 
 - **`checkers`** — [`rules/checkers/checkers.md`](checkers/checkers.md) (a board game)
-- **`cornhole`** — [`rules/cornhole/cornhole.md`](cornhole/cornhole.md) (an outdoor game)
+- **`tennis`** — [`rules/tennis/tennis.md`](tennis/tennis.md) (a racket sport)
 - **`poker`** — [`rules/poker/poker.md`](poker/poker.md) (five variants — a deliberate **stress** corpus: the variants share almost all their vocabulary but differ in specifics, so retrieval has to disambiguate near-duplicates. Run `python -m rulebook.eval --domain poker` to watch hit@k/MRR fall, especially on the `label`-tagged questions.)
 
 These are **original prose written for this repo**, not copies of anyone's
@@ -59,7 +59,7 @@ that domain. Official sources (grab the **current** edition from each hub):
 | Soccer | IFAB | https://www.theifab.com/laws/ | `soccer` |
 | Baseball | MLB | https://www.mlb.com/glossary/rules | `baseball` |
 | Cricket | MCC | https://www.lords.org/mcc/laws | `cricket` |
-| Tennis | ITF | https://www.itftennis.com/en/about-us/governance/rules-and-regulations/ | `tennis` |
+| Tennis | ITF | https://www.itftennis.com/en/about-us/governance/rules-and-regulations/ | `tennis_itf` (`tennis` is the bundled sample) |
 | Badminton | BWF | see [badminton](#badminton--badminton-bwf) below | `badminton` |
 | Water polo | World Aquatics | https://www.worldaquatics.com/water-polo/rules | `water_polo` |
 | Goaltimate | USAG | see [goaltimate](#goaltimate--goaltimate-usag) below | `goaltimate` |

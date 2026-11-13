@@ -34,7 +34,7 @@ def test_plain_text_is_left_alone(tmp_path: Path) -> None:
 
 
 def test_sample_corpora_index_no_license_header() -> None:
-    for domain in ("checkers", "cornhole", "poker"):
+    for domain in ("checkers", "tennis", "poker"):
         doc = RULES_ROOT / domain / f"{domain}.md"
         chunks = chunk_pages(extract_pages(doc), source=doc.name, domain=domain)
         assert chunks, domain

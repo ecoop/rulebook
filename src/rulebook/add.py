@@ -17,8 +17,8 @@ Then ask against it:
 DOWNLOADS STAY MANUAL BY DESIGN. This command does not fetch from a URL — you
 download each ruleset yourself, accepting its publisher's terms (see
 rules/SOURCES.md for a menu of where to get recognizable rulesets). Copyrighted
-source docs stay untracked; only the two committed sample domains (checkers,
-cornhole) ship in git. Registering a display name/sources (scripts/domains.py)
+source docs stay untracked; only the committed sample domains (checkers,
+tennis, poker) ship in git. Registering a display name/sources (scripts/domains.py)
 is a hosted-only step — locally a domain just uses its title-cased slug.
 """
 
