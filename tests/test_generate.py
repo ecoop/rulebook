@@ -13,7 +13,12 @@ from types import SimpleNamespace
 
 import rulebook.generate as gen
 from rulebook.config import settings
-from rulebook.generate import build_system_prompt, find_unverified_citations, generate_answer
+from rulebook.generate import (
+    build_prompt,
+    build_system_prompt,
+    find_unverified_citations,
+    generate_answer,
+)
 from rulebook.retrieve import RetrievedChunk
 
 
@@ -96,6 +101,18 @@ def test_generate_answer_omits_effort_when_unset(monkeypatch):
     monkeypatch.setattr(settings, "claude_effort", "")
     generate_answer("q?", [_chunk("ultimate", "II.B.1")])
     assert "output_config" not in seen
+
+
+def test_build_prompt_is_what_generate_answer_sends(monkeypatch):
+    # The RAG at a glance notebook prints build_prompt() as "what Claude is given",
+    # so it must be exactly what the call sends.
+    seen = _capture_call(monkeypatch)
+    chunks = [_chunk("ultimate", "II.B.1"), _chunk("hearts", "Object of the Game")]
+    generate_answer("how many players?", chunks)
+    system, user = build_prompt("how many players?", chunks)
+    assert seen["system"] == system
+    assert seen["messages"] == [{"role": "user", "content": user}]
+    assert "[ultimate II.B.1]" in user and "<question>how many players?</question>" in user
 
 
 def test_all_citations_verified_returns_empty():

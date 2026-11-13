@@ -1,8 +1,7 @@
 <!-- Copyright (c) 2026 Eric Cooper. -->
 <!--
   The notebooks landing page (ecoop.github.io/rulebook/). Copied to _site/index.html
-  by .github/workflows/notebook-page.yml. The RAG at a glance card sits between the
-  rag-at-a-glance markers; the workflow drops it when that page wasn't built (no key).
+  by .github/workflows/notebook-page.yml.
   Same font, column and colours as the notebook pages (page_template/index.html.j2).
 -->
 <!doctype html>
@@ -94,7 +93,6 @@
   anything. Every notebook also runs in Colab, free with a Google account.
 </p>
 
-<!-- rag-at-a-glance -->
 <h2>Start here</h2>
 <div class="cards">
   <div class="card with-image start">
@@ -103,11 +101,10 @@
     <h3><a href="rag_at_a_glance.html">RAG at a glance</a></h3>
     <div class="meta">
       <span class="tag">about 10 minutes</span>
-      <span class="tag">your Anthropic key, last section only</span>
+      <span class="tag">no key</span>
     </div>
-    <p class="what">One question, followed through the whole pipeline: the rules cut into chunks, the
-      nearest chunks retrieved, and Claude's answer with its citations. The last section calls Claude with your own key, about a cent a
-      question; everything before it runs without one.</p>
+    <p class="what">A few questions, followed through the whole pipeline: the rules cut into chunks,
+      the nearest chunks retrieved, and Claude's answer with its citations.</p>
     <div class="links">
       <a href="rag_at_a_glance.html">Read it</a>
       <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb">Run it in Colab</a>
@@ -115,10 +112,9 @@
     </div>
   </div>
 </div>
-<!-- /rag-at-a-glance -->
 
 <h2>Go further</h2>
-<p class="section-note">One stage each, in this order: each one picks up where the last left off. None needs a key.</p>
+<p class="section-note">One stage each, in this order: each one picks up where the last left off.</p>
 <div class="cards">
 
   <div class="card with-image">
