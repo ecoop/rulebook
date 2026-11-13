@@ -65,6 +65,11 @@ RULES_ROOT = Path("rules")
 _SOURCE_SUFFIXES = {".pdf", ".md", ".txt"}
 
 
+def _has_rule_files(folder: Path) -> bool:
+    """True if ``folder`` holds an ingestable file at any depth."""
+    return any(p.is_file() and p.suffix.lower() in _SOURCE_SUFFIXES for p in folder.rglob("*"))
+
+
 def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[Source]:
     """Walk ``rules/<domain>/`` and return one Source per ingestable file.
 
@@ -105,6 +110,15 @@ def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[S
             if p.name.endswith(".extracted.md")
         }
         for f in sorted(domain_dir.iterdir()):
+            if f.is_dir() and _has_rule_files(f):
+                # Only files directly in rules/<domain>/ are indexed. Say so rather
+                # than dropping a nested folder (e.g. an edition) without a trace.
+                print(
+                    f"[warn  ]  skipped {f.relative_to(rules_root.parent).as_posix()}/: "
+                    f"rule files in a subfolder aren't indexed; only files directly in "
+                    f"{domain_dir.relative_to(rules_root.parent).as_posix()}/ are"
+                )
+                continue
             if not f.is_file() or f.suffix.lower() not in _SOURCE_SUFFIXES:
                 continue
             if f.suffix.lower() == ".pdf" and f.stem in extracted_stems:
