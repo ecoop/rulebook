@@ -283,44 +283,41 @@ def _dashed(x, y, w, h, turn=0.0) -> str:
             f'stroke-dasharray="4 4" opacity="0.7" transform="rotate({turn} {x + w / 2:.1f} {y + h / 2:.1f})"/>')
 
 
-def chunking() -> str:
-    """Each rule set cut into chunks: the poker hand card by card, the chessboard into tiles."""
-    sk = Sketch(320, 120, "Sketch of a poker hand and a chessboard, each cut into several pieces")
-
-    # Poker: the hand laid out in two rows, each card its own piece.
-    s, gap = 0.3, 9
-    w, h = CARD_W * s, CARD_H * s
-    poker = []
-    rows = [(FULL_HOUSE[:3], 9), (FULL_HOUSE[3:], 9 + h + 12)]
-    for r, (hand, y) in enumerate(rows):
-        x0 = 14 + (0 if r == 0 else (w + gap) / 2)
-        for i, (rank, suit) in enumerate(hand):
-            x = x0 + i * (w + gap)
-            turn = (-2.0, 1.5, -1.0, 2.0, -1.5)[r * 3 + i]
-            poker.append(f'<g transform="rotate({turn} {x + w / 2:.1f} {y + h / 2:.1f})">'
-                         + card(sk, x, y, s, rank, suit) + "</g>")
-            poker.append(_dashed(x - 3, y - 3, w + 6, h + 6, turn))
-
-    # Chess: the board with its pieces, cut into three strips pulled a little apart.
-    # The pieces stand clear of the cuts, so each strip holds whole pieces.
-    bx, by, bs = 236, 101, 0.62
-    scene = board(sk, bx, by, bs, [], front=118, back=76, depth=80, edge=6, squares="tone",
-                  pieces=[("rook", 0, 0), ("knight", 1, 2), ("king", 4, 0), ("queen", 3, 4),
-                          ("bishop", 6, 1), ("pawn", 7, 3)])
-    sk.defs["chess"] = f'<g id="chess">{scene}</g>'
-    half = 118 * bs
-    cuts = [bx - half - 5, bx - 24, bx + 24, bx + half + 5]
-    top, bottom = 30, by + 6 * bs + 5
-    tiles = []
-    for k, dx in enumerate((-6, 0, 6)):
+def _slices(sk: Sketch, name: str, scene: str, cuts, top, bottom, shifts) -> str:
+    """Cut ``scene`` into upright slices at the x positions in ``cuts``, each moved by
+    its entry in ``shifts`` and framed with a dashed line."""
+    sk.defs[name] = f'<g id="{name}">{scene}</g>'
+    out = []
+    for k, dx in enumerate(shifts):
         x0, x1 = cuts[k], cuts[k + 1]
-        clip = sk.uid("tile")
-        tiles.append(
-            f'<clipPath id="{clip}"><rect x="{x0:.1f}" y="{top}" width="{x1 - x0:.1f}" height="{bottom - top:.1f}"/></clipPath>'
-            f'<g transform="translate({dx} 0)"><use href="#chess" clip-path="url(#{clip})"/>'
+        clip = sk.uid("slice")
+        out.append(
+            f'<clipPath id="{clip}"><rect x="{x0:.1f}" y="{top}" width="{x1 - x0:.1f}" '
+            f'height="{bottom - top:.1f}"/></clipPath>'
+            f'<g transform="translate({dx} 0)"><use href="#{name}" clip-path="url(#{clip})"/>'
             + _dashed(x0 + 1, top, x1 - x0 - 2, bottom - top) + "</g>"
         )
-    return sk.render("".join(poker) + "".join(tiles))
+    return "".join(out)
+
+
+def chunking() -> str:
+    """Each rule set cut into chunks: the poker hand and the chessboard, each in three slices."""
+    sk = Sketch(320, 120, "Sketch of a poker hand and a chessboard, each cut into three slices")
+    top, bottom = 22, 112
+
+    hx = 70
+    hand = cards(sk, hx, 146, 0.36, FULL_HOUSE, spread=24)
+    poker = _slices(sk, "hand", hand, [hx - 62, hx - 19, hx + 19, hx + 62], top, bottom, (-5, 0, 5))
+
+    # The chess pieces stand clear of the cuts, so each slice holds whole pieces.
+    bx, by, bs = 238, 101, 0.56
+    board_scene = board(sk, bx, by, bs, [], front=118, back=76, depth=80, edge=6, squares="tone",
+                        pieces=[("rook", 0, 0), ("knight", 1, 2), ("king", 4, 0), ("queen", 3, 4),
+                                ("bishop", 6, 1), ("pawn", 7, 3)])
+    half = 118 * bs
+    chess = _slices(sk, "chess", board_scene, [bx - half - 4, bx - 22, bx + 22, bx + half + 4],
+                    top, bottom, (-5, 0, 5))
+    return sk.render(poker + chess)
 
 
 VIGNETTES = {"rag_at_a_glance": glance, "embeddings": embeddings, "evaluation": evaluation,
