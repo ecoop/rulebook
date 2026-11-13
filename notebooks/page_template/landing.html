@@ -47,6 +47,12 @@
     padding: 18px 20px 16px;
   }
   .card.start { border-color: var(--accent); background: #fff; border-width: 2px; }
+  .card.with-image { display: grid; grid-template-columns: 190px 1fr; gap: 0 20px; align-items: start; }
+  .card .vignette { width: 100%; height: auto; display: block; margin-top: 2px; }
+  @media (max-width: 560px) {
+    .card.with-image { grid-template-columns: 1fr; }
+    .card .vignette { max-width: 260px; margin: 0 0 10px; }
+  }
   .card h3 { font-size: 18px; margin: 0 0 4px; }
   .card h3 a { color: inherit; }
   .card .what { margin: 6px 0 10px; }
@@ -91,7 +97,9 @@
 <!-- rag-at-a-glance -->
 <h2>Start here</h2>
 <div class="cards">
-  <div class="card start">
+  <div class="card with-image start">
+    <img class="vignette" src="img/rag_at_a_glance.svg" alt="">
+    <div>
     <h3><a href="rag_at_a_glance.html">RAG at a glance</a></h3>
     <div class="meta">
       <span class="tag">about 10 minutes</span>
@@ -104,6 +112,7 @@
       <a href="rag_at_a_glance.html">Read it</a>
       <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb">Run it in Colab</a>
     </div>
+    </div>
   </div>
 </div>
 <!-- /rag-at-a-glance -->
@@ -112,7 +121,9 @@
 <p class="section-note">One stage each, in this order: each one picks up where the last left off. None needs a key.</p>
 <div class="cards">
 
-  <div class="card">
+  <div class="card with-image">
+    <img class="vignette" src="img/embeddings.svg" alt="">
+    <div>
     <h3><a href="embeddings.html">Embeddings</a></h3>
     <div class="meta"><span class="tag">about 10 minutes</span><span class="tag">no key</span></div>
     <p class="what">What an embedding is, and how retrieval uses one.</p>
@@ -124,9 +135,12 @@
       <a href="embeddings.html">Read it</a>
       <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb">Run it in Colab</a>
     </div>
+    </div>
   </div>
 
-  <div class="card">
+  <div class="card with-image">
+    <img class="vignette" src="img/evaluation.svg" alt="">
+    <div>
     <h3><a href="evaluation.html">Evaluation</a></h3>
     <div class="meta"><span class="tag">about 15 minutes</span><span class="tag">no key</span></div>
     <p class="what">How to tell whether retrieval is any good.</p>
@@ -138,9 +152,12 @@
       <a href="evaluation.html">Read it</a>
       <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/evaluation.ipynb">Run it in Colab</a>
     </div>
+    </div>
   </div>
 
-  <div class="card">
+  <div class="card with-image">
+    <img class="vignette" src="img/reranking.svg" alt="">
+    <div>
     <h3><a href="reranking.html">Reranking</a></h3>
     <div class="meta"><span class="tag">about 15 minutes</span><span class="tag">no key</span></div>
     <p class="what">Why retrieval finds passages <em>about</em> the question rather than ones that
@@ -153,9 +170,12 @@
       <a href="reranking.html">Read it</a>
       <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/reranking.ipynb">Run it in Colab</a>
     </div>
+    </div>
   </div>
 
-  <div class="card">
+  <div class="card with-image">
+    <img class="vignette" src="img/chunking.svg" alt="">
+    <div>
     <h3><a href="chunking.html">Chunking</a></h3>
     <div class="meta"><span class="tag">about 15 minutes</span><span class="tag">no key</span></div>
     <p class="what">How a rulebook is cut into the pieces retrieval returns and Claude cites.</p>
@@ -166,6 +186,7 @@
     <div class="links">
       <a href="chunking.html">Read it</a>
       <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/chunking.ipynb">Run it in Colab</a>
+    </div>
     </div>
   </div>
 
