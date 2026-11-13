@@ -350,21 +350,29 @@ def _slices(sk: Sketch, name: str, scene: str, cuts, top, bottom, shifts) -> str
 
 def chunking() -> str:
     """Each rule set cut into chunks: the poker hand and the chessboard, each in three slices."""
-    sk = Sketch(320, 120, "Sketch of a poker hand and a chessboard, each cut into three slices")
-    top, bottom = 22, 112
+    # Stacked (hand above board) rather than side by side, so each scene is drawn
+    # large enough to read at card size.
+    sk = Sketch(220, 192, "Sketch of a poker hand and a chessboard, each cut into three slices")
+    cx = 110
 
-    hx = 70
-    hand = cards(sk, hx, 146, 0.36, FULL_HOUSE, spread=24)
-    poker = _slices(sk, "hand", hand, [hx - 62, hx - 19, hx + 19, hx + 62], top, bottom, (-5, 0, 5))
+    ps = 0.44                      # the hand, sliced between its cards
+    f = ps / 0.36
+    py = 6 + 104 * f
+    hand = cards(sk, cx, py, ps, FULL_HOUSE, spread=24)
+    poker = _slices(sk, "hand", hand, [cx - 62 * f, cx - 19 * f, cx + 19 * f, cx + 62 * f],
+                    6, py - 30 * f, (-6, 0, 6))
 
     # The chess pieces stand clear of the cuts, so each slice holds whole pieces.
-    bx, by, bs = 238, 101, 0.56
-    board_scene = board(sk, bx, by, bs, [], front=118, back=76, depth=80, edge=6, squares="tone",
+    bs = 0.64
+    g = bs / 0.56
+    top = py - 30 * f + 10
+    by = top + 60 * g
+    board_scene = board(sk, cx, by, bs, [], front=118, back=76, depth=80, edge=6, squares="tone",
                         pieces=[("rook", 0, 0), ("knight", 1, 2), ("king", 4, 0), ("queen", 3, 4),
                                 ("bishop", 6, 1), ("pawn", 7, 3)])
     half = 118 * bs
-    chess = _slices(sk, "chess", board_scene, [bx - half - 4, bx - 22, bx + 22, bx + half + 4],
-                    top, bottom, (-5, 0, 5))
+    chess = _slices(sk, "chess", board_scene, [cx - half - 4, cx - 22 * g, cx + 22 * g, cx + half + 4],
+                    top, by + 11 * g, (-6, 0, 6))
     return sk.render(poker + chess)
 
 
