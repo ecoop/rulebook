@@ -31,7 +31,7 @@ from rulebook.eval import (
 from rulebook.ingest import extract_pages
 
 RULES_ROOT = Path(__file__).resolve().parents[1] / "rules"
-DOMAINS = ["checkers", "cornhole", "poker"]
+DOMAINS = ["checkers", "tennis", "poker"]
 
 
 # --- pure metric functions (no index, no network) ---------------------------
@@ -70,7 +70,7 @@ def test_citation_rule_id_parses_and_checks_the_domain():
     assert citation_rule_id("ultimate II.B.1", "ultimate") == "II.B.1"
     assert citation_rule_id("5.1", "checkers") == "5.1"  # bare id: already this domain
     with pytest.raises(ValueError):
-        citation_rule_id("cornhole 1.1", "checkers")
+        citation_rule_id("tennis 1.1", "checkers")
 
 
 def test_load_gold_reads_citations_and_the_legacy_gold_key(tmp_path):
@@ -86,7 +86,7 @@ def test_load_gold_reads_citations_and_the_legacy_gold_key(tmp_path):
 
 def test_load_gold_rejects_a_citation_into_another_domain(tmp_path):
     (tmp_path / "x.jsonl").write_text(
-        '{"domain": "checkers", "question": "q", "citations": ["cornhole 1.1"]}\n'
+        '{"domain": "checkers", "question": "q", "citations": ["tennis 1.1"]}\n'
     )
     with pytest.raises(ValueError):
         load_gold(directory=tmp_path)
@@ -157,7 +157,7 @@ def test_scratch_index_scores_without_touching_the_real_index(monkeypatch, tmp_p
     r = rank_of(items[0].question, items[0].citations, index=idx)
     assert r is None or 1 <= r <= 5
     with pytest.raises(ValueError):
-        rank_of("q", ("1.1",), domain="cornhole", index=idx)  # wrong domain for this index
+        rank_of("q", ("1.1",), domain="tennis", index=idx)  # wrong domain for this index
 
 
 def test_hits_at_counts_and_hit_cell_shows_both():

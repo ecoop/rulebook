@@ -28,7 +28,7 @@ on:
       - src/rulebook/notebook.py
       - eval/gold/**
       - rules/checkers/**
-      - rules/cornhole/**
+      - rules/tennis/**
       - rules/poker/**
       - scripts/build_index.py
       - src/rulebook/app_state.py
@@ -118,7 +118,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          uv run --no-sync python scripts/build_index.py --domain cornhole
+          uv run --no-sync python scripts/build_index.py --domain tennis
           uv run --no-sync jupyter nbconvert notebooks/rag_at_a_glance.ipynb $RENDER --output rag_at_a_glance
 
       # The landing page is a static template, with its vignettes in img/

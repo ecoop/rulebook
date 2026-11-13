@@ -1,0 +1,12 @@
+{"domain": "tennis", "question": "How many points do you need to win a game?", "citations": ["tennis 5.1"], "style": "literal"}
+{"domain": "tennis", "question": "What does deuce mean?", "citations": ["tennis 5.2"], "style": "literal"}
+{"domain": "tennis", "question": "What happens when both players are tied at forty?", "citations": ["tennis 5.2"], "style": "paraphrase"}
+{"domain": "tennis", "question": "What happens if the serve clips the net and still lands in the box?", "citations": ["tennis 3.4"], "style": "paraphrase"}
+{"domain": "tennis", "question": "What is a double fault?", "citations": ["tennis 3.3"], "style": "literal"}
+{"domain": "tennis", "question": "How do you win a set?", "citations": ["tennis 5.3"], "style": "literal"}
+{"domain": "tennis", "question": "What happens at six games all?", "citations": ["tennis 5.4"], "style": "paraphrase"}
+{"domain": "tennis", "question": "How many sets does it take to win the match?", "citations": ["tennis 5.5"], "style": "literal"}
+{"domain": "tennis", "question": "Can you hit the ball before it bounces?", "citations": ["tennis 2.3"], "style": "paraphrase"}
+{"domain": "tennis", "question": "Is a ball that lands on the line in or out?", "citations": ["tennis 1.2"], "style": "paraphrase"}
+{"domain": "tennis", "question": "Where does the server have to stand?", "citations": ["tennis 3.1"], "style": "literal"}
+{"domain": "tennis", "question": "What happens if a player touches the net during a point?", "citations": ["tennis 4.2"], "style": "paraphrase"}

@@ -1,8 +1,8 @@
 # Copyright (c) 2026 Eric Cooper.
 """The committed sample corpora chunk cleanly — no API, no built index needed.
 
-These are the two domains a fresh clone can build and ask against with zero
-downloads (rules/checkers/, rules/cornhole/). This guard proves they stay
+These are the sample domains a fresh clone can build and ask against with zero
+downloads (rules/checkers/, rules/tennis/, rules/poker/). This guard proves they stay
 ingestable and that the section-aware chunker keeps finding their numbered
 rules, so the tutorial's first step never silently rots into empty-index land.
 """
@@ -21,7 +21,7 @@ RULES_ROOT = Path(__file__).resolve().parents[1] / "rules"
 # (domain, a few rule ids that must survive chunking)
 SAMPLES = [
     ("checkers", {"1.1", "2.1", "3.3", "5.1"}),
-    ("cornhole", {"1.1", "3.3", "3.4", "4.2"}),
+    ("tennis", {"1.1", "3.4", "5.2", "5.4"}),
     ("poker", {"1.1", "3.2", "4.1", "5.4"}),
 ]
 
@@ -45,4 +45,4 @@ def test_sample_corpus_chunks_cleanly(domain: str, expected_ids: set[str]) -> No
 
 def test_sample_domains_present() -> None:
     present = {p.name for p in RULES_ROOT.iterdir() if p.is_dir()}
-    assert {"checkers", "cornhole", "poker"} <= present
+    assert {"checkers", "tennis", "poker"} <= present
