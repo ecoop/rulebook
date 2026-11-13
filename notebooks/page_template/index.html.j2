@@ -27,5 +27,19 @@
   .jp-OutputArea-output pre { line-height: 1.45; }
   /* Output tables line up with output text and get some air. */
   .jp-OutputArea-output table { margin: 6px 0 4px 0; }
+  /* The notebook's vignette (img/, drawn by vignettes.py), beside the title. */
+  .vignette { float: right; width: 220px; height: auto; margin: 4px 0 12px 28px; }
+  @media (max-width: 560px) {
+    .vignette { float: none; display: block; width: 100%; max-width: 260px; margin: 0 0 8px; }
+  }
 </style>
 {%- endblock html_head_css -%}
+
+{#- Same names as VIGNETTES in vignettes.py; a notebook without one gets no image. -#}
+{%- block body_header -%}
+{{ super() }}
+{%- set name = resources['metadata']['name'] %}
+{%- if name in ['rag_at_a_glance', 'embeddings', 'evaluation', 'reranking', 'chunking'] %}
+<img class="vignette" src="img/{{ name }}.svg" alt="">
+{%- endif %}
+{%- endblock body_header -%}

@@ -243,11 +243,59 @@ def card(sk: Sketch, x, y, s, rank, suit) -> str:
     return place(x, y, s, inner)
 
 
+# --- tennis: origin at the butt of the handle, up is negative y ------------------
+def racket(sk: Sketch, x: float, y: float, s: float, turn: float = 0.0) -> str:
+    """A tennis racket: oval head with strings, open throat, wrapped grip."""
+    cy, rx, ry, rim = -150, 44, 58, 7          # head centre, outer radii, frame width
+    irx, iry = rx - rim, ry - rim
+    clip = sk.uid("strings")
+    strings = " ".join(
+        [f"M{i} {cy - iry} L{i} {cy + iry}" for i in range(-irx + 6, irx, 8)]
+        + [f"M{-irx} {j} L{irx} {j}" for j in range(cy - iry + 6, cy + iry, 8)]
+    )
+    ring = (f"M{-rx} {cy} a{rx} {ry} 0 1 0 {2 * rx} 0 a{rx} {ry} 0 1 0 {-2 * rx} 0 Z "
+            f"M{-irx} {cy} a{irx} {iry} 0 1 0 {2 * irx} 0 a{irx} {iry} 0 1 0 {-2 * irx} 0 Z")
+    grip = " ".join(f"M-7 {j} L7 {j - 6}" for j in range(-6, -62, -9))
+    inner = (
+        f'<clipPath id="{clip}"><ellipse cx="0" cy="{cy}" rx="{irx}" ry="{iry}"/></clipPath>'
+        f'<path d="{strings}" stroke-width="0.8" opacity="0.75" clip-path="url(#{clip})"/>'
+        f'<path d="{ring}" fill-rule="evenodd" fill="{sk.hatch("tight", s)}" stroke-width="1.6"/>'
+        # throat: two arms from the head down to the top of the grip
+        f'<path d="M-24 {cy + ry - 8} C -14 -80, -8 -74, -7 -66 M24 {cy + ry - 8} C 14 -80, 8 -74, 7 -66" '
+        f'stroke-width="1.6"/>'
+        f'<path d="M-24 {cy + ry - 8} Q 0 {cy + ry + 4} 24 {cy + ry - 8}" stroke-width="1.2"/>'
+        f'<path d="M-7 -66 L-8 0 L8 0 L7 -66 Z" fill="#fff" stroke-width="1.6"/>'
+        f'<path d="{grip}" stroke-width="1" opacity="0.8"/>'
+        f'<path d="M-9 0 L9 0 L9 4 L-9 4 Z" fill="{sk.hatch("tight", s)}" stroke-width="1.3"/>'
+    )
+    return f'<g transform="translate({x} {y}) rotate({turn}) scale({s})">{inner}</g>'
+
+
+def ball(sk: Sketch, x: float, y: float, r: float) -> str:
+    """A tennis ball: shaded on one side, with its curved seam."""
+    clip = sk.uid("ball")
+    return (
+        f'<clipPath id="{clip}"><circle cx="{x}" cy="{y}" r="{r}"/></clipPath>'
+        f'<ellipse cx="{x + 1}" cy="{y + r + 1}" rx="{r * 1.1:.1f}" ry="{r * 0.22:.1f}" '
+        f'fill="{sk.hatch("light", 1)}" stroke="none" opacity="0.5"/>'
+        f'<circle cx="{x}" cy="{y}" r="{r}" fill="#fff" stroke-width="1.5"/>'
+        f'<rect x="{x + r * 0.15:.1f}" y="{y - r}" width="{r * 1.2:.1f}" height="{2 * r}" '
+        f'fill="{sk.hatch("light", 1)}" clip-path="url(#{clip})" stroke="none"/>'
+        f'<path d="M{x - r * 0.8:.1f} {y - r * 0.6:.1f} C {x - r * 0.15:.1f} {y - r * 0.2:.1f}, '
+        f'{x - r * 0.15:.1f} {y + r * 0.2:.1f}, {x - r * 0.8:.1f} {y + r * 0.6:.1f} '
+        f'M{x + r * 0.8:.1f} {y - r * 0.6:.1f} C {x + r * 0.15:.1f} {y - r * 0.2:.1f}, '
+        f'{x + r * 0.15:.1f} {y + r * 0.2:.1f}, {x + r * 0.8:.1f} {y + r * 0.6:.1f}" '
+        f'stroke-width="1.2" clip-path="url(#{clip})"/>'
+    )
+
+
 def glance() -> str:
-    sk = Sketch(320, 170, "Sketch of a poker hand beside a checkerboard with checkers")
+    """The two rule sets RAG at a glance uses: checkers and tennis."""
+    sk = Sketch(320, 170, "Sketch of a tennis racket and ball beside a checkerboard with checkers")
     return sk.render(
-        board(sk, 212, 150, 0.68, GAME[::2], front=125, back=72, depth=70)
-        + cards(sk, 86, 178, 0.5, [("K", "S"), ("7", "H"), ("2", "C")], spread=20)
+        board(sk, 226, 150, 0.68, GAME[::2], front=125, back=72, depth=70)
+        + racket(sk, 84, 162, 0.66, turn=-20)
+        + ball(sk, 122, 151, 11)
     )
 
 
