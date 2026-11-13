@@ -1,0 +1,193 @@
+<!-- Copyright (c) 2026 Eric Cooper. -->
+<!--
+  The notebooks landing page (ecoop.github.io/rulebook/). Copied to _site/index.html
+  by .github/workflows/notebook-page.yml. The RAG at a glance card sits between the
+  rag-at-a-glance markers; the workflow drops it when that page wasn't built (no key).
+  Same font, column and colours as the notebook pages (page_template/index.html.j2).
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learn RAG with Rulebook</title>
+<meta name="description" content="Notebooks that run real questions through a working RAG app, one stage at a time.">
+<style>
+  :root {
+    --text: rgba(0, 0, 0, 0.87);
+    --muted: rgba(0, 0, 0, 0.6);
+    --line: #e0e0e0;
+    --card: #fafafa;
+    --accent: #1976d2;
+    --tag: #eef3f8;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto;
+    max-width: 920px;
+    padding: 40px 20px 96px;
+    background: #fff;
+    color: var(--text);
+    font: 15px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  h1 { font-size: 30px; line-height: 1.25; margin: 0 0 12px; }
+  h2 { font-size: 19px; margin: 44px 0 6px; }
+  p { margin: 0 0 0.8em; }
+  .lead { font-size: 17px; color: var(--text); max-width: 720px; }
+  .section-note { color: var(--muted); margin-bottom: 16px; }
+
+  .cards { display: grid; gap: 16px; }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--card);
+    padding: 18px 20px 16px;
+  }
+  .card.start { border-color: var(--accent); background: #fff; border-width: 2px; }
+  .card h3 { font-size: 18px; margin: 0 0 4px; }
+  .card h3 a { color: inherit; }
+  .card .what { margin: 6px 0 10px; }
+  .card ul { margin: 0 0 12px; padding-left: 20px; }
+  .card li { margin-bottom: 2px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .tag {
+    background: var(--tag);
+    border-radius: 999px;
+    padding: 1px 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .cards > * { min-width: 0; }
+  .links { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; }
+  .links a:first-child { font-weight: 600; }
+  .coming { color: var(--muted); }
+  .coming h3 { color: var(--muted); }
+  pre {
+    background: #f5f5f5;
+    border-radius: 6px;
+    padding: 10px 14px;
+    overflow-x: auto;
+    font-size: 13px;
+  }
+  footer { margin-top: 48px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<h1>Learn RAG with Rulebook</h1>
+<p class="lead">
+  <a href="https://github.com/ecoop/rulebook">Rulebook</a> answers questions about a rulebook, citing
+  the rule behind every claim. These notebooks run real questions through its own pipeline, one stage
+  at a time, on three small sample rule sets: checkers, cornhole and poker.
+</p>
+<p class="section-note">
+  Each page below shows a fresh run with every result filled in, so you can read it without installing
+  anything. Every notebook also runs in Colab, free with a Google account.
+</p>
+
+<!-- rag-at-a-glance -->
+<h2>Start here</h2>
+<div class="cards">
+  <div class="card start">
+    <h3><a href="rag_at_a_glance.html">RAG at a glance</a></h3>
+    <div class="meta">
+      <span class="tag">about 10 minutes</span>
+      <span class="tag">your Anthropic key, last section only</span>
+    </div>
+    <p class="what">One question, followed through the whole pipeline: the rules cut into chunks, the
+      nearest chunks retrieved, and Claude's answer with its citations. The last section calls Claude with your own key, about a cent a
+      question; everything before it runs without one.</p>
+    <div class="links">
+      <a href="rag_at_a_glance.html">Read it</a>
+      <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb">Run it in Colab</a>
+    </div>
+  </div>
+</div>
+<!-- /rag-at-a-glance -->
+
+<h2>Go further</h2>
+<p class="section-note">One stage each, in this order: each one picks up where the last left off. None needs a key.</p>
+<div class="cards">
+
+  <div class="card">
+    <h3><a href="embeddings.html">Embeddings</a></h3>
+    <div class="meta"><span class="tag">about 10 minutes</span><span class="tag">no key</span></div>
+    <p class="what">What an embedding is, and how retrieval uses one.</p>
+    <ul>
+      <li>See a question and a rule as vectors, and the distance between them.</li>
+      <li>Swap the embedding model and watch which rules come back change.</li>
+    </ul>
+    <div class="links">
+      <a href="embeddings.html">Read it</a>
+      <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb">Run it in Colab</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><a href="evaluation.html">Evaluation</a></h3>
+    <div class="meta"><span class="tag">about 15 minutes</span><span class="tag">no key</span></div>
+    <p class="what">How to tell whether retrieval is any good.</p>
+    <ul>
+      <li>Write the right answers down once (a gold set), then score any setup with hit@k and MRR.</li>
+      <li>Find the misses a score hides: on poker, the right rule from the wrong variant.</li>
+    </ul>
+    <div class="links">
+      <a href="evaluation.html">Read it</a>
+      <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/evaluation.ipynb">Run it in Colab</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><a href="reranking.html">Reranking</a></h3>
+    <div class="meta"><span class="tag">about 15 minutes</span><span class="tag">no key</span></div>
+    <p class="what">Why retrieval finds passages <em>about</em> the question rather than ones that
+      <em>answer</em> it, and a second stage that fixes the order.</p>
+    <ul>
+      <li>Compare BM25, a hybrid, and a cross-encoder that reads the question and passage together.</li>
+      <li>Weigh what each fixes and breaks against its cost per question.</li>
+    </ul>
+    <div class="links">
+      <a href="reranking.html">Read it</a>
+      <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/reranking.ipynb">Run it in Colab</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><a href="chunking.html">Chunking</a></h3>
+    <div class="meta"><span class="tag">about 15 minutes</span><span class="tag">no key</span></div>
+    <p class="what">How a rulebook is cut into the pieces retrieval returns and Claude cites.</p>
+    <ul>
+      <li>Compare ways of cutting fairly, at the same reading budget.</li>
+      <li>Find a chunking bug with the gold set, and an overlooked fix for poker's wrong-variant misses.</li>
+    </ul>
+    <div class="links">
+      <a href="chunking.html">Read it</a>
+      <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/chunking.ipynb">Run it in Colab</a>
+    </div>
+  </div>
+
+  <div class="card coming">
+    <h3>Generation &amp; citations <span class="tag">coming</span></h3>
+    <p class="what">What Claude is given, why every claim must cite a rule, and how it declines
+      questions the rules don't cover. Will need an Anthropic key.</p>
+  </div>
+
+</div>
+
+<h2>Run them on your own machine</h2>
+<p>From a clone of the repo:</p>
+<pre>uv sync
+uv run jupyter lab</pre>
+<p>Then add a rulebook of your own and ask it questions; the
+  <a href="https://github.com/ecoop/rulebook#learning-rag">README</a> has the details.</p>
+
+<footer>
+  From <a href="https://github.com/ecoop/rulebook">ecoop/rulebook</a> (MIT). These pages are rebuilt
+  from the notebooks whenever the code they use changes.
+</footer>
+
+</body>
+</html>
