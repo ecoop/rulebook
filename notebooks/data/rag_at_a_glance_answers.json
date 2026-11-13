@@ -1,0 +1,26 @@
+{
+  "about": "Claude's answers shown in notebooks/rag_at_a_glance.ipynb section 3, saved so the notebook runs without an API key. Re-record with scripts/record_glance_answers.py.",
+  "model": "claude-sonnet-5",
+  "recorded": "2026-11-13",
+  "from": "a CI run of the notebook (notebook-page.yml run 43527761210, commit 031097e)",
+  "answers": [
+    {
+      "question": "How does a piece become a king, and what can it then do?",
+      "domain": "checkers",
+      "answer": "A man becomes a king when it reaches the opponent's back row (the king row), at which point it is immediately crowned by stacking a second piece on top of it [checkers 4.1][checkers 1.2]. If the promotion happens on the last jump of a multi-jump capture, the turn ends immediately — the new king does not keep jumping until the player's next turn [checkers 4.1].\n\nOnce crowned, a king can move one square diagonally in any direction, forward or backward [checkers 4.2]. It also captures like a man by jumping an adjacent enemy piece into the empty space beyond, but it may do so forward or backward and chain jumps in any mix of directions, still subject to the compulsory-capture rule [checkers 4.3]. This backward mobility is what makes a king more powerful than an ordinary man, which can only move and capture forward [checkers 2.4][checkers 4.2]."
+    },
+    {
+      "question": "What is the offside rule in soccer?",
+      "domain": "checkers",
+      "answer": "The provided context contains only rules for Checkers; it does not include any rules for soccer, so I cannot answer this question from the available context."
+    },
+    {
+      "question": "How do you win each game?",
+      "domains": [
+        "checkers",
+        "tennis"
+      ],
+      "answer": "**Checkers:** You win when your opponent has no legal move on their turn—either because you've captured all their pieces, or because all their remaining pieces are blocked and unable to move [checkers 2.1][checkers 5.1].\n\n**Tennis:** Winning a \"game\" refers to the scoring unit within a set: points are called love, 15, 30, 40, and winning a point while at 40 wins the game (unless both players reach 40, i.e., deuce) [tennis 5.1]. To win the overall match, a player must win the required number of sets, where a set is won by reaching six games with a two-game margin (or via a tiebreak at six-all) [tennis 5.3][tennis 5.4][tennis 2.1]."
+    }
+  ]
+}

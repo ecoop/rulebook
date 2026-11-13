@@ -1,17 +1,14 @@
 name: Notebook page
 
 # Runs the notebooks and publishes them, with every output, as results pages:
-#   https://ecoop.github.io/rulebook/rag_at_a_glance.html  (needs a key)
-#   https://ecoop.github.io/rulebook/embeddings.html       (key-free)
-#   https://ecoop.github.io/rulebook/evaluation.html       (key-free)
-#   https://ecoop.github.io/rulebook/reranking.html        (key-free)
+#   https://ecoop.github.io/rulebook/<notebook>.html, plus the landing page
 # The notebooks stay committed without outputs (so Colab and Jupyter open them
 # un-run); these pages are the "read it with results" view. They're built here
 # and deployed straight to Pages, never committed.
 #
-# RAG at a glance asks Claude three questions (about a cent each), so it needs
-# the ANTHROPIC_API_KEY repo secret. Without the secret, that page is
-# skipped and only the key-free pages are published.
+# Every notebook is key-free. RAG at a glance shows Claude's answers saved in
+# notebooks/data/ (re-recorded by scripts/record_glance_answers.py) rather than
+# calling Claude, so no API key is used here.
 #
 # Runs only on pushes to main that touch something the notebooks use, plus a
 # manual "Run workflow" button. A failed run leaves the last good pages up.
@@ -25,6 +22,7 @@ on:
       - notebooks/reranking.ipynb
       - notebooks/chunking.ipynb
       - notebooks/page_template/**
+      - notebooks/data/**
       - src/rulebook/notebook.py
       - eval/gold/**
       - rules/checkers/**
@@ -65,9 +63,8 @@ jobs:
     env:
       # fastembed keeps its models in a temp dir by default; put them in the cache below.
       FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
-      # true/false only; the key itself is given to the RAG at a glance step alone.
-      HAS_ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       # Same rendering for every page: the page_template layout, no In/Out prompts.
+      # The template leaves off cells tagged run-only or run-setup (see index.html.j2).
       RENDER: >-
         --execute --to html
         --TemplateExporter.extra_template_basedirs=notebooks
@@ -97,7 +94,7 @@ jobs:
           key: hf-${{ hashFiles('notebooks/*.ipynb', 'src/rulebook/config.py') }}
           restore-keys: hf-
 
-      # No API key is set in these steps, so they prove these notebooks are key-free.
+      # No API key is set in any step, so these builds prove every notebook is key-free.
       - name: Embeddings page
         run: uv run --no-sync jupyter nbconvert notebooks/embeddings.ipynb $RENDER --output embeddings
 
@@ -111,23 +108,16 @@ jobs:
         run: uv run --no-sync jupyter nbconvert notebooks/chunking.ipynb $RENDER --output chunking
 
       - name: RAG at a glance page
-        if: env.HAS_ANTHROPIC_KEY == 'true'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           uv run --no-sync python scripts/build_index.py --domain tennis
           uv run --no-sync jupyter nbconvert notebooks/rag_at_a_glance.ipynb $RENDER --output rag_at_a_glance
 
       # The landing page is a static template, with its vignettes in img/
-      # (drawn by notebooks/page_template/vignettes.py). Without the key, RAG at a glance isn't
-      # built, so its card (between the rag-at-a-glance markers) is dropped.
+      # (drawn by notebooks/page_template/vignettes.py).
       - name: Landing page
         run: |
           cp notebooks/page_template/landing.html _site/index.html
           cp -r notebooks/page_template/img _site/img
-          if [ ! -f _site/rag_at_a_glance.html ]; then
-            sed -i '/<!-- rag-at-a-glance -->/,/<!-- \/rag-at-a-glance -->/d' _site/index.html
-          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:

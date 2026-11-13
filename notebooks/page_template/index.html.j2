@@ -44,6 +44,16 @@
 </style>
 {%- endblock html_head_css -%}
 
+{#- Cells only for someone running the notebook are left off the page: run-only
+    (how to run it) and run-setup (the setup code; it still runs, since later cells
+    need it, but its code and output aren't shown). Skipped here, after execution. -#}
+{%- block any_cell -%}
+{%- set tags = cell.metadata.get('tags', []) -%}
+{%- if 'run-only' not in tags and 'run-setup' not in tags -%}
+{{ super() }}
+{%- endif -%}
+{%- endblock any_cell -%}
+
 {#- The page's own chrome (not in the notebook, so Colab doesn't show it): a bar
     back to the notebooks page and to this notebook in Colab, then the vignette.
     Vignette names match VIGNETTES in vignettes.py; a notebook without one gets no image. -#}

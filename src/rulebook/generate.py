@@ -156,6 +156,21 @@ def _is_covered(domain: str, rule_id: str, valid: set[tuple[str, str]]) -> bool:
     )
 
 
+def build_prompt(question: str, chunks: list[RetrievedChunk]) -> tuple[str, str]:
+    """The system prompt and user message Claude is sent for ``question``: no call.
+
+    Separate from :func:`generate_answer` so the exact prompt can be shown (the
+    RAG at a glance notebook prints it) without an API key.
+    """
+    # Distinct domains present in the retrieved context, in first-seen order,
+    # named by their registry display name (#113) — "Ultimate (USAU)", not the
+    # bare slug. Citations still key on the slug shown in each context header.
+    domains = list(dict.fromkeys(c.domain for c in chunks))
+    labels = display_labels(domains)
+    system_prompt = build_system_prompt([labels[d] for d in domains])
+    return system_prompt, USER_TEMPLATE.format(context=format_context(chunks), question=question)
+
+
 def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAnswer:
     """Call Claude with the retrieved chunks and return the answer + usage.
 
@@ -171,13 +186,7 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
             "it) to use `ask` or the web app."
         )
     client = Anthropic(api_key=settings.anthropic_api_key)
-    context = format_context(chunks)
-    # Distinct domains present in the retrieved context, in first-seen order,
-    # named by their registry display name (#113) — "Ultimate (USAU)", not the
-    # bare slug. Citations still key on the slug shown in each context header.
-    domains = list(dict.fromkeys(c.domain for c in chunks))
-    labels = display_labels(domains)
-    system_prompt = build_system_prompt([labels[d] for d in domains])
+    system_prompt, user_message = build_prompt(question, chunks)
     hooks = [
         # Fail closed on a model lcg can't price ($0 → invisible spend → the
         # WindowedCapHook below never trips). Ordered first so it gates the call.
@@ -200,7 +209,7 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
         messages=[
             {
                 "role": "user",
-                "content": USER_TEMPLATE.format(context=context, question=question),
+                "content": user_message,
             }
         ],
         **extra,
