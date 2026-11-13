@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # EMBEDDING_MODEL=voyage-4), because query and stored vectors must share a model.
     embedding_provider: str = Field(default="local", pattern="^(local|voyage|openai)$")
     embedding_model: str = "minishlab/potion-retrieval-32M"
+    # Put each numbered rule's Markdown section name at the front of its chunk
+    # ("Seven-Card Stud: 3.4 ..."). Index-time: changing it needs a rebuild.
+    chunk_section_headers: bool = False
     # Optional second pass over a wider candidate set (src/rulebook/rerank.py).
     # "none" (default) leaves retrieval unchanged; bm25/hybrid need nothing extra;
     # "local" is a cross-encoder and needs `uv sync --extra rerank-local`.

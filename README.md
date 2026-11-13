@@ -21,7 +21,9 @@ The notebooks run real questions through Rulebook's own pipeline, one stage at a
 - **Go further:** [**Evaluation**](https://ecoop.github.io/rulebook/evaluation.html): how to measure retrieval. Write the right answers down once, then score any setup against them, on checkers and then on poker. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/evaluation.ipynb).
 - **Go further:** [**Reranking**](https://ecoop.github.io/rulebook/reranking.html): why retrieval finds passages *about* the question rather than ones that *answer* it, and a second stage that fixes the order: BM25, hybrid, and a cross-encoder, scored on poker and checkers. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/reranking.ipynb).
 
-More *Go further* notebooks are coming: chunking, and generation & citations. To run them on your own machine, and for what to read after them, see [Learning RAG](#learning-rag).
+- **Go further:** [**Chunking**](https://ecoop.github.io/rulebook/chunking.html): how a rulebook is cut into chunks, how to compare ways of cutting fairly (the same reading budget for each), a chunking bug the gold set found, and section headers, a one-line fix for poker's wrong-variant misses. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/chunking.ipynb).
+
+One more *Go further* notebook is coming: generation & citations. To run them on your own machine, and for what to read after them, see [Learning RAG](#learning-rag).
 
 ## What's in here
 
@@ -46,6 +48,7 @@ rulebook/
 │   ├── ask.py                 # CLI: `python -m rulebook.ask` — retrieve + answer in the terminal
 │   ├── add.py                 # CLI: `python -m rulebook.add <slug> <file>` — one-command ingest
 │   ├── eval.py                # CLI + lib: `python -m rulebook.eval` — hit@k / MRR over a gold set
+│   ├── chunk_eval.py          # compare ways of chunking at an equal reading budget
 │   ├── roles.py               # capability-based RBAC (suspended…superuser, ROLE_CAPABILITIES)
 │   ├── allowed_domains.py     # per-user domain scoping
 │   ├── registry.py            # per-domain metadata (display name, source URLs)
@@ -112,7 +115,7 @@ See [`rules/SOURCES.md`](rules/SOURCES.md) for a menu of recognizable rulesets a
 
 ### Learning RAG
 
-New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_glance.ipynb) ([results page](https://ecoop.github.io/rulebook/rag_at_a_glance.html)), a short tour that runs a question through every stage (chunk → embed and retrieve → generate) on the sample domains. Each stage points to a *Go further* notebook. The first two are [`notebooks/embeddings.ipynb`](notebooks/embeddings.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings.html)), on what an embedding is, and [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb) ([results page](https://ecoop.github.io/rulebook/evaluation.html)), on how to *measure* retrieval (hit@k/MRR, checkers then poker, local vs Voyage), and [`notebooks/reranking.ipynb`](notebooks/reranking.ipynb) ([results page](https://ecoop.github.io/rulebook/reranking.html)), on reordering what retrieval found. Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
+New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_glance.ipynb) ([results page](https://ecoop.github.io/rulebook/rag_at_a_glance.html)), a short tour that runs a question through every stage (chunk → embed and retrieve → generate) on the sample domains. Each stage points to a *Go further* notebook. They are [`notebooks/embeddings.ipynb`](notebooks/embeddings.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings.html)), on what an embedding is, and [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb) ([results page](https://ecoop.github.io/rulebook/evaluation.html)), on how to *measure* retrieval (hit@k/MRR, checkers then poker, local vs Voyage), and [`notebooks/reranking.ipynb`](notebooks/reranking.ipynb) ([results page](https://ecoop.github.io/rulebook/reranking.html)), on reordering what retrieval found, and [`notebooks/chunking.ipynb`](notebooks/chunking.ipynb) ([results page](https://ecoop.github.io/rulebook/chunking.html)), on how the rules are cut into chunks. Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
 
 **No install? Run it in your browser.**
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb)
@@ -157,6 +160,12 @@ uv run python -m rulebook.eval --domain poker --rerank hybrid
 ```
 
 [`notebooks/reranking.ipynb`](notebooks/reranking.ipynb) walks through all three on poker and checkers. Hosted rerankers and Claude as a reranker are tracked in [#258](https://github.com/ecoop/rulebook/issues/258).
+
+### Chunking
+
+Rulebook cuts each rulebook at its own rule numbers, so one chunk is one citable rule ([`src/rulebook/chunking.py`](src/rulebook/chunking.py)). To compare chunkers, don't score hit@k per chunk: a bigger chunk holds more rules and hits more often. [`src/rulebook/chunk_eval.py`](src/rulebook/chunk_eval.py) gives every cut the same reading budget and reports how much of it is the cited rule.
+
+`CHUNK_SECTION_HEADERS=true` puts each numbered rule's Markdown section name at the front of its chunk ("Seven-Card Stud: 3.4 ..."), which removes poker's wrong-variant misses. It's off by default and changes the embedded text, so rebuild the index after setting it. It applies to Markdown rule files with `##` section headings; PDFs don't get section headers yet. [`notebooks/chunking.ipynb`](notebooks/chunking.ipynb) measures both.
 
 ## Adding a domain
 

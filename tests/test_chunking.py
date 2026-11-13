@@ -196,3 +196,56 @@ def test_split_word_cuts_an_oversize_sentence():
     pieces = _split_if_long(text)
     assert len(pieces) > 1 and all(len(p) <= MAX_CHARS for p in pieces)
     assert " ".join(pieces) == _normalize_ws(text)
+
+
+# --- Markdown section headings between numbered rules ---
+
+_SECTIONED = """# Card games — sample rules
+
+Shared conventions for every game below.
+
+## 1. Draw
+
+1.1 The deal. Each player is dealt five cards face down by the dealer.
+1.2 The draw. Each player may discard and replace up to three cards.
+1.3 Showdown. The best five-card hand wins the pot at the end.
+
+## 2. Stud
+
+2.1 The deal. Each player gets one card down and one card up to start.
+2.2 Betting. The lowest upcard posts the bring-in on the first round.
+2.3 Showdown. The best five-card hand wins after the final round.
+"""
+
+
+def _sectioned_chunks(**kw):
+    return chunk_pages([PageText(page_number=1, text=_SECTIONED)], source="c.md", domain="cards", **kw)
+
+
+def test_section_heading_is_not_glued_to_the_previous_rule():
+    by_id = {c.rule_id: c.text for c in _sectioned_chunks()}
+    assert by_id["1.3"].endswith("at the end.")  # not "... at the end. ## 2. Stud"
+    assert "#" not in by_id["preamble"].split("below.")[-1]  # nor "## 1. Draw"
+
+
+def test_section_headers_are_off_by_default():
+    by_id = {c.rule_id: c.text for c in _sectioned_chunks()}
+    assert by_id["2.2"].startswith("2.2 Betting.")
+
+
+def test_section_headers_prefix_the_section_name_without_its_number():
+    by_id = {c.rule_id: c.text for c in _sectioned_chunks(section_headers=True)}
+    assert by_id["1.3"].startswith("Draw: 1.3 Showdown.")
+    assert by_id["2.2"].startswith("Stud: 2.2 Betting.")
+    assert not by_id["preamble"].startswith(("Draw", "Stud"))
+
+
+def test_a_heading_used_once_is_a_title_not_a_section():
+    # Only the document title is a heading, so no rule gets a prefix.
+    text = _SECTIONED.replace("## 1. Draw\n", "").replace("## 2. Stud\n", "")
+    chunks = chunk_pages(
+        [PageText(page_number=1, text=text)], source="c.md", domain="cards", section_headers=True
+    )
+    assert [c.text.split(" ")[0] for c in chunks if c.rule_id != "preamble"] == [
+        "1.1", "1.2", "1.3", "2.1", "2.2", "2.3"
+    ]
