@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Eric Cooper.
 """Section-aware chunking for rulebooks.
 
 The single biggest quality lever in RAG over structured documents. A naive
@@ -129,13 +130,22 @@ def _normalize_ws(text: str) -> str:
     return _WHITESPACE_RUN.sub(" ", text).strip()
 
 
-def chunk_pages(pages: list[PageText], *, source: str, domain: str) -> list[Chunk]:
-    """Chunk a list of PageText into a list of Chunk records."""
+def chunk_pages(
+    pages: list[PageText], *, source: str, domain: str, section_headers: bool = False
+) -> list[Chunk]:
+    """Chunk a list of PageText into a list of Chunk records.
+
+    ``section_headers`` puts the name of the Markdown section a numbered rule
+    sits under at the front of its chunk ("Seven-Card Stud: 3.4 ..."), so a short
+    rule's vector carries its context. Off by default (``CHUNK_SECTION_HEADERS``);
+    notebooks/chunking.ipynb measures what it does.
+    """
     if not pages:
         return []
 
     joined, page_starts = _join_with_offsets(pages)
     anchors = _detect_anchors(joined)
+    sections = _section_headings(joined) if section_headers and anchors else []
 
     if not anchors:
         # No rule-numbering scheme — try markdown headings (authored prose rules
@@ -150,7 +160,7 @@ def chunk_pages(pages: list[PageText], *, source: str, domain: str) -> list[Chun
 
     # Optionally emit a "preamble" chunk for pre-first-anchor text.
     if anchors[0][0] > 0:
-        preamble = joined[: anchors[0][0]].strip()
+        preamble = _strip_trailing_headings(joined[: anchors[0][0]])
         if len(preamble) >= MIN_CHARS:
             page_end = _page_for(anchors[0][0] - 1, page_starts)
             for piece in _split_if_long(preamble):
@@ -168,9 +178,10 @@ def chunk_pages(pages: list[PageText], *, source: str, domain: str) -> list[Chun
     # One chunk (or several, after _split_if_long) per anchor.
     for i, (offset, rule_id) in enumerate(anchors):
         end = anchors[i + 1][0] if i + 1 < len(anchors) else len(joined)
-        section_text = joined[offset:end].strip()
+        section_text = _strip_trailing_headings(joined[offset:end])
         page_start = _page_for(offset, page_starts)
         page_end = _page_for(max(end - 1, offset), page_starts)
+        prefix = _section_for(offset, sections)
         for piece in _split_if_long(section_text):
             chunks.append(
                 Chunk(
@@ -179,7 +190,7 @@ def chunk_pages(pages: list[PageText], *, source: str, domain: str) -> list[Chun
                     rule_id=rule_id,
                     page_start=page_start,
                     page_end=page_end,
-                    text=_normalize_ws(piece),
+                    text=_normalize_ws(f"{prefix}: {piece}" if prefix else piece),
                 )
             )
 
@@ -290,6 +301,49 @@ def _detect_markdown_heading_anchors(text: str) -> list[tuple[int, str]]:
         if title:
             out.append((m.start(), title))
     return out
+
+
+def _strip_trailing_headings(text: str) -> str:
+    """Drop Markdown heading lines from the end of a section.
+
+    A numbered rule runs up to the next rule, so a section heading that sits
+    between two rules ("## 3. Seven-Card Stud") would otherwise end the
+    *previous* rule's chunk and pull its vector toward the next section.
+    """
+    lines = text.rstrip().split("\n")
+    while lines and (not lines[-1].strip() or _MD_HEADING.fullmatch(lines[-1])):
+        lines.pop()
+    return "\n".join(lines).strip()
+
+
+_SECTION_NUMBER = re.compile(r"^\d+(?:\.\d+)*\.?\s+")
+
+
+def _section_headings(text: str) -> list[tuple[int, str]]:
+    """(offset, title) of the Markdown headings that divide a document into sections.
+
+    Only heading levels used at least twice count: a heading that appears once
+    is the document's title, and putting it on every chunk tells retrieval
+    nothing. A leading number ("3. Seven-Card Stud") is dropped from the title.
+    """
+    found = [
+        (m.start(), len(m.group(0).lstrip(" \t")) - len(m.group(0).lstrip(" \t#")), m.group(1))
+        for m in _MD_HEADING.finditer(text)
+    ]
+    counts: dict[int, int] = {}
+    for _off, level, _title in found:
+        counts[level] = counts.get(level, 0) + 1
+    return [
+        (off, _SECTION_NUMBER.sub("", title))
+        for off, level, title in found
+        if counts[level] >= 2 and title
+    ]
+
+
+def _section_for(offset: int, sections: list[tuple[int, str]]) -> str | None:
+    """Title of the last section heading before ``offset``, if any."""
+    i = bisect_right([off for off, _ in sections], offset)
+    return sections[i - 1][1] if i else None
 
 
 def _detect_hierarchical_anchors(text: str) -> list[tuple[int, str]]:

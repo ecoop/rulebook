@@ -55,7 +55,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .chunking import chunk_pages
+from .chunking import Chunk, chunk_pages
 from .config import settings
 from .embeddings import LocalEmbedder
 from .ingest import extract_pages
@@ -213,20 +213,43 @@ class ScratchIndex:
 _SOURCE_SUFFIXES = {".pdf", ".md", ".txt"}  # the same suffixes build_index.py ingests
 
 
-def build_scratch_index(domain: str, model: str) -> ScratchIndex:
-    """Chunk a domain's rule docs and embed them with a local model2vec ``model``.
+def domain_chunks(domain: str, *, section_headers: bool | None = None) -> list[Chunk]:
+    """A domain's rule documents, chunked the way ``build_index.py`` chunks them.
 
     Rule documents only (no gold-answer chunks), which is all the sample domains
-    have. The first call for a model downloads it once (tens of MB) and caches it.
+    have. ``section_headers`` defaults to the ``CHUNK_SECTION_HEADERS`` setting.
     """
+    if section_headers is None:
+        section_headers = settings.chunk_section_headers
     docs = sorted(
         p
         for p in (settings.rules_dir / domain).iterdir()
         if p.is_file() and p.suffix.lower() in _SOURCE_SUFFIXES
     )
-    chunks = [
-        c for d in docs for c in chunk_pages(extract_pages(d), source=d.name, domain=domain)
+    return [
+        c
+        for d in docs
+        for c in chunk_pages(
+            extract_pages(d), source=d.name, domain=domain, section_headers=section_headers
+        )
     ]
+
+
+def build_scratch_index(
+    domain: str,
+    model: str,
+    *,
+    section_headers: bool | None = None,
+    chunks: list[Chunk] | None = None,
+) -> ScratchIndex:
+    """Embed a domain's chunks with a local model2vec ``model`` into a throwaway store.
+
+    ``chunks`` defaults to :func:`domain_chunks`; pass your own to score a different
+    way of cutting or labelling the same rules. The first call for a model
+    downloads it once (tens of MB) and caches it.
+    """
+    if chunks is None:
+        chunks = domain_chunks(domain, section_headers=section_headers)
     embedder = LocalEmbedder(model)
     vectors = embedder.embed([c.text for c in chunks], input_type="document")
     path = Path(tempfile.mkdtemp(prefix=f"rulebook-scratch-{domain}-"))

@@ -23,6 +23,7 @@ on:
       - notebooks/embeddings.ipynb
       - notebooks/evaluation.ipynb
       - notebooks/reranking.ipynb
+      - notebooks/chunking.ipynb
       - notebooks/page_template/**
       - src/rulebook/notebook.py
       - eval/gold/**
@@ -31,6 +32,7 @@ on:
       - rules/poker/**
       - scripts/build_index.py
       - src/rulebook/app_state.py
+      - src/rulebook/chunk_eval.py
       - src/rulebook/chunking.py
       - src/rulebook/config.py
       - src/rulebook/embeddings.py
@@ -108,6 +110,9 @@ jobs:
       - name: Reranking page
         run: uv run --no-sync jupyter nbconvert notebooks/reranking.ipynb $RENDER --output reranking
 
+      - name: Chunking page
+        run: uv run --no-sync jupyter nbconvert notebooks/chunking.ipynb $RENDER --output chunking
+
       - name: RAG at a glance page
         if: env.HAS_ANTHROPIC_KEY == 'true'
         env:
@@ -130,6 +135,7 @@ jobs:
             echo '<li>Go further: <a href="embeddings.html"><b>Embeddings</b></a>. What an embedding is, how retrieval uses it, and what changes when you swap the model.</li>'
             echo '<li>Go further: <a href="evaluation.html"><b>Evaluation</b></a>. How to measure retrieval: write the right answers down once, then score any setup against them, on checkers and on poker.</li>'
             echo '<li>Go further: <a href="reranking.html"><b>Reranking</b></a>. Why retrieval finds passages about the question rather than ones that answer it, and a second stage that fixes the order.</li>'
+            echo '<li>Go further: <a href="chunking.html"><b>Chunking</b></a>. How a rulebook is cut into chunks, how to compare ways of cutting fairly, and a one-line fix for wrong-variant misses.</li>'
             echo '</ul>'
           } > _site/index.html
 

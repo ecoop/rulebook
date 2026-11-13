@@ -271,7 +271,12 @@ def _build_domain(
         print(f"[ingest]  {domain}: reading {src.path.name}")
         pages = extract_pages(src.path)
         print(f"          -> {len(pages)} pages of text")
-        c = chunk_pages(pages, source=src.path.name, domain=domain)
+        c = chunk_pages(
+            pages,
+            source=src.path.name,
+            domain=domain,
+            section_headers=settings.chunk_section_headers,
+        )
         print(f"[chunk ]  {domain}: {len(c)} chunks "
               f"(avg {sum(len(x.text) for x in c) // max(len(c), 1)} chars)")
         chunks.extend(c)
@@ -305,6 +310,7 @@ def _build_domain(
         "gold_chunks": len(dom_golds),
         "golds": dom_records,
         "chunks_by_domain": {domain: len(chunks)},
+        "section_headers": settings.chunk_section_headers,
     }
     written = write_store(
         domain_index_path(settings.resolved_index_path, domain),
