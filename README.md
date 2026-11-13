@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.14-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-_Last updated: 2026-11-12_
+_Last updated: 2026-11-13_
 
 **Rulebook** is a RAG (retrieval-augmented generation) app that answers questions about a set of rules. Give it a rulebook (PDF, Markdown or plain text) and it starts answering questions about it: each claim cites the rule it comes from, and you see the passages it drew on. Adding a rule set is one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)); nothing in the pipeline is specific to a game or sport.
 
@@ -20,7 +20,6 @@ The notebooks run real questions through Rulebook's own pipeline, one stage at a
 - **Go further:** [**Embeddings**](https://ecoop.github.io/rulebook/embeddings.html): what an embedding is, how retrieval uses it, and what changes when you swap the model. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb).
 - **Go further:** [**Evaluation**](https://ecoop.github.io/rulebook/evaluation.html): how to measure retrieval. Write the right answers down once, then score any setup against them, on checkers and then on poker. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/evaluation.ipynb).
 - **Go further:** [**Reranking**](https://ecoop.github.io/rulebook/reranking.html): why retrieval finds passages *about* the question rather than ones that *answer* it, and a second stage that fixes the order: BM25, hybrid, and a cross-encoder, scored on poker and checkers. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/reranking.ipynb).
-
 - **Go further:** [**Chunking**](https://ecoop.github.io/rulebook/chunking.html): how a rulebook is cut into chunks, how to compare ways of cutting fairly (the same reading budget for each), a chunking bug the gold set found, and section headers, a one-line fix for poker's wrong-variant misses. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/chunking.ipynb).
 
 One more *Go further* notebook is coming: generation & citations. To run them on your own machine, and for what to read after them, see [Learning RAG](#learning-rag).
@@ -119,7 +118,7 @@ New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_gl
 
 **No install? Run it in your browser.**
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb)
-opens the Embeddings notebook on Google's free machines (key-free; its first cell installs the repo). Every notebook has an Open in Colab badge at its top, and a results page, linked above, showing them after a fresh run; CI rebuilds them whenever the code they use changes ([`notebook-page.yml`](.github/workflows/notebook-page.yml)).
+opens the Embeddings notebook on Google's free machines (key-free; its first cell installs the repo). Every notebook has an Open in Colab badge at its top, and a results page, linked above and from the [notebooks landing page](https://ecoop.github.io/rulebook/), showing them after a fresh run; CI rebuilds them whenever the code they use changes ([`notebook-page.yml`](.github/workflows/notebook-page.yml)).
 
 > The notebooks are committed with outputs stripped ([`.gitattributes`](.gitattributes) + nbstripout) — they're meant to be run. After cloning, run `uv run nbstripout --install` once so your commits stay clean too.
 

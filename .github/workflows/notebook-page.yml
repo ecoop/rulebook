@@ -121,23 +121,14 @@ jobs:
           uv run --no-sync python scripts/build_index.py --domain cornhole
           uv run --no-sync jupyter nbconvert notebooks/rag_at_a_glance.ipynb $RENDER --output rag_at_a_glance
 
+      # The landing page is a static template. Without the key, RAG at a glance isn't
+      # built, so its card (between the rag-at-a-glance markers) is dropped.
       - name: Landing page
         run: |
-          {
-            echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-            echo '<title>Rulebook notebooks</title>'
-            echo '<style>body{font:16px/1.6 system-ui,sans-serif;max-width:640px;margin:48px auto;padding:0 20px}li{margin:.8em 0}</style>'
-            echo '<h1>Rulebook notebooks</h1>'
-            echo '<p>Notebooks from <a href="https://github.com/ecoop/rulebook">ecoop/rulebook</a>, shown after a fresh run.</p><ul>'
-            if [ -f _site/rag_at_a_glance.html ]; then
-              echo '<li><a href="rag_at_a_glance.html"><b>RAG at a glance</b></a> (start here). A short tour of the whole pipeline, from chunking to Claude'"'"'s cited answer.</li>'
-            fi
-            echo '<li>Go further: <a href="embeddings.html"><b>Embeddings</b></a>. What an embedding is, how retrieval uses it, and what changes when you swap the model.</li>'
-            echo '<li>Go further: <a href="evaluation.html"><b>Evaluation</b></a>. How to measure retrieval: write the right answers down once, then score any setup against them, on checkers and on poker.</li>'
-            echo '<li>Go further: <a href="reranking.html"><b>Reranking</b></a>. Why retrieval finds passages about the question rather than ones that answer it, and a second stage that fixes the order.</li>'
-            echo '<li>Go further: <a href="chunking.html"><b>Chunking</b></a>. How a rulebook is cut into chunks, how to compare ways of cutting fairly, and a one-line fix for wrong-variant misses.</li>'
-            echo '</ul>'
-          } > _site/index.html
+          cp notebooks/page_template/landing.html _site/index.html
+          if [ ! -f _site/rag_at_a_glance.html ]; then
+            sed -i '/<!-- rag-at-a-glance -->/,/<!-- \/rag-at-a-glance -->/d' _site/index.html
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:
