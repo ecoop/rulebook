@@ -210,9 +210,6 @@ class ScratchIndex:
     store: Store
 
 
-_SOURCE_SUFFIXES = {".pdf", ".md", ".txt"}  # the same suffixes build_index.py ingests
-
-
 def domain_chunks(domain: str, *, section_headers: bool | None = None) -> list[Chunk]:
     """A domain's rule documents, chunked the way ``build_index.py`` chunks them.
 
@@ -221,11 +218,14 @@ def domain_chunks(domain: str, *, section_headers: bool | None = None) -> list[C
     """
     if section_headers is None:
         section_headers = settings.chunk_section_headers
-    docs = sorted(
-        p
-        for p in (settings.rules_dir / domain).iterdir()
-        if p.is_file() and p.suffix.lower() in _SOURCE_SUFFIXES
-    )
+    from .rulesets import find_ruleset
+
+    # The slug's folder may be nested (rules/<game>/<edition>/) or moved; the
+    # same discovery the builder uses finds it and applies its .extracted.md skip.
+    ruleset = find_ruleset(settings.rules_dir, domain)
+    if ruleset is None:
+        raise FileNotFoundError(f"no ruleset with slug {domain!r} under {settings.rules_dir}")
+    docs = ruleset.files
     return [
         c
         for d in docs

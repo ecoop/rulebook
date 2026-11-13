@@ -81,3 +81,71 @@ def test_sync_pulls_and_writes_files(monkeypatch, tmp_path):
     assert n == 2
     assert (tmp_path / "rules" / "ultimate" / "rules.pdf").read_bytes() == b"%PDF-1.7"
     assert (tmp_path / "rules" / "hearts" / "rules-for-hearts.md").read_text() == "# Hearts"
+
+
+def test_sync_pulls_nested_editions_and_markers(monkeypatch, tmp_path):
+    # Editions (docs/design/ruleset-editions.md): nested folders and the
+    # .ruleset.json marker that pins a moved folder's slug must survive the pull.
+    _make_gcs(monkeypatch, data_root=tmp_path)
+    _fake_storage(monkeypatch, {
+        "rules/ultimate/2026/usau.pdf": b"%PDF-2026",
+        "rules/ultimate/2026/.ruleset.json": b'{"slug": "ultimate"}',
+        "rules/ultimate/1990/old.pdf": b"%PDF-1990",
+    })
+    assert rules_sync.sync_rules_from_gcs() == 3
+    from rulebook.rulesets import discover
+
+    found = {r.slug: r.dir.name for r in discover(tmp_path / "rules").rulesets}
+    assert found == {"ultimate": "2026", "ultimate_1990": "1990"}
+
+
+def _recording_storage(monkeypatch, remote: list[str]):
+    uploaded: list[str] = []
+
+    class _Blob:
+        def __init__(self, name):
+            self.name = name
+
+        def upload_from_filename(self, _p):
+            uploaded.append(self.name)
+
+    class _Bucket:
+        def blob(self, name):
+            return _Blob(name)
+
+    class _Client:
+        def bucket(self, _name):
+            return _Bucket()
+
+        def list_blobs(self, _bucket, prefix=None):
+            return [_Blob(n) for n in remote if n.startswith(prefix or "")]
+
+    class _Storage:
+        def Client(self, *a, **k):  # noqa: N802 — mirrors storage.Client
+            return _Client()
+
+    monkeypatch.setitem(sys.modules, "google.cloud", type(sys)("google.cloud"))
+    monkeypatch.setattr(sys.modules["google.cloud"], "storage", _Storage(), raising=False)
+    return uploaded
+
+
+def test_publish_includes_markers_and_reports_stale_objects(monkeypatch, tmp_path):
+    _make_gcs(monkeypatch)
+    root = tmp_path / "rules"
+    (root / "ultimate" / "2026").mkdir(parents=True)
+    (root / "ultimate" / "2026" / "usau.pdf").write_bytes(b"%PDF")
+    (root / "ultimate" / "2026" / ".ruleset.json").write_text('{"slug": "ultimate"}')
+    (root / "ultimate" / "2026" / ".DS_Store").write_bytes(b"junk")
+    # The bucket still holds the pre-nesting flat layout.
+    uploaded = _recording_storage(monkeypatch, [
+        "rules/ultimate/usau.pdf",
+        "rules/ultimate/.ruleset.json",
+        "rules/ultimate/2026/usau.pdf",
+    ])
+    assert rules_sync.publish_rules_to_gcs(root) == 2
+    assert sorted(uploaded) == ["rules/ultimate/2026/.ruleset.json", "rules/ultimate/2026/usau.pdf"]
+    # Reported, never deleted.
+    assert rules_sync.stale_rules_in_gcs(root) == [
+        "rules/ultimate/.ruleset.json",
+        "rules/ultimate/usau.pdf",
+    ]

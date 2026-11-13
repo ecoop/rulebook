@@ -22,7 +22,7 @@ import os
 import sys
 from pathlib import Path
 
-from rulebook.rules_sync import _SUFFIXES, publish_rules_to_gcs
+from rulebook.rules_sync import _SUFFIXES, is_synced_file, publish_rules_to_gcs, stale_rules_in_gcs
 
 # The operator's local corpus is the repo's rules/, NOT settings.rules_dir
 # (which under gcs points at the container's writable sync dir).
@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> None:
     if not root.is_dir():
         sys.exit(f"publish_rules: source dir {root} does not exist.")
 
-    files = [p for p in sorted(root.rglob("*")) if p.is_file() and p.suffix.lower() in _SUFFIXES]
+    files = [p for p in sorted(root.rglob("*")) if is_synced_file(p)]
     if not files:
         sys.exit(f"publish_rules: no {' / '.join(_SUFFIXES)} files under {root}.")
 
@@ -59,10 +59,26 @@ def main(argv: list[str] | None = None) -> None:
         print(f"--dry-run: would upload {len(files)} file(s) ({total / 1_048_576:.1f} MiB) from {root}:")
         for p in files:
             print(f"    rules/{p.relative_to(root).as_posix()}")
+        _report_stale(root)
         return
 
     n = publish_rules_to_gcs(source_dir=root)
     print(f"publish_rules: uploaded {n} file(s) to gs://{os.environ['GCS_STATE_BUCKET']}/rules/")
+    _report_stale(root)
+
+
+def _report_stale(root: Path) -> None:
+    """List bucket objects with no local file (e.g. left behind when a flat game
+    was nested into edition folders). Reported only; deleting is the operator's call."""
+    stale = stale_rules_in_gcs(root)
+    if not stale:
+        return
+    bucket = os.environ["GCS_STATE_BUCKET"]
+    print(f"publish_rules: {len(stale)} object(s) in the bucket have no local file "
+          "(not deleted; the container would sync them back):")
+    for name in stale:
+        print(f"    gs://{bucket}/{name}")
+    print("  Remove the ones you no longer want with `gcloud storage rm <url>`.")
 
 
 if __name__ == "__main__":

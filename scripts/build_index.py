@@ -1,13 +1,14 @@
-"""Build the RAG index from the source files under ./rules/<domain>/.
+"""Build the RAG index from the rulesets under ./rules/ (one index per slug).
 
 Run:
     uv run python scripts/build_index.py
 
-Sources are discovered by walking ``rules/<domain>/`` — the parent
-directory name is the domain tag. Every ``.pdf``, ``.md``, and ``.txt``
-in there is ingested. Add a new domain by creating a new sibling
-directory; add a new resource by dropping a file into the domain's dir.
-No code change needed.
+Sources are discovered by ``rulebook.rulesets``: a folder of rule files
+(``.pdf``/``.md``/``.txt``) is a ruleset; a folder of folders is a game whose
+subfolders are editions. Each ruleset's slug comes from its machine-written
+``.ruleset.json`` marker, written on the first build from the path
+(``rules/tennis/`` -> ``tennis``, ``rules/ultimate/1990/`` -> ``ultimate_1990``).
+Add a ruleset by dropping a folder of files in; no code change needed.
 
 Pipeline per source:
     file -> ingest.extract_pages -> chunking.chunk_pages
@@ -41,6 +42,7 @@ from rulebook.interaction_log import (
     read_latest_source_curation,
     read_qa_entries,
 )
+from rulebook.rulesets import discover, ensure_markers, file_sha256
 from rulebook.store import domain_index_path, write_store
 
 # Guardrails singletons — needed so the embedding calls this script
@@ -58,20 +60,34 @@ class Source:
     path: Path
 
 
-# Root of the source tree; each immediate subdirectory is one domain.
+# Root of the source tree; see rulebook.rulesets for the layout rules.
 RULES_ROOT = Path("rules")
 
-# File suffixes we treat as ingestable sources.
-_SOURCE_SUFFIXES = {".pdf", ".md", ".txt"}
 
+def discover_sources(
+    rules_root: Path,
+    *,
+    apply_curation: bool = True,
+    report: bool = False,
+    write_markers: bool = False,
+    known_hashes: dict[str, set[str]] | None = None,
+) -> list[Source]:
+    """Return one Source per ingestable file, tagged with its ruleset's slug.
 
-def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[Source]:
-    """Walk ``rules/<domain>/`` and return one Source per ingestable file.
-
-    Convention:
+    Layout (rulebook.rulesets has the full rules):
         rules/
-            ultimate/       -> domain="ultimate", every .pdf/.md/.txt inside
-            goaltimate/     -> domain="goaltimate", ditto
+            tennis/          -> flat ruleset, domain="tennis"
+            ultimate/        -> a game holding only edition folders
+                1990/        -> domain from its .ruleset.json marker, else "ultimate_1990"
+                2026/        -> ditto (e.g. "ultimate", kept from when it was flat)
+
+    A folder with both rule files and edition folders builds its own files and
+    reports the edition folders (not built). Problems are printed when
+    ``report`` is set (the CLI build); the API's read-only listings stay quiet.
+
+    ``write_markers`` writes each ruleset's marker if missing (only the build
+    does this). ``known_hashes`` ({slug: sha256s} from the built manifests)
+    turns on duplicate and moved-folder checks.
 
     Skip rule: if a ``<stem>.pdf`` and ``<stem>.extracted.md`` are
     siblings, the PDF is skipped in favor of the extracted markdown.
@@ -82,9 +98,10 @@ def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[S
     Admin curation: if ``apply_curation`` is True (the default), files
     whose latest source_curation row set included=False are dropped.
     Absent from the log = included by default, so freshly-added files
-    flow into the index automatically. The admin UI (GET /admin/sources)
+    flow into the index automatically. The admin UI (GET /advanced/sources)
     passes apply_curation=False so it can show both included and
-    excluded files.
+    excluded files. Curation keys are paths (``rules/<game>/<edition>/<file>``
+    when nested), so moving a file resets its curation to included.
     """
     excluded_paths: set[str] = set()
     if apply_curation:
@@ -93,32 +110,39 @@ def discover_sources(rules_root: Path, *, apply_curation: bool = True) -> list[S
             if not included
         }
 
+    found = discover(rules_root, hash_files=report, known_hashes=known_hashes)
+    if report:
+        for issue in found.issues:
+            print(f"[{issue.level:<6}]  {issue.path}: {issue.message}")
+    if write_markers:
+        for path in ensure_markers(found):
+            print(f"[marker]  wrote {path}")
+
     sources: list[Source] = []
     dropped_by_curation = 0
-    for domain_dir in sorted(p for p in rules_root.iterdir() if p.is_dir()):
-        domain = domain_dir.name
-        # Build the set of stems that have an .extracted.md so we can
-        # skip their .pdf siblings in this dir.
-        extracted_stems = {
-            p.name.removesuffix(".extracted.md")
-            for p in domain_dir.iterdir()
-            if p.name.endswith(".extracted.md")
-        }
-        for f in sorted(domain_dir.iterdir()):
-            if not f.is_file() or f.suffix.lower() not in _SOURCE_SUFFIXES:
-                continue
-            if f.suffix.lower() == ".pdf" and f.stem in extracted_stems:
-                # Skip — the .extracted.md sibling is the ingestable form.
-                continue
+    for rs in found.rulesets:
+        for f in rs.files:
             rel = f.relative_to(rules_root.parent).as_posix()
             if rel in excluded_paths:
                 dropped_by_curation += 1
                 continue
-            sources.append(Source(domain=domain, path=f))
+            sources.append(Source(domain=rs.slug, path=f))
 
     if dropped_by_curation:
         print(f"[curate]  {dropped_by_curation} source file(s) excluded by admin")
     return sources
+
+
+def known_source_hashes(index_root: Path) -> dict[str, set[str]]:
+    """{slug: sha256s} recorded in each built index's provenance (empty for
+    indexes built before hashes were recorded)."""
+    from rulebook.store import domain_index_path, list_domains, read_manifest
+
+    out: dict[str, set[str]] = {}
+    for slug in list_domains(index_root):
+        srcs = read_manifest(domain_index_path(index_root, slug)).get("sources") or []
+        out[slug] = {s["sha256"] for s in srcs if isinstance(s, dict) and s.get("sha256")}
+    return out
 
 # Embed in batches so we play nice with the embedder's request-size limits
 # and get a useful progress bar. Voyage caps requests at 1000 items or
@@ -256,6 +280,8 @@ def _split_gold_sections(
 def _build_domain(
     domain: str,
     sources: list[Source],
+    rules_root: Path,
+    meta: tuple[str | None, str | None],
     gold_chunks: list[Chunk],
     gold_records: list[dict],
     embedder,
@@ -305,7 +331,19 @@ def _build_domain(
         "git_sha": BUILD_INFO.sha,
         "build_num": BUILD_INFO.build_num,
         "domain": domain,
-        "sources": [{"domain": domain, "file": s.path.name} for s in sources],
+        # Content hashes: the next build uses them to warn about duplicate files
+        # and to recognize this ruleset's folder if it moves without its marker.
+        "sources": [
+            {
+                "domain": domain,
+                "file": s.path.name,
+                "path": s.path.relative_to(rules_root).as_posix(),
+                "sha256": file_sha256(s.path),
+            }
+            for s in sources
+        ],
+        "game": meta[0],
+        "edition": meta[1],
         "gold_answers": len(dom_records),
         "gold_chunks": len(dom_golds),
         "golds": dom_records,
@@ -359,7 +397,12 @@ def main(argv: list[str] | None = None) -> None:
     if not rules_root.is_dir():
         raise FileNotFoundError(f"Missing rules directory: {rules_root}")
 
-    sources = discover_sources(rules_root)
+    sources = discover_sources(
+        rules_root,
+        report=True,
+        write_markers=True,
+        known_hashes=known_source_hashes(settings.resolved_index_path),
+    )
     if not sources:
         raise RuntimeError(
             f"No source files found under {rules_root}. Add PDFs or .md files"
@@ -372,7 +415,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.domain:
         if args.domain not in all_domains:
             raise SystemExit(
-                f"--domain {args.domain!r} has no rules/{args.domain}/ sources; "
+                f"--domain {args.domain!r} matches no ruleset under {rules_root}; "
                 f"one of {all_domains}"
             )
         targets = [args.domain]
@@ -390,11 +433,17 @@ def main(argv: list[str] | None = None) -> None:
         settings.data_dir / "logs" / "gold.jsonl", set(all_domains)
     )
 
+    from rulebook.rulesets import ruleset_meta
+
+    meta = ruleset_meta(rules_root)
     embedder = get_embedder()
     total = 0
     for domain in targets:
         dom_sources = [s for s in sources if s.domain == domain]
-        total += _build_domain(domain, dom_sources, gold_chunks, gold_records, embedder)
+        total += _build_domain(
+            domain, dom_sources, rules_root, meta.get(domain, (None, None)),
+            gold_chunks, gold_records, embedder,
+        )
 
     print(f"[done  ]  built {len(targets)} domain(s), {total} total rows "
           f"→ {settings.resolved_index_path}/<domain>/")

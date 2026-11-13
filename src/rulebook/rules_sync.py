@@ -1,6 +1,10 @@
 # Copyright (c) 2026 Eric Cooper.
 """Sync the source rulebooks (rules/<domain>/…) between the local dir and GCS.
 
+Nested edition folders (rules/<game>/<edition>/…) and each ruleset's
+``.ruleset.json`` marker sync like any other file: the pull mirrors every
+object path, and the push includes markers (see ``is_synced_file``).
+
 The rule PDFs used to ride along inside the container image, so every deploy's
 build context and image grew with the corpus (#170). Instead they live in the
 GCS state bucket under ``rules/`` and are pulled into a writable local dir when
@@ -28,12 +32,21 @@ import logging
 from pathlib import Path
 
 from .config import settings
+from .rulesets import MARKER_NAME
 
 log = logging.getLogger(__name__)
 
 _GCS_PREFIX = "rules/"
-# The source docs the index build reads; skip anything else (dotfiles, etc.).
+# The source docs the index build reads; skip anything else (dotfiles, etc.)...
 _SUFFIXES = (".pdf", ".md", ".txt")
+
+
+def is_synced_file(path: Path) -> bool:
+    """A file the corpus sync carries: a source doc, or a ruleset's
+    ``.ruleset.json`` marker (it holds the slug, so it must travel with the
+    files or a moved/nested edition would lose its identity in the container).
+    """
+    return path.is_file() and (path.suffix.lower() in _SUFFIXES or path.name == MARKER_NAME)
 
 
 def _enabled() -> bool:
@@ -102,7 +115,7 @@ def publish_rules_to_gcs(source_dir: Path | None = None) -> int:
     bucket = client.bucket(bucket_name)
     pushed = 0
     for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in _SUFFIXES:
+        if not is_synced_file(path):
             continue
         rel = path.relative_to(root).as_posix()
         bucket.blob(f"{_GCS_PREFIX}{rel}").upload_from_filename(str(path))
@@ -112,3 +125,26 @@ def publish_rules_to_gcs(source_dir: Path | None = None) -> int:
         pushed, root, bucket_name, _GCS_PREFIX,
     )
     return pushed
+
+
+def stale_rules_in_gcs(source_dir: Path | None = None) -> list[str]:
+    """Bucket objects under ``rules/`` with no local counterpart.
+
+    Publishing only uploads; it never deletes. After a local move (e.g. a flat
+    game nested into ``rules/<game>/<edition>/``) the old objects linger, and
+    the container would sync both layouts back. This lists them so the operator
+    can remove them; it deletes nothing. ``[]`` off GCS.
+    """
+    if not _enabled():
+        return []
+    root = source_dir or settings.rules_dir
+    from google.cloud import storage
+
+    local = {
+        p.relative_to(root).as_posix() for p in root.rglob("*") if is_synced_file(p)
+    } if root.is_dir() else set()
+    return sorted(
+        blob.name
+        for blob in storage.Client().list_blobs(settings.gcs_state_bucket, prefix=_GCS_PREFIX)
+        if not blob.name.endswith("/") and blob.name[len(_GCS_PREFIX):] not in local
+    )

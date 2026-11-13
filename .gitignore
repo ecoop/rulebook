@@ -57,3 +57,12 @@ web/.vite/
 # service syncs them from GCS at runtime (rules_sync); local copies stay local.
 rules/**/*.pdf
 rules/**/*.extracted.md
+
+# Ruleset markers (.ruleset.json, machine-written by the build; see
+# docs/design/ruleset-editions.md). A marker belongs with its ruleset's files:
+# your own rulesets' markers stay local (and reach GCS via publish_rules), while
+# the committed samples' markers are tracked so a fresh clone builds clean.
+rules/**/.ruleset.json
+!rules/checkers/.ruleset.json
+!rules/poker/.ruleset.json
+!rules/tennis/.ruleset.json
