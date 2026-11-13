@@ -14,7 +14,7 @@ It started as a hands-on way to **learn RAG** and has grown into a small gated p
 
 ## Learn RAG with the notebooks
 
-The notebooks run real questions through Rulebook's own pipeline, one stage at a time. You can read each one with every result filled in, no install needed, or run it yourself in Colab:
+The notebooks run real questions through Rulebook's own pipeline, one stage at a time. Start at the [notebooks page](https://ecoop.github.io/rulebook/), which lists them in reading order. You can read each one with every result filled in, no install needed, or run it yourself in Colab:
 
 - [**RAG at a glance**](https://ecoop.github.io/rulebook/rag_at_a_glance.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer. Its last section calls Claude with your own Anthropic API key; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb) with the key stored as a Colab secret.
 - **Go further:** [**Embeddings**](https://ecoop.github.io/rulebook/embeddings.html): what an embedding is, how retrieval uses it, and what changes when you swap the model. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb).
