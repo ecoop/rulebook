@@ -52,9 +52,10 @@ permissions:
   pages: write
   id-token: write
 
-# One deploy at a time; a newer push replaces a queued one.
+# One run at a time per branch; a newer push replaces a queued one. Per branch, so a
+# test build of a branch (Run workflow on it) can't cancel main's deploy.
 concurrency:
-  group: notebook-page
+  group: notebook-page-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -108,9 +109,7 @@ jobs:
         run: uv run --no-sync jupyter nbconvert notebooks/chunking.ipynb $RENDER --output chunking
 
       - name: RAG at a glance page
-        run: |
-          uv run --no-sync python scripts/build_index.py --domain tennis
-          uv run --no-sync jupyter nbconvert notebooks/rag_at_a_glance.ipynb $RENDER --output rag_at_a_glance
+        run: uv run --no-sync jupyter nbconvert notebooks/rag_at_a_glance.ipynb $RENDER --output rag_at_a_glance
 
       # The landing page is a static template, with its vignettes in img/
       # (drawn by notebooks/page_template/vignettes.py).
