@@ -3,7 +3,7 @@
 can start with two lines instead of a screen of boilerplate.
 
     from rulebook.notebook import setup, show_table
-    setup("checkers")
+    setup()
 
 Nothing in the app imports this module. IPython is imported only inside `show_table`,
 so importing the module works without the notebook dependencies installed.
@@ -25,16 +25,16 @@ from .config import Settings, settings
 from .store import list_domains
 
 
-def setup(*domains: str) -> Path:
+def setup() -> None:
     """Get a notebook ready to run, from wherever Jupyter (or Colab) was started.
 
     - Work from the repo root, so `rules/`, `data/` and `eval/` resolve.
     - Load the repo's `.env` if there is one. setup() never reads API keys from
       anywhere else; a notebook that needs one asks for it in a visible cell.
     - Start the cost tracking that embedding and generation calls report to.
-    - Build each named sample domain's index if it isn't built yet.
 
-    Returns the repo root.
+    It builds no index: a notebook builds the indexes it needs in a visible cell
+    (`build_index` or `ensure_index`), where the work belongs.
     """
     root = settings.repo_root
     os.chdir(root)
@@ -42,8 +42,6 @@ def setup(*domains: str) -> Path:
         _reload_settings()
     app_state.initialize(settings)
     print(f"ready: working in {root.name}/")
-    ensure_index(*domains)
-    return root
 
 
 def _reload_settings() -> None:
@@ -58,20 +56,35 @@ def _reload_settings() -> None:
         setattr(settings, name, getattr(fresh, name))
 
 
-def ensure_index(*domains: str) -> None:
-    """Build each sample domain's index if it isn't built yet (key-free, a few seconds)."""
+# The build log's per-stage lines, the ones worth showing in a notebook. The rest
+# (which files were found, a page count, the closing summary) is left out.
+_STAGE_LINE = re.compile(r"^\[(ingest|chunk|embed|store)\s*\]")
+
+
+def build_index(*domains: str) -> None:
+    """Build each sample domain's index (key-free, a few seconds each), showing its stages.
+
+    Runs scripts/build_index.py and prints just its per-stage lines: ingest, chunk,
+    embed, store. Rebuilds an index that already exists.
+    """
     for domain in domains:
-        if domain in list_domains(settings.resolved_index_path):
-            print(f"{domain}: index already built")
-            continue
-        print(f"{domain}: building the index...")
         build = subprocess.run(
             [sys.executable, "scripts/build_index.py", "--domain", domain],
             capture_output=True, text=True,
         )
-        print(build.stdout.replace(str(Path.cwd()), "."))  # the build log, paths relative to the repo
         if build.returncode:
             raise RuntimeError(build.stderr)
+        lines = [ln for ln in build.stdout.splitlines() if _STAGE_LINE.match(ln)]
+        print("\n".join(lines).replace(str(Path.cwd()), "."))  # paths relative to the repo
+
+
+def ensure_index(*domains: str) -> None:
+    """Build each sample domain's index if it isn't built yet (see `build_index`)."""
+    for domain in domains:
+        if domain in list_domains(settings.resolved_index_path):
+            print(f"{domain}: index already built")
+        else:
+            build_index(domain)
 
 
 def hit_cell(result, k: int) -> str:
