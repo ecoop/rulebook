@@ -5,7 +5,10 @@ _Last updated: 2026-11-13_
 
 The rules text under `rules/<domain>/` is built into the vector index by
 [`scripts/build_index.py`](../scripts/build_index.py) (the directory name is the
-domain slug; discovery is data-driven — no code change to add a domain). This
+domain slug; discovery is data-driven — no code change to add a domain). Several
+editions of one game nest as `rules/<game>/<edition>/`; each ruleset folder gets
+a machine-written `.ruleset.json` that keeps its slug if the folder moves (see
+[`docs/design/ruleset-editions.md`](../docs/design/ruleset-editions.md)). This
 file records **where to download each source document** so a fresh checkout can
 rebuild the index.
 
@@ -52,7 +55,8 @@ uv run python -m rulebook.ask "..." --domain <slug>
 ```
 
 `rulebook.add` copies the file into `rules/<slug>/` and runs the builder for just
-that domain. Official sources (grab the **current** edition from each hub):
+that domain. For a second edition of a game, give the edition too
+(`rulebook.add ultimate 1990 <file>`). Official sources (grab the **current** edition from each hub):
 
 | Sport | Governing body | Official rules hub | Suggested slug |
 |-------|----------------|--------------------|----------------|

@@ -1597,7 +1597,8 @@ def admin_list_sources() -> AdminSourceListResponse:
     for src in discover_sources(rules_root, apply_curation=False):
         if not _in_scope(scope, [src.domain]):
             continue
-        # Identity is "rules/<domain>/<file>" — kept stable (independent of
+        # Identity is "rules/<domain>/<file>" (or rules/<game>/<edition>/<file>
+        # for an edition) — kept stable (independent of
         # where rules_dir resolves) so source-curation keys keep matching.
         rel = (Path("rules") / src.path.relative_to(rules_root)).as_posix()
         st = src.path.stat()
@@ -1613,13 +1614,30 @@ def admin_list_sources() -> AdminSourceListResponse:
     return AdminSourceListResponse(sources=rows)
 
 
+def _source_path_domain(rel: str) -> str:
+    """The slug that owns a "rules/…/<file>" curation path ("" if none).
+
+    Nested editions (rules/<game>/<edition>/<file>) and moved folders mean the
+    path's second segment is not necessarily the slug, so ask discovery; a path
+    discovery doesn't know (e.g. a file not synced here) falls back to the
+    flat-layout reading, rules/<slug>/<file>.
+    """
+    from scripts.build_index import discover_sources
+
+    root = settings.rules_dir
+    for src in discover_sources(root, apply_curation=False):
+        if (Path("rules") / src.path.relative_to(root)).as_posix() == rel:
+            return src.domain
+    parts = rel.split("/")
+    return parts[1] if len(parts) == 3 and parts[0] == "rules" else ""
+
+
 @app.post("/advanced/source-curation", response_model=SourceCurationResponse, dependencies=[Depends(require_capability(CAP_SOURCES_CURATE))])
 def admin_set_source_curation(req: SourceCurationRequest) -> SourceCurationResponse:
     """Toggle whether a source file is included in the next index rebuild."""
-    scope = _admin_domain_scope()  # #156: path is "rules/<domain>/<file>"
+    scope = _admin_domain_scope()  # #156
     if scope is not None:
-        parts = req.path.split("/")
-        _require_domain_in_scope(scope, parts[1] if len(parts) > 2 and parts[0] == "rules" else "")
+        _require_domain_in_scope(scope, _source_path_domain(req.path))
     log_source_curation(req.path, included=req.included)
     _audit(CAP_SOURCES_CURATE, target=req.path, detail={"included": req.included})
     return SourceCurationResponse()

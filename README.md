@@ -28,8 +28,10 @@ One more *Go further* notebook is coming: generation & citations. To run them on
 
 ```
 rulebook/
-├── rules/<domain>/            # source rule docs, one dir per domain (slug = dir name);
-│                              #   discovery is data-driven — add a domain by adding a dir.
+├── rules/<domain>/            # source rule docs, one dir per domain (slug = dir name, then
+│                              #   pinned by a machine-written .ruleset.json); a game with
+│                              #   several editions nests them: rules/<game>/<edition>/.
+│                              #   Discovery is data-driven — add a domain by adding a dir.
 │                              #   checkers/, tennis/, poker/ ship (original prose, runnable
 │                              #   samples; poker is a 5-variant stress corpus for eval);
 │                              #   copyrighted domains stay untracked — see rules/SOURCES.md
@@ -170,6 +172,7 @@ Rulebook cuts each rulebook at its own rule numbers, so one chunk is one citable
 
 1. Create `rules/<slug>/` and drop the rule doc(s) in (see [`rules/SOURCES.md`](rules/SOURCES.md) for the source/copyright policy — copyrighted docs stay untracked).
 2. `uv run python scripts/build_index.py` (discovery picks up the new dir).
+   A second edition of a game you already have: `uv run python -m rulebook.add <game> <edition> <file>` — see [`docs/design/ruleset-editions.md`](docs/design/ruleset-editions.md).
 3. Register display name + source URL(s): `uv run python -m scripts.domains set <slug> --name "…" --sources <url>`.
 4. Grant access (hosted): new domains reach no one until granted (per-user allowlist).
 

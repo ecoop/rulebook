@@ -173,3 +173,26 @@ def test_director_source_curation_guarded_by_domain(client, monkeypatch):
     _as(client, "tok_dir")
     assert client.post("/advanced/source-curation", json={"path": "rules/ultimate/x.pdf", "included": False}).status_code == 200
     assert client.post("/advanced/source-curation", json={"path": "rules/badminton/y.pdf", "included": False}).status_code == 403
+
+
+def test_director_source_curation_scope_follows_the_slug_for_editions(client, monkeypatch, tmp_path):
+    # Nested edition paths: the second path segment is the GAME, not the slug.
+    # rules/ultimate/2026/ keeps slug "ultimate" via its marker (in scope);
+    # rules/ultimate/1990/ is "ultimate_1990" (out of scope for this director).
+    import api.main as main
+    from rulebook.config import settings
+    from rulebook.rulesets import write_marker
+
+    root = tmp_path / "rules"
+    for edition in ("2026", "1990"):
+        (root / "ultimate" / edition).mkdir(parents=True)
+        (root / "ultimate" / edition / "r.pdf").write_bytes(b"%PDF")
+    write_marker(root / "ultimate" / "2026", "ultimate", "ultimate", "2026")
+    monkeypatch.setattr(type(settings), "rules_dir", property(lambda self: root))
+    monkeypatch.setattr(main, "log_source_curation", lambda *a, **k: None)
+    monkeypatch.setattr(main, "log_audit", lambda **k: None)
+
+    _as(client, "tok_dir")
+    post = lambda p: client.post("/advanced/source-curation", json={"path": p, "included": False})  # noqa: E731
+    assert post("rules/ultimate/2026/r.pdf").status_code == 200
+    assert post("rules/ultimate/1990/r.pdf").status_code == 403

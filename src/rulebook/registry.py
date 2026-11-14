@@ -37,6 +37,8 @@ DEFAULT_TTL_SECONDS = 30.0
 
 # bucket -> (expiry_monotonic, {slug: raw-entry-dict})
 _registry_cache: dict[str, tuple[float, dict[str, dict]]] = {}
+# rules dir -> (expiry_monotonic, {slug: (game, edition)}) from the rulesets' markers/layout
+_meta_cache: dict[str, tuple[float, dict[str, tuple[str | None, str | None]]]] = {}
 
 
 @dataclass(frozen=True)
@@ -50,19 +52,34 @@ class DomainInfo:
     # default "[{slug} {rule_id}]". Stored now; wired into generation later.
     numbering: str | None = None
     enabled: bool = True
+    # Editions (docs/design/ruleset-editions.md): the game this ruleset is an
+    # edition of and its label, e.g. ("ultimate", "1990"). From the registry
+    # entry if declared there, else the ruleset's folder/marker. None = flat
+    # with no recorded label.
+    game: str | None = None
+    edition: str | None = None
 
 
-def _default_name(slug: str) -> str:
+def _default_name(slug: str, game: str | None = None, edition: str | None = None) -> str:
+    """Title-cased slug, or "Game (edition)" for an edition: "Ultimate (1990)"."""
+    if edition:
+        return f"{_default_name(game or slug)} ({edition})"
     return slug.replace("_", " ").replace("-", " ").title()
 
 
-def _entry_to_info(slug: str, entry: Mapping[str, object]) -> DomainInfo:
+def _entry_to_info(
+    slug: str, entry: Mapping[str, object], meta: tuple[str | None, str | None] = (None, None)
+) -> DomainInfo:
+    game = str(entry.get("game") or "") or meta[0]
+    edition = str(entry.get("edition") or "") or meta[1]
     return DomainInfo(
         slug=slug,
-        display_name=str(entry.get("display_name") or "") or _default_name(slug),
+        display_name=str(entry.get("display_name") or "") or _default_name(slug, game, edition),
         sources=[str(u) for u in (entry.get("sources") or [])],
         numbering=(str(entry["numbering"]) if entry.get("numbering") else None),
         enabled=bool(entry.get("enabled", True)),
+        game=game,
+        edition=edition,
     )
 
 
@@ -70,13 +87,34 @@ def _entry_to_info(slug: str, entry: Mapping[str, object]) -> DomainInfo:
 
 
 def domain_info(slug: str, declared: Mapping[str, dict] | None = None) -> DomainInfo:
-    """Registry entry for a slug, or a sensible default if it's not declared."""
+    """Registry entry for a slug, or a sensible default if it's not declared.
+
+    An explicit ``display_name`` always wins; otherwise an edition reads
+    "Ultimate (1990)" and a plain ruleset its title-cased slug.
+    """
     if declared is None:
         declared = _declared_registry()
-    entry = declared.get(slug)
-    return _entry_to_info(slug, entry) if entry is not None else DomainInfo(
-        slug=slug, display_name=_default_name(slug)
-    )
+    return _entry_to_info(slug, declared.get(slug) or {}, _ruleset_meta().get(slug, (None, None)))
+
+
+def _ruleset_meta() -> dict[str, tuple[str | None, str | None]]:
+    """{slug: (game, edition)} from the rules tree, TTL-cached. Best-effort:
+    a missing or unreadable rules dir just means no edition labels."""
+    root = settings.rules_dir
+    key = str(root)
+    now = time.monotonic()
+    cached = _meta_cache.get(key)
+    if cached is not None and now < cached[0]:
+        return cached[1]
+    from .rulesets import ruleset_meta
+
+    try:
+        meta = ruleset_meta(root)
+    except OSError:
+        log.exception("registry: could not read rulesets under %s", root)
+        meta = cached[1] if cached is not None else {}
+    _meta_cache[key] = (now + DEFAULT_TTL_SECONDS, meta)
+    return meta
 
 
 def resolve_registry(index_domains: Iterable[str]) -> dict[str, DomainInfo]:
