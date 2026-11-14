@@ -205,6 +205,40 @@ def test_leftover_marker_on_a_game_folder_warns(rules):
     assert any(i.path == rules / "ultimate" / MARKER_NAME for i in d.issues)
 
 
+def test_folder_emptied_of_its_files_reports_its_marker(rules):
+    # mv poker/* cards/ moves the files but not the dotfile marker.
+    _write(rules / "poker" / "poker.md", "x")
+    ensure_markers(discover(rules))
+    (rules / "cards").mkdir()
+    (rules / "poker" / "poker.md").rename(rules / "cards" / "poker.md")
+    d = discover(rules)
+    [issue] = [i for i in d.issues if i.path == rules / "poker" / MARKER_NAME]
+    assert issue.level == "warning"
+    assert "'poker'" in issue.message and "rulesets claim <their folder> poker" in issue.message
+
+
+def test_edition_folder_emptied_of_its_files_reports_its_marker(rules):
+    _write(rules / "tennis" / "2024" / "a.md", "a")
+    _write(rules / "tennis" / "2026" / "b.md", "b")
+    ensure_markers(discover(rules))
+    (rules / "tennis" / "2024" / "a.md").unlink()
+    d = discover(rules)
+    assert [r.slug for r in d.rulesets] == ["tennis_2026"]
+    assert [i.path for i in d.issues] == [rules / "tennis" / "2024" / MARKER_NAME]
+
+
+def test_full_build_names_indexes_it_did_not_rebuild(tmp_path, capsys):
+    import scripts.build_index as bi
+
+    index = tmp_path / "index"
+    for slug in ("checkers", "poker", "tennis_2026"):
+        _write(index / slug / "manifest.json", json.dumps({"build_id": f"b-{slug}"}))
+    assert bi.report_unbuilt_indexes(index, ["checkers"]) == ["poker", "tennis_2026"]
+    out = capsys.readouterr().out
+    assert "[keep  ]  poker: not built this time; its last index (build b-poker)" in out
+    assert "checkers" not in out
+
+
 # ── Nesting a flat game ───────────────────────────────────────────────────
 
 

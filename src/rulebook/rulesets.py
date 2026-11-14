@@ -206,13 +206,19 @@ def discover(
                 )))
             continue
         if not subs:
-            continue  # no rule files anywhere below: not a ruleset, nothing to say
+            # No rule files anywhere below: not a ruleset. Only a leftover marker is worth a word.
+            if (top / MARKER_NAME).exists():
+                issues.append(_orphan_marker(top))
+            continue
         if (top / MARKER_NAME).exists():
             issues.append(Issue("warning", top / MARKER_NAME, (
                 "a game folder (only edition folders inside) holds a ruleset marker. "
                 "It was probably left behind when its files moved into an edition "
                 "folder; move it into that folder to keep the slug."
             )))
+        for d in _visible_dirs(top):
+            if d not in subs and (d / MARKER_NAME).exists():
+                issues.append(_orphan_marker(d))  # an edition folder emptied of its files
         for s in subs:
             for deeper in (d for d in _visible_dirs(s) if _has_rule_files_below(d)):
                 issues.append(Issue("error", deeper, (
@@ -262,6 +268,20 @@ def discover(
         issues.extend(moved)
 
     return Discovery(rulesets, issues)
+
+
+def _orphan_marker(folder: Path) -> Issue:
+    """A folder holding a ruleset marker but no rule files: its files moved away."""
+    try:
+        slug = (read_marker(folder) or {}).get("slug")
+    except ValueError:
+        slug = None
+    named = f" for slug {slug!r}" if slug else ""
+    return Issue("warning", folder / MARKER_NAME, (
+        f"holds a ruleset marker{named} but no rule files, so its files were probably "
+        f"moved out. If they moved, `python -m rulebook.rulesets claim <their folder> "
+        f"{slug or '<slug>'}` keeps the slug; otherwise remove this folder."
+    ))
 
 
 def _duplicate_issues(rulesets: list[Ruleset]) -> list[Issue]:

@@ -447,6 +447,26 @@ def main(argv: list[str] | None = None) -> None:
 
     print(f"[done  ]  built {len(targets)} domain(s), {total} total rows "
           f"→ {settings.resolved_index_path}/<domain>/")
+    if not args.domain:
+        report_unbuilt_indexes(settings.resolved_index_path, targets)
+
+
+def report_unbuilt_indexes(index_root: Path, built: list[str]) -> list[str]:
+    """After a full build, name each index that no ruleset folder built this time.
+
+    That's a ruleset held back above (two folders claiming one slug, a folder moved
+    without its marker) or one whose folder is gone. Its last index stays on disk
+    and is still served; nothing is deleted. Returns the slugs reported.
+    """
+    from rulebook.store import domain_index_path, list_domains, read_manifest
+
+    kept = sorted(set(list_domains(index_root)) - set(built))
+    for slug in kept:
+        path = domain_index_path(index_root, slug)
+        build = read_manifest(path).get("build_id", "unknown")
+        print(f"[keep  ]  {slug}: not built this time; its last index (build {build}) is still "
+              f"served. Fix its folder (see above), or remove {path} if the ruleset is gone.")
+    return kept
 
 
 if __name__ == "__main__":
