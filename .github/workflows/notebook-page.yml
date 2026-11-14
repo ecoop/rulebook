@@ -52,9 +52,10 @@ permissions:
   pages: write
   id-token: write
 
-# One deploy at a time; a newer push replaces a queued one.
+# One run at a time per branch; a newer push replaces a queued one. Per branch, so a
+# test build of a branch (Run workflow on it) can't cancel main's deploy.
 concurrency:
-  group: notebook-page
+  group: notebook-page-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
