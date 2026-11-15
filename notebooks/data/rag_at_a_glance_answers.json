@@ -1,13 +1,13 @@
 {
-  "about": "Claude's answers shown in notebooks/rag_at_a_glance.ipynb section 3, saved so the notebook runs without an API key. Re-record with scripts/record_glance_answers.py.",
+  "about": "Claude's answers shown in notebooks/rag_at_a_glance.ipynb section 5 (Generation), saved so the notebook runs without an API key. Re-record with scripts/record_glance_answers.py.",
   "model": "claude-sonnet-5",
   "recorded": "2026-11-14",
   "from": "scripts/record_glance_answers.py",
   "answers": [
     {
-      "question": "How does a piece become a king, and what can it then do?",
+      "question": "can a king move backwards?",
       "domain": "checkers",
-      "answer": "A piece becomes a king when it reaches the farthest row from its owner (the opponent's king row), at which point it is promoted immediately by crowning it with a second piece [checkers 4.1]. If promotion happens on the final jump of a capturing chain, the turn ends there and the piece does not continue jumping that turn [checkers 4.1].\n\nOnce crowned, a king gains abilities an ordinary piece lacks: it can move one square diagonally in any direction, forward or backward [checkers 4.2], and it captures the same way as a regular piece (jumping an adjacent opponent's piece into the empty square beyond), but it may jump forward or backward and chain multiple jumps in any mix of directions [checkers 4.3]. This is a major upgrade, since ordinary pieces may only move and capture forward [checkers 2.4]. The compulsory-capture rule still applies to kings [checkers 4.3]."
+      "answer": ""
     },
     {
       "question": "What is the offside rule in soccer?",

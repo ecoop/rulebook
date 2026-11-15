@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Eric Cooper.
-"""Re-record the Claude answers that RAG at a glance shows in section 3.
+"""Re-record the Claude answers that RAG at a glance shows in section 5 (Generation).
 
 The notebook runs without an API key, so instead of calling Claude it shows
 answers saved in notebooks/data/rag_at_a_glance_answers.json from a real run.
@@ -35,6 +35,8 @@ def main() -> None:
         if res.unverified_citations:
             raise SystemExit(f"{entry['question']!r} cites rules it wasn't given: {res.unverified_citations}")
         entry["answer"] = res.answer
+        entry["input_tokens"] = res.input_tokens
+        entry["output_tokens"] = res.output_tokens
         print(f"{entry['question']}\n{res.answer}\n")
     doc["model"] = settings.claude_model
     doc["recorded"] = date.today().isoformat()
