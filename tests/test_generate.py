@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 import rulebook.generate as gen
 from rulebook.config import settings
 from rulebook.generate import (
@@ -104,6 +106,7 @@ def _capture_call(monkeypatch) -> dict:
         return resp, None
 
     monkeypatch.setattr(gen, "guarded_call", fake_guarded_call)
+    monkeypatch.setattr(gen.app_state, "cost_counter", object())  # as if initialized
     return seen
 
 
@@ -133,6 +136,15 @@ def test_build_prompt_is_what_generate_answer_sends(monkeypatch):
     assert seen["system"] == system
     assert seen["messages"] == [{"role": "user", "content": user}]
     assert "[ultimate II.B.1]" in user and "<question>how many players?</question>" in user
+
+
+def test_generate_answer_without_guardrails_says_how_to_set_them_up(monkeypatch):
+    # A script that calls Claude without app_state.initialize() used to die with
+    # "'NoneType' object has no attribute 'enforce'" from inside the cost-cap hook.
+    monkeypatch.setattr(settings, "anthropic_api_key", "sk-test")
+    monkeypatch.setattr(gen.app_state, "cost_counter", None)
+    with pytest.raises(RuntimeError, match="app_state.initialize"):
+        generate_answer("q?", [_chunk("ultimate", "II.B.1")])
 
 
 def test_all_citations_verified_returns_empty():

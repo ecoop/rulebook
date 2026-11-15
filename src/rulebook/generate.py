@@ -189,6 +189,14 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GeneratedAns
             "and eval need no key — only answering does. Add it to your .env (or export "
             "it) to use `ask` or the web app."
         )
+    if app_state.cost_counter is None:
+        # The cost-cap hook below needs the guardrail singletons; without them it
+        # fails deep inside llm-cost-governor with a bare AttributeError.
+        raise RuntimeError(
+            "Generation runs through the cost guardrails, which aren't set up yet. Call "
+            "rulebook.app_state.initialize(settings) first, as api/main.py, rulebook.ask "
+            "and notebook.setup() do."
+        )
     client = Anthropic(api_key=settings.anthropic_api_key)
     system_prompt, user_message = build_prompt(question, chunks)
     hooks = [
