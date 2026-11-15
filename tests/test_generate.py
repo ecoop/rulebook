@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 import rulebook.generate as gen
 from rulebook.config import settings
 from rulebook.generate import (
@@ -104,6 +106,7 @@ def _capture_call(monkeypatch) -> dict:
         return resp, None
 
     monkeypatch.setattr(gen, "guarded_call", fake_guarded_call)
+    monkeypatch.setattr(gen.app_state, "cost_counter", object())  # as if initialized
     return seen
 
 
@@ -135,6 +138,15 @@ def test_build_prompt_is_what_generate_answer_sends(monkeypatch):
     assert "[ultimate II.B.1]" in user and "<question>how many players?</question>" in user
 
 
+def test_generate_answer_without_guardrails_says_how_to_set_them_up(monkeypatch):
+    # A script that calls Claude without app_state.initialize() used to die with
+    # "'NoneType' object has no attribute 'enforce'" from inside the cost-cap hook.
+    monkeypatch.setattr(settings, "anthropic_api_key", "sk-test")
+    monkeypatch.setattr(gen.app_state, "cost_counter", None)
+    with pytest.raises(RuntimeError, match="app_state.initialize"):
+        generate_answer("q?", [_chunk("ultimate", "II.B.1")])
+
+
 def test_all_citations_verified_returns_empty():
     answer = "Seven per team [ultimate II.B.1]. Avoid points [hearts Object of the Game]."
     assert find_unverified_citations(answer, _CHUNKS) == []
@@ -150,6 +162,16 @@ def test_flags_entirely_fabricated_domain():
     # poker isn't a domain at all — still caught.
     answer = "Deal five cards [poker 1.2]."
     assert find_unverified_citations(answer, _CHUNKS) == ["poker 1.2"]
+
+
+def test_several_rules_in_one_bracket_are_each_checked():
+    # Claude sometimes groups citations: "[tennis 5.3, tennis 5.4]". Read as one
+    # rule id ("5.3, tennis 5.4"), that was flagged though both were retrieved.
+    chunks = [_chunk("tennis", "5.3"), _chunk("tennis", "5.4")]
+    assert find_unverified_citations("Win two sets [tennis 5.3, tennis 5.4].", chunks) == []
+    assert find_unverified_citations("Win two sets [tennis 5.3; 5.4].", chunks) == []
+    assert find_unverified_citations("[tennis 5.3, checkers 9.9]", chunks) == ["checkers 9.9"]
+    assert find_unverified_citations("[tennis 5.3, 5.9]", chunks) == ["tennis 5.9"]
 
 
 def test_ignores_markdown_links():
