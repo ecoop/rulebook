@@ -18,6 +18,7 @@ import json
 from datetime import date
 from pathlib import Path
 
+from rulebook import app_state
 from rulebook.config import settings
 from rulebook.pipeline import ask
 
@@ -25,6 +26,9 @@ ANSWERS = Path(__file__).resolve().parents[1] / "notebooks" / "data" / "rag_at_a
 
 
 def main() -> None:
+    # Same guardrail singletons rulebook.ask and the API construct: the Claude call
+    # records its cost through them, so they must exist first.
+    app_state.initialize(settings)
     doc = json.loads(ANSWERS.read_text())
     for entry in doc["answers"]:
         res = ask(entry["question"], domain=entry.get("domain"), domains=entry.get("domains"))
