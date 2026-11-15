@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.14-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-_Last updated: 2026-11-14_
+_Last updated: 2026-11-15_
 
 **Rulebook** is a RAG (retrieval-augmented generation) app that answers questions about a set of rules. Give it a rulebook (PDF, Markdown or plain text) and it starts answering questions about it: each claim cites the rule it comes from, and you see the passages it drew on. Adding a rule set is one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)); nothing in the pipeline is specific to a game or sport.
 
@@ -22,7 +22,9 @@ The notebooks run real questions through Rulebook's own pipeline, one stage at a
 - **Go further:** [**A closer look at Reranking**](https://ecoop.github.io/rulebook/reranking.html): why retrieval finds passages *about* the question rather than ones that *answer* it, and a second stage that fixes the order: BM25, hybrid, and a cross-encoder, scored on poker and checkers. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/reranking.ipynb).
 - **Go further:** [**A closer look at Chunking**](https://ecoop.github.io/rulebook/chunking.html): how a rulebook is cut into chunks, how to compare ways of cutting fairly (the same reading budget for each), a chunking bug the gold set found, and section headers, a one-line fix for poker's wrong-variant misses. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/chunking.ipynb).
 
-One more *Go further* notebook is coming: *A closer look at Generation and Citations*. To run them on your own machine, and for what to read after them, see [Learning RAG](#learning-rag).
+- **Go further:** [**A closer look at Generation**](https://ecoop.github.io/rulebook/generation.html): what Claude is sent with each question, why the system prompt says what it does (each rule and the failure that added it), and what the citation check catches and misses. No key needed to read it or run most of it; the last section asks Claude live with your own key. [Run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/generation.ipynb).
+
+To run them on your own machine, and for what to read after them, see [Learning RAG](#learning-rag).
 
 ## What's in here
 
@@ -62,6 +64,8 @@ rulebook/
 ├── notebooks/embeddings.ipynb # go further: what an embedding is, swapping the embedder
 ├── notebooks/evaluation.ipynb # go further: golds + hit@k/MRR, checkers then poker
 ├── notebooks/reranking.ipynb  # go further: BM25, hybrid, cross-encoder reranking
+├── notebooks/chunking.ipynb   # go further: ways of cutting, section headers
+├── notebooks/generation.ipynb # go further: the prompt, rule by rule, and checking citations
 ├── api/main.py                # FastAPI: /ask, /meta, /me, /feedback, /gold, /advanced/*
 ├── web/                       # React 19 + TypeScript + Tailwind v4 (Vite) — Ask + "Your activity"
 └── docs/                      # deploy, RBAC, roles, sources… (see Documentation)
@@ -117,7 +121,7 @@ See [`rules/SOURCES.md`](rules/SOURCES.md) for a menu of recognizable rulesets a
 
 ### Learning RAG
 
-New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_glance.ipynb) ([results page](https://ecoop.github.io/rulebook/rag_at_a_glance.html)), a short tour that runs a question through every stage (ingestion → chunking → embeddings → retrieval → generation → evaluation) on the sample domains. Each stage points to a *Go further* notebook. They are [`notebooks/embeddings.ipynb`](notebooks/embeddings.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings.html)), on what an embedding is, and [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb) ([results page](https://ecoop.github.io/rulebook/evaluation.html)), on how to *measure* retrieval (hit@k/MRR, checkers then poker, local vs Voyage), and [`notebooks/reranking.ipynb`](notebooks/reranking.ipynb) ([results page](https://ecoop.github.io/rulebook/reranking.html)), on reordering what retrieval found, and [`notebooks/chunking.ipynb`](notebooks/chunking.ipynb) ([results page](https://ecoop.github.io/rulebook/chunking.html)), on how the rules are cut into chunks. Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
+New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_glance.ipynb) ([results page](https://ecoop.github.io/rulebook/rag_at_a_glance.html)), a short tour that runs a question through every stage (ingestion → chunking → embeddings → retrieval → generation → evaluation) on the sample domains. Each stage points to a *Go further* notebook. They are [`notebooks/embeddings.ipynb`](notebooks/embeddings.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings.html)), on what an embedding is, and [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb) ([results page](https://ecoop.github.io/rulebook/evaluation.html)), on how to *measure* retrieval (hit@k/MRR, checkers then poker, local vs Voyage), and [`notebooks/reranking.ipynb`](notebooks/reranking.ipynb) ([results page](https://ecoop.github.io/rulebook/reranking.html)), on reordering what retrieval found, and [`notebooks/chunking.ipynb`](notebooks/chunking.ipynb) ([results page](https://ecoop.github.io/rulebook/chunking.html)), on how the rules are cut into chunks, and [`notebooks/generation.ipynb`](notebooks/generation.ipynb) ([results page](https://ecoop.github.io/rulebook/generation.html)), on what Claude is sent and how its citations are checked. Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
 
 **No install? Run it in your browser.**
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb)

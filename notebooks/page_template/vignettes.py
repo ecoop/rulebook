@@ -379,8 +379,44 @@ def chunking() -> str:
     return sk.render(poker + chess)
 
 
+def _checker(sk: Sketch, x: float, y: float, rx: float, ry: float, side: float, s: float) -> str:
+    """One dark checker as a short cylinder, its base centred on (x, y)."""
+    return (f'<path d="M{x - rx:.1f} {y:.1f} L{x - rx:.1f} {y - side:.1f} '
+            f'A{rx:.1f} {ry:.1f} 0 0 1 {x + rx:.1f} {y - side:.1f} L{x + rx:.1f} {y:.1f} '
+            f'A{rx:.1f} {ry:.1f} 0 0 1 {x - rx:.1f} {y:.1f} Z" fill="#fff" stroke-width="1.4"/>'
+            f'<ellipse cx="{x:.1f}" cy="{y - side:.1f}" rx="{rx:.1f}" ry="{ry:.1f}" '
+            f'fill="{sk.hatch("tight", s)}" stroke-width="1.4"/>')
+
+
+def generation() -> str:
+    """A written answer with its citations bracketed, beside the king it's about."""
+    sk = Sketch(320, 170, "Sketch of a handwritten answer with bracketed citations, beside a crowned checker")
+    # The page, tilted a little, with lines of writing; two end in a bracketed citation.
+    lines = [(0, 112, None), (1, 96, 26), (2, 118, None), (3, 84, None), (4, 70, 30), (5, 104, None)]
+    ink = []
+    for row, length, cite in lines:
+        y = 36 + row * 19
+        x, d = 30, []
+        while x < 30 + length:  # writing as short wavy strokes, word by word
+            w = min(8 + (x * 7 + row * 13) % 15, 30 + length - x)
+            d.append(f"M{x} {y} q {w / 4:.1f} -3 {w / 2:.1f} 0 t {w / 2:.1f} 0")
+            x += w + 5
+        ink.append(f'<path d="{" ".join(d)}" stroke-width="1.3" opacity="0.8"/>')
+        if cite:
+            bx = 30 + length + 6
+            ink.append(f'<path d="M{bx + 3} {y - 7} h-3 v13 h3 M{bx + cite} {y - 7} h3 v13 h-3" '
+                       f'stroke="{DEEP}" stroke-width="1.8"/>'
+                       f'<path d="M{bx + 6} {y} h{cite - 9}" stroke="{DEEP}" stroke-width="1.6"/>')
+    page = (f'<g transform="rotate(-4 95 85)"><rect x="16" y="14" width="164" height="140" rx="3" '
+            f'fill="#fff" stroke-width="1.5"/>{"".join(ink)}</g>')
+    # The king: one checker crowned with a second.
+    king = _checker(sk, 252, 140, 40, 15, 12, 1) + _checker(sk, 252, 116, 40, 15, 12, 1)
+    return sk.render(page + king)
+
+
 VIGNETTES = {"rag_at_a_glance": glance, "embeddings": embeddings, "evaluation": evaluation,
-             "reranking": reranking, "chunking": chunking}
+             "reranking": reranking, "chunking": chunking,
+             "generation": generation}
 
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)

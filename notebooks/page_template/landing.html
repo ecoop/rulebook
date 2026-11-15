@@ -68,8 +68,6 @@
   .cards > * { min-width: 0; }
   .links { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; }
   .links a:first-child { font-weight: 600; }
-  .coming { color: var(--muted); }
-  .coming h3 { color: var(--muted); }
   pre {
     background: #f5f5f5;
     border-radius: 6px;
@@ -186,10 +184,21 @@
     </div>
   </div>
 
-  <div class="card coming">
-    <h3>A closer look at Generation and Citations <span class="tag">coming</span></h3>
-    <p class="what">What Claude is given, why every claim must cite a rule, and how it declines
-      questions the rules don't cover. Will need an Anthropic key.</p>
+  <div class="card with-image">
+    <img class="vignette" src="img/generation.svg" alt="">
+    <div>
+    <h3><a href="generation.html">A closer look at Generation</a></h3>
+    <div class="meta"><span class="tag">about 15 minutes</span><span class="tag">key for the last step</span></div>
+    <p class="what">What Claude is sent with each question, and why the prompt says what it does.</p>
+    <ul>
+      <li>Read the system prompt rule by rule, with the failure that added each one.</li>
+      <li>See what the citation check catches, and the wrong answer it can't.</li>
+    </ul>
+    <div class="links">
+      <a href="generation.html">Read it</a>
+      <a href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/generation.ipynb">Run it in Colab</a>
+    </div>
+    </div>
   </div>
 
 </div>
