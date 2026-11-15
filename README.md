@@ -45,6 +45,7 @@ rulebook/
 │   ├── store.py               # in-memory numpy vector store (.npy matrix + .jsonl records)
 │   ├── retrieve.py            # single-domain and cross-domain retrieval
 │   ├── generate.py            # Claude call with a citation-forcing prompt
+│   ├── prompts/system.md      # that prompt, the default; SYSTEM_PROMPT_FILE swaps in your own
 │   ├── pipeline.py            # end-to-end: question → answer + citations
 │   ├── ask.py                 # CLI: `python -m rulebook.ask` — retrieve + answer in the terminal
 │   ├── add.py                 # CLI: `python -m rulebook.add <slug> <file>` — one-command ingest

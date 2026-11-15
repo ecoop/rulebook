@@ -34,6 +34,26 @@ def test_prompt_names_the_domains_in_play():
     assert "ultimate" in p and "hearts" in p
 
 
+def test_default_prompt_file_is_sent_without_its_comments():
+    # The default prompt lives in src/rulebook/prompts/system.md, under a
+    # copyright header and notes that Claude must never see.
+    p = build_system_prompt(["Checkers"])
+    assert p.startswith("You are an assistant that answers questions about the rules of "
+                        "the following: Checkers using ONLY")
+    assert "<!--" not in p and "Copyright" not in p and "{domains_phrase}" not in p
+    assert p.endswith("One or two short paragraphs is usually enough.")
+
+
+def test_system_prompt_file_setting_uses_your_own(monkeypatch, tmp_path):
+    mine = tmp_path / "my_prompt.md"
+    mine.write_text("<!-- my notes -->\nAnswer about {domains_phrase}. Cite as {domain rule}.\n")
+    monkeypatch.setattr(settings, "system_prompt_file", str(mine))
+    # Braces other than the placeholder are left alone.
+    assert build_system_prompt(["Tennis"]) == (
+        "Answer about the following: Tennis. Cite as {domain rule}."
+    )
+
+
 def test_prompt_refuses_domains_absent_from_context():
     # Guardrail against citation hallucination: the model must not answer for or
     # cite a domain with no excerpt in the context. See #172 for the structural

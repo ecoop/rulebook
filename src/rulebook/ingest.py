@@ -40,12 +40,17 @@ _TEXT_SUFFIXES = {".md", ".txt"}
 _HTML_COMMENT = re.compile(r"<!--.*?-->[ \t]*\n?", re.DOTALL)
 
 
+def strip_html_comments(text: str) -> str:
+    """``text`` without its HTML comments (and the rest of each comment's line)."""
+    return _HTML_COMMENT.sub("", text)
+
+
 def extract_pages(source_path: Path) -> list[PageText]:
     """Return one PageText per non-empty page (or one per text file)."""
     if source_path.suffix.lower() in _TEXT_SUFFIXES:
         raw = source_path.read_text(encoding="utf-8")
         if source_path.suffix.lower() == ".md":
-            raw = _HTML_COMMENT.sub("", raw)
+            raw = strip_html_comments(raw)
         cleaned = _clean(raw)
         return [PageText(page_number=1, text=cleaned)] if cleaned.strip() else []
 
