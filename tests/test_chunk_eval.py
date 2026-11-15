@@ -33,11 +33,11 @@ def _chunk(rule_id, text):
 
 
 def test_rule_spans_locate_chunks_and_refuse_prefixed_text():
-    text = "1.1 Kings move. 1.2 Men move forward."
-    spans = rule_spans(text, [_chunk("1.1", "1.1 Kings move."), _chunk("1.2", "1.2 Men move forward.")])
+    text = "1.1 Kings move. 1.2 Pieces move forward."
+    spans = rule_spans(text, [_chunk("1.1", "1.1 Kings move."), _chunk("1.2", "1.2 Pieces move forward.")])
     assert [(text[s.start:s.end], s.rule_id) for s in spans] == [
         ("1.1 Kings move.", "1.1"),
-        ("1.2 Men move forward.", "1.2"),
+        ("1.2 Pieces move forward.", "1.2"),
     ]
     with pytest.raises(ValueError, match="section headers"):
         rule_spans(text, [_chunk("1.1", "Checkers: 1.1 Kings move.")])
@@ -46,18 +46,18 @@ def test_rule_spans_locate_chunks_and_refuse_prefixed_text():
 class KeywordEmbedder:
     """One dimension per keyword, so retrieval is predictable."""
 
-    WORDS = ("king", "men", "board")
+    WORDS = ("king", "pieces", "board")
 
     def embed(self, texts, *, input_type):
         return [[float(w in t.lower()) + 1e-3 for w in self.WORDS] for t in texts]
 
 
 def test_score_cut_counts_a_hit_and_the_cited_share():
-    text = "1.1 The board is square. 1.2 A king moves both ways. 1.3 Men move forward."
+    text = "1.1 The board is square. 1.2 A king moves both ways. 1.3 Pieces move forward."
     chunks = [
         _chunk("1.1", "1.1 The board is square."),
         _chunk("1.2", "1.2 A king moves both ways."),
-        _chunk("1.3", "1.3 Men move forward."),
+        _chunk("1.3", "1.3 Pieces move forward."),
     ]
     spans = rule_spans(text, chunks)
     gold = [GoldItem(domain="x", question="How does a king move?", citations=("x 1.2",))]
