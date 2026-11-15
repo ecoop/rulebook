@@ -134,14 +134,35 @@ def find_unverified_citations(answer: str, chunks: list[RetrievedChunk]) -> list
         # Skip markdown links: a `]` immediately followed by `(`.
         if m.end() < len(answer) and answer[m.end()] == "(":
             continue
-        domain = m.group(1)
+        for domain, rule_id in _bracket_citations(m.group(1), m.group(2)):
+            label = f"{domain} {rule_id}"
+            if not _is_covered(domain, rule_id, valid) and label not in flagged:
+                flagged.append(label)
+    return flagged
+
+
+_DOMAIN_PREFIX_RE = re.compile(r"([a-z][a-z0-9_-]*)\s+(\S.*)")
+
+
+def _bracket_citations(domain: str, rest: str) -> list[tuple[str, str]]:
+    """The (domain, rule_id) pairs in one bracket.
+
+    Usually one, ``[checkers 4.1]``, but the model sometimes groups several:
+    ``[tennis 5.3, tennis 5.4]`` or ``[tennis 5.3; 5.4]``. A later item may name
+    its own domain or inherit the bracket's.
+    """
+    pairs = []
+    for i, item in enumerate(re.split(r"\s*[,;]\s*", rest.strip())):
+        if i and (m := _DOMAIN_PREFIX_RE.fullmatch(item)):
+            item_domain, item = m.group(1), m.group(2)
+        else:
+            item_domain = domain
         # Drop a trailing page suffix the model may copy from the context header
         # (" — p.3" / " — pp.3-4"); citations key on the bare rule_id.
-        rule_id = m.group(2).strip().split(" — ")[0].strip()
-        label = f"{domain} {rule_id}"
-        if not _is_covered(domain, rule_id, valid) and label not in flagged:
-            flagged.append(label)
-    return flagged
+        rule_id = item.split(" — ")[0].strip()
+        if rule_id:
+            pairs.append((item_domain, rule_id))
+    return pairs
 
 
 def _is_covered(domain: str, rule_id: str, valid: set[tuple[str, str]]) -> bool:

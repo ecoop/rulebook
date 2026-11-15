@@ -164,6 +164,16 @@ def test_flags_entirely_fabricated_domain():
     assert find_unverified_citations(answer, _CHUNKS) == ["poker 1.2"]
 
 
+def test_several_rules_in_one_bracket_are_each_checked():
+    # Claude sometimes groups citations: "[tennis 5.3, tennis 5.4]". Read as one
+    # rule id ("5.3, tennis 5.4"), that was flagged though both were retrieved.
+    chunks = [_chunk("tennis", "5.3"), _chunk("tennis", "5.4")]
+    assert find_unverified_citations("Win two sets [tennis 5.3, tennis 5.4].", chunks) == []
+    assert find_unverified_citations("Win two sets [tennis 5.3; 5.4].", chunks) == []
+    assert find_unverified_citations("[tennis 5.3, checkers 9.9]", chunks) == ["checkers 9.9"]
+    assert find_unverified_citations("[tennis 5.3, 5.9]", chunks) == ["tennis 5.9"]
+
+
 def test_ignores_markdown_links():
     answer = "See the [official rules](https://example.com/rules) for details."
     assert find_unverified_citations(answer, _CHUNKS) == []
