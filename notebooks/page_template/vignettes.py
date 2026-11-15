@@ -217,9 +217,11 @@ def board(sk: Sketch, x, y, s, checkers, front=125, back=72, depth=62, edge=6, p
     return place(x, y, s, "".join(out))
 
 
-GAME = [(1, 0, True), (3, 0, True), (5, 0, True), (0, 1, True), (2, 1, True), (6, 1, True),
-        (3, 2, True), (4, 5, False), (1, 5, False), (5, 6, False), (7, 6, False), (2, 7, False),
-        (4, 7, False), (6, 7, False), (3, 4, False)]
+# (column, row, filled), all on dark squares (column + row even): checkers is played
+# on the dark squares only, with a dark square in each player's left-hand corner.
+GAME = [(6, 0, True), (4, 0, True), (2, 0, True), (7, 1, True), (5, 1, True), (1, 1, True),
+        (4, 2, True), (3, 5, False), (5, 5, False), (2, 6, False), (0, 6, False), (5, 7, False),
+        (3, 7, False), (1, 7, False), (4, 4, False)]
 
 
 # --- the vignettes ---------------------------------------------------------------
