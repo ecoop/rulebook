@@ -111,6 +111,11 @@ jobs:
       - name: RAG at a glance page
         run: uv run --no-sync jupyter nbconvert notebooks/rag_at_a_glance.ipynb $RENDER --output rag_at_a_glance
 
+      # The notebooks link each other through Colab (Colab sends any other link
+      # through a google.com redirect notice); on the pages, link page to page.
+      - name: Page-to-page links
+        run: uv run --no-sync python notebooks/page_template/page_links.py _site/*.html
+
       # The landing page is a static template, with its vignettes in img/
       # (drawn by notebooks/page_template/vignettes.py).
       - name: Landing page
