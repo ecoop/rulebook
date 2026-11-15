@@ -104,8 +104,8 @@ def test_generate_answer_omits_effort_when_unset(monkeypatch):
 
 
 def test_build_prompt_is_what_generate_answer_sends(monkeypatch):
-    # The RAG at a glance notebook prints build_prompt() as "what Claude is given",
-    # so it must be exactly what the call sends.
+    # build_prompt() is how to show what Claude is given, so it must be exactly
+    # what the call sends.
     seen = _capture_call(monkeypatch)
     chunks = [_chunk("ultimate", "II.B.1"), _chunk("hearts", "Object of the Game")]
     generate_answer("how many players?", chunks)
