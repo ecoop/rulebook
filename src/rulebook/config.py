@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # default ("high") with no loss on the gold set. Empty = omit the
     # parameter, for models that don't accept effort.
     claude_effort: str = Field(default="low", pattern="^(|low|medium|high|xhigh|max)$")
+    # The system prompt for answer generation. Empty = the default in
+    # src/rulebook/prompts/system.md; a path (relative to the repo root, or
+    # absolute) uses your own. "{domains_phrase}" in it becomes the rule sets in play.
+    system_prompt_file: str = ""
 
     # --- Storage -----------------------------------------------------------
     # Where the vector index lives on the local filesystem. Local dev leaves
@@ -233,6 +237,13 @@ class Settings(BaseSettings):
     @property
     def resolved_index_path(self) -> Path:
         p = self.index_path
+        return p if p.is_absolute() else self.repo_root / p
+
+    @property
+    def resolved_system_prompt_file(self) -> Path:
+        if not self.system_prompt_file:
+            return Path(__file__).parent / "prompts" / "system.md"
+        p = Path(self.system_prompt_file)
         return p if p.is_absolute() else self.repo_root / p
 
     @property

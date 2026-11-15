@@ -17,6 +17,9 @@ The prompt is deliberately short. Long system prompts are not
 automatically better prompts, and each extra instruction is one the
 model might overweight. Iterate here when you have real failure modes to
 respond to — not in advance.
+
+The default system prompt is a file, prompts/system.md; SYSTEM_PROMPT_FILE
+points to your own instead.
 """
 
 import re
@@ -30,17 +33,17 @@ from llm_cost_governor.wrapper import guarded_call
 
 from . import app_state
 from .config import settings
+from .ingest import strip_html_comments
 from .registry import display_labels
 from .retrieve import RetrievedChunk
 
-SYSTEM_PROMPT_TEMPLATE = """You are an assistant that answers questions about the rules of {domains_phrase} using ONLY the excerpts provided in the <context> block.
 
-Rules for your answer:
-- Cite the source of every specific claim inline, in the form [domain rule_id], using the domain and rule id from the context block that supports it. Example: [ultimate II.B.1].
-- If the context does not contain the answer, say so plainly. Do NOT fill in from general knowledge.
-- Only the rule sets named above are available. If the question mentions any other game or domain (one with no excerpt in the context block), do NOT supply its rules from general knowledge or invent a [domain rule_id] for it — say plainly that its rules aren't in the provided context. You MAY still relay what an available rule set's own excerpts say about that other game, cited to the available domain.
-- For questions that compare two domains, structure your answer by domain so the differences are obvious. If one domain's context doesn't address the topic, say that too.
-- Be concise. One or two short paragraphs is usually enough."""
+def system_prompt_template() -> str:
+    """The system prompt as written: SYSTEM_PROMPT_FILE, or the default
+    prompts/system.md, without its HTML comments. Read on each call, so an edit
+    to the file applies to the next question."""
+    text = settings.resolved_system_prompt_file.read_text(encoding="utf-8")
+    return strip_html_comments(text).strip()
 
 
 def build_system_prompt(domains: list[str]) -> str:
@@ -55,7 +58,8 @@ def build_system_prompt(domains: list[str]) -> str:
         phrase = "the following: " + ", ".join(domains)
     else:
         phrase = "the provided rules"
-    return SYSTEM_PROMPT_TEMPLATE.format(domains_phrase=phrase)
+    # replace, not format: a prompt someone writes may contain other braces.
+    return system_prompt_template().replace("{domains_phrase}", phrase)
 
 USER_TEMPLATE = """<context>
 {context}
