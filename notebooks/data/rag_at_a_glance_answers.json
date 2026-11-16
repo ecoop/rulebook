@@ -1,18 +1,22 @@
 {
   "about": "Claude's answers shown in notebooks/rag_at_a_glance.ipynb section 5 (Generation), saved so the notebook runs without an API key. Re-record with scripts/record_glance_answers.py.",
   "model": "claude-sonnet-5",
-  "recorded": "2026-11-14",
+  "recorded": "2026-11-16",
   "from": "scripts/record_glance_answers.py",
   "answers": [
     {
       "question": "can a king move backwards?",
       "domain": "checkers",
-      "answer": ""
+      "answer": "Yes. A king can move one square diagonally backward (as well as forward) to an adjacent empty dark square [checkers 4.2], and it may also capture by jumping backward, including chaining jumps in any mix of directions [checkers 4.3]. This is unlike an ordinary piece, which may only move and capture forward until promoted [checkers 2.4].",
+      "input_tokens": 933,
+      "output_tokens": 117
     },
     {
       "question": "What is the offside rule in soccer?",
       "domain": "checkers",
-      "answer": "The provided context contains only rules for Checkers (English Draughts) — there is no information about soccer or its offside rule in this context. I can't answer that question from the available material."
+      "answer": "The provided context contains only rules for Checkers (English Draughts) and does not include any information about soccer or its offside rule. I can't answer this question from the given context.",
+      "input_tokens": 938,
+      "output_tokens": 52
     },
     {
       "question": "How do you win each game?",
@@ -20,7 +24,9 @@
         "checkers",
         "tennis"
       ],
-      "answer": "**Checkers:** You win when your opponent has no legal move at the start of their turn — either because you've captured all their pieces, or because their remaining pieces are all blocked [checkers 5.1, checkers 2.1]. A draw can occur instead if neither side can force a win [checkers 5.2].\n\n**Tennis:** A \"game\" is won by reaching 40 and winning another point, unless both players reach 40, in which case play continues until one player gets a two-point lead [tennis 5.1]. Games accumulate into sets (won by reaching six games with a two-game margin, or via a tiebreak at six-all) [tennis 5.3, tennis 5.4], and sets accumulate into a match win [tennis 2.1]."
+      "answer": "**Checkers:** You win when your opponent has no legal move at the start of their turn — either because you've captured all of their pieces or because all their remaining pieces are blocked and cannot move [checkers 5.1]. This is the object of the game, achieved by capturing all opposing pieces or blocking every piece so no legal move remains [checkers 2.1].\n\n**Tennis:** Winning \"a game\" involves point-based scoring: points go love, 15, 30, 40, and winning a point at 40 wins the game, unless both players have reached 40 (deuce) [tennis 5.1]. More broadly, the object is to win rallies by landing the ball in the opponent's court so it can't be returned, with points accumulating into games, games into sets, and the match going to whoever wins the required number of sets [tennis 2.1].",
+      "input_tokens": 1371,
+      "output_tokens": 264
     }
   ]
 }
