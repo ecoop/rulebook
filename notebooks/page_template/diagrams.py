@@ -2,8 +2,9 @@
 """Draw the RAG flow diagrams: blue crayon sketches of what each stage does.
 
 The same conté as the landing page's vignettes (vignettes.py's Sketch: its crayon
-filter and hatching), in a blue chosen to sit at the sanguine's lightness, so the
-two read as one hand in two colours: sanguine for the games, blue for the pipeline.
+filter and hatching), in blue: sanguine for the games, blue for the pipeline. The
+blue is darker than the sanguine, and the words get a crayon of their own that
+wobbles less and skips less, because the vignettes are looked at and these are read.
 
     uv run python notebooks/page_template/diagrams.py
 
@@ -21,17 +22,18 @@ from pathlib import Path
 from vignettes import Sketch
 
 OUT = Path(__file__).parent / "img"
-INK = "#33618f"   # blue, CIELAB L* 40.0: the same lightness as the sanguine #9c4329
-DEEP = "#22416a"  # blue, pressed harder: L* ~26, like the deep sanguine #6e2a17
-WEIGHT = 1.45     # diagrams are read, not admired: every stroke a little heavier
+INK = "#264d79"   # blue, CIELAB L* 32 (the sanguine #9c4329 is 40): darker, to be read
+DEEP = "#1a3558"  # blue, pressed harder: L* ~22
+WEIGHT = 1.45     # every stroke a little heavier than the vignettes'
+WORDS = (1.4, 2.8)  # the words' crayon (wobble, tooth): steadier and more solid than the lines'
 FONT = 'font-family="Georgia, serif" font-style="italic"'
 
 
 class Diagram(Sketch):
-    """A Sketch in blue, with every stroke ``WEIGHT`` times heavier."""
+    """A Sketch in blue, with every stroke ``WEIGHT`` times heavier and crisper words."""
 
     def __init__(self, width: int, height: int, label: str):
-        super().__init__(width, height, label, ink=INK, deep=DEEP)
+        super().__init__(width, height, label, ink=INK, deep=DEEP, words=WORDS)
 
     def render(self, body: str) -> str:
         body = re.sub(r'stroke-width="([\d.]+)"',
