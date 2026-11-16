@@ -17,7 +17,12 @@ STRATEGY
     3. Split the text at those boundaries. Each resulting chunk carries
        its rule id, page range, domain, and source PDF.
 
-    4. If a section is longer than MAX_CHARS, split it further at
+    4. Merge each rule with the sub-rules under it (14 with 14.2, 14.2.1 …)
+       while the whole stays under MERGE_CHARS. A rule's lead-in ("It shall
+       be a let if:") then travels with its list, instead of each list item
+       becoming a fragment that never says what it belongs to.
+
+    5. If a section is longer than MAX_CHARS, split it further at
        sentence ends, so no piece stops mid-sentence and no single chunk
        becomes needle-in-a-haystack.
 
@@ -112,6 +117,7 @@ _HIER_LEVELS = [
 
 MAX_CHARS = 1500       # ~350 tokens; comfortably under any embedder's cap
 MIN_CHARS = 60         # discard shorter fragments (headings-only, page numbers)
+MERGE_CHARS = 1000     # merge a rule with its sub-rules up to this size; 0 = off
 
 _WHITESPACE_RUN = re.compile(r"\s+")
 
@@ -131,7 +137,12 @@ def _normalize_ws(text: str) -> str:
 
 
 def chunk_pages(
-    pages: list[PageText], *, source: str, domain: str, section_headers: bool = False
+    pages: list[PageText],
+    *,
+    source: str,
+    domain: str,
+    section_headers: bool = False,
+    merge_chars: int = MERGE_CHARS,
 ) -> list[Chunk]:
     """Chunk a list of PageText into a list of Chunk records.
 
@@ -139,12 +150,15 @@ def chunk_pages(
     sits under at the front of its chunk ("Seven-Card Stud: 3.4 ..."), so a short
     rule's vector carries its context. Off by default (``CHUNK_SECTION_HEADERS``);
     notebooks/chunking.ipynb measures what it does.
+
+    ``merge_chars`` is the size up to which a rule absorbs its sub-rules (see
+    :func:`_merge_into_parents`); 0 keeps one chunk per numbered rule.
     """
     if not pages:
         return []
 
     joined, page_starts = _join_with_offsets(pages)
-    anchors = _detect_anchors(joined)
+    anchors = _merge_into_parents(joined, _detect_anchors(joined), merge_chars)
     sections = _section_headings(joined) if section_headers and anchors else []
 
     if not anchors:
@@ -267,6 +281,71 @@ def _detect_anchors(text: str) -> list[tuple[int, str]]:
             by_offset[offset] = rule_id
 
     return sorted(by_offset.items(), key=lambda x: x[0])
+
+
+def _merge_into_parents(
+    text: str, anchors: list[tuple[int, str]], merge_chars: int
+) -> list[tuple[int, str]]:
+    """Drop the anchors of sub-rules that fit in their parent's chunk.
+
+    A rule runs from its anchor to the next one, so dropping an anchor joins its
+    text to the chunk before it. Walking in document order, while the chunk stays
+    within ``merge_chars``, a rule joins it when
+
+    * its id sits under the chunk's id (``14.2.1`` under ``14``, ``III.D.2``
+      under ``III.D``), or
+    * it is a list item continuing the chunk's sentence: a sibling of the chunk's
+      first rule whose text starts lowercase ("13.3.7. is hit twice …" after
+      "13.3.6. is caught …"). This catches lists whose lead-in ("13.3. It shall
+      be a fault if the shuttle:") wasn't detected as a rule of its own. The
+      chunk is then cited by the parent's id (``13.3``).
+
+    Otherwise it starts a chunk of its own.
+
+    Why: rulebooks write a lead-in and then a list ("14. LETS … It shall be a
+    'let' if:" then 14.2.1 … 14.2.7). One chunk per number leaves the lead-in too
+    short to keep (under MIN_CHARS) and each item a fragment that never says
+    "let", so no item matches a question about lets. Merged, the chunk is cited by
+    the parent's id; citing a sub-rule inside it still verifies, because the
+    citation check accepts a sub-clause of a retrieved rule.
+
+    Self-contained siblings ("3.B. Foul: …", "4.1 …", "4.2 …") never merge, so
+    definitions stay one per chunk and rulebooks numbered one level deep are
+    unchanged.
+    """
+    if merge_chars <= 0 or len(anchors) < 2:
+        return anchors
+    ends = [off for off, _ in anchors[1:]] + [len(text)]
+    kept: list[tuple[int, str]] = []
+    scope = ""     # ids under this join the current chunk
+    widened = False
+    size = 0
+    for (offset, rule_id), end in zip(anchors, ends, strict=True):
+        span = text[offset:end]
+        n = len(_normalize_ws(span))
+        fits = bool(kept) and size + 1 + n <= merge_chars
+        if fits and rule_id.startswith(scope + "."):
+            size += 1 + n
+            continue
+        parent = rule_id.rpartition(".")[0]
+        if (
+            fits
+            and not widened
+            and parent
+            and scope.rpartition(".")[0] == parent
+            and _CONTINUES_SENTENCE.match(span)
+        ):
+            kept[-1] = (kept[-1][0], parent)
+            scope, widened = parent, True
+            size += 1 + n
+            continue
+        kept.append((offset, rule_id))
+        scope, widened, size = rule_id, False, n
+    return kept
+
+
+# A list item's text after its number starts lowercase: "13.3.7. is hit twice …".
+_CONTINUES_SENTENCE = re.compile(r"\s*\S+\s+[a-z]")
 
 
 def _detect_numbered_title_anchors(text: str) -> list[tuple[int, str]]:
