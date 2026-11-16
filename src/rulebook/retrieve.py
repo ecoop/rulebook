@@ -28,13 +28,17 @@ PERFORMANCE NOTE
     the loaded Store in a module-level singleton behind a lock.
 """
 
+import logging
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from .config import settings
 from .embeddings import get_embedder
 from .rerank import Reranker, get_reranker, reorder
-from .store import list_domains, open_domain_store
+from .store import Store, list_domains, open_domain_store
+
+log = logging.getLogger(__name__)
 
 _WHITESPACE_RUN = re.compile(r"\s+")
 
@@ -76,6 +80,58 @@ def _row_to_chunk(row: dict) -> RetrievedChunk:
     )
 
 
+class EmbedderMismatchError(RuntimeError):
+    """A domain's index was built by a different embedder than the one configured.
+
+    A question is only comparable with the stored chunks if the same model
+    embedded both. A different model can give vectors of a different length (a
+    shape error) or of the same length in an unrelated space (nearest neighbours
+    that mean nothing), so retrieval refuses rather than return either.
+    """
+
+
+# Index dirs already warned about having no recorded model, so a long-running
+# app logs it once per index rather than on every question.
+_warned_unknown_embedder: set[Path] = set()
+
+
+def _open_for_query(root: Path, domain: str) -> Store:
+    """Open ``domain``'s store, checking it was built by the configured embedder.
+
+    Raises :class:`EmbedderMismatchError` when the manifest's provider/model differ
+    from EMBEDDING_PROVIDER/EMBEDDING_MODEL. An index whose manifest records no
+    model (built before manifests carried one) is searched as-is, with a warning.
+    Scratch indexes (eval.build_scratch_index) don't come through here: they carry
+    their own embedder.
+    """
+    store = open_domain_store(root, domain)
+    if store.vectors is None:
+        return store  # unbuilt; search() raises its own "build the index" error
+    built_provider = store.manifest.get("provider")
+    built_model = store.manifest.get("model")
+    if built_model is None:
+        if store.path not in _warned_unknown_embedder:
+            _warned_unknown_embedder.add(store.path)
+            log.warning(
+                "Index for %r records no embedding model; assuming it matches "
+                "%s/%s. Rebuild it to record one: "
+                "uv run python scripts/build_index.py --domain %s",
+                domain, settings.embedding_provider, settings.embedding_model, domain,
+            )
+        return store
+    if (built_provider, built_model) != (settings.embedding_provider, settings.embedding_model):
+        raise EmbedderMismatchError(
+            f"The {domain!r} index was built with {built_provider}/{built_model}, "
+            f"but the configured embedder is "
+            f"{settings.embedding_provider}/{settings.embedding_model} "
+            f"(EMBEDDING_PROVIDER / EMBEDDING_MODEL). Questions must be embedded by "
+            f"the same model as the index. Rebuild it with "
+            f"`uv run python scripts/build_index.py --domain {domain}`, "
+            f"or set the embedder back to {built_provider}/{built_model}."
+        )
+    return store
+
+
 # Default for retrieve()'s ``reranker``: use whatever RERANK_PROVIDER selects.
 FROM_SETTINGS = object()
 
@@ -99,9 +155,10 @@ def retrieve(
         reranker = get_reranker()
     # Per-domain index (#128): each domain has its own store, so there's no
     # masking — the store IS the domain.
+    # Check the index before embedding, so a mismatch costs no embedding call.
+    store = _open_for_query(settings.resolved_index_path, domain)
     embedder = get_embedder()
     [q_vec] = embedder.embed([question], input_type="query")
-    store = open_domain_store(settings.resolved_index_path, domain)
     if reranker is None:
         return [_row_to_chunk(r) for r in store.search(q_vec, k=k)]
     n = max(k, candidates or settings.rerank_candidates)
@@ -122,16 +179,17 @@ def retrieve_across_domains(
     k_per_domain: int = 4,
     max_total: int = CROSS_DOMAIN_MAX_TOTAL,
 ) -> list[RetrievedChunk]:
-    embedder = get_embedder()
-    [q_vec] = embedder.embed([question], input_type="query")
     root = settings.resolved_index_path
     # Default to every BUILT domain (not a hardcoded list), so a newly-built
     # domain joins cross-domain comparison automatically. Per-domain (#128):
     # open each selected domain's own store rather than masking one big index.
     domains = list(domains or list_domains(root))
+    stores = [_open_for_query(root, s) for s in domains]
+    embedder = get_embedder()
+    [q_vec] = embedder.embed([question], input_type="query")
     per_domain = [
-        [_row_to_chunk(r) for r in open_domain_store(root, s).search(q_vec, k=k_per_domain)]
-        for s in domains
+        [_row_to_chunk(r) for r in store.search(q_vec, k=k_per_domain)]
+        for store in stores
     ]
     # Interleave by rank so every selected domain is represented, then cap the
     # total (round-robin: each domain's closest, then each domain's next, …). This

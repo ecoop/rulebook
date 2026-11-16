@@ -60,7 +60,7 @@ from .config import settings
 from .embeddings import LocalEmbedder
 from .ingest import extract_pages
 from .rerank import Reranker, make_reranker, reorder
-from .retrieve import _normalize_ws, retrieve
+from .retrieve import EmbedderMismatchError, _normalize_ws, retrieve
 from .store import Store, write_store
 
 
@@ -318,8 +318,8 @@ def evaluate(
     """Retrieve top-k for each gold question and score hit@k + reciprocal rank.
 
     By default this searches the built index for each item's domain, so it needs
-    that index built with the active embedder (a mismatched provider compares
-    different geometries and the numbers are meaningless). Pass ``index`` to
+    that index built with the active embedder (otherwise retrieval raises
+    :class:`~rulebook.retrieve.EmbedderMismatchError`). Pass ``index`` to
     search a :class:`ScratchIndex` instead — handy for comparing local models
     without rebuilding anything. Pass ``reranker`` to rerank the top ``candidates``
     first (see rerank.py); the default, None, scores retrieval alone, whatever
@@ -356,20 +356,6 @@ def _print_domain(domain: str, res: EvalResult) -> None:
     mf = read_manifest(domain_index_path(settings.resolved_index_path, domain))
     index_desc = f"{mf.get('provider', '?')}/{mf.get('model', '?')}"
     print(f"\n━━ {domain} ━━  index: {index_desc}  n={res.n}  k={res.k}")
-
-    # The index must have been built by the embedder we're now querying with —
-    # otherwise query and stored vectors live in different geometries and the
-    # scores are noise. Warn loudly rather than silently reporting garbage.
-    if mf and (
-        mf.get("provider") != settings.embedding_provider
-        or mf.get("model") != settings.embedding_model
-    ):
-        print(
-            f"   ! WARNING: index was built with {index_desc} but EMBEDDING_PROVIDER="
-            f"{settings.embedding_provider}/{settings.embedding_model} is active.\n"
-            f"   ! Rebuild the index for this provider before trusting these numbers."
-        )
-
     print(f"   hit@{res.k} = {res.hit_rate:.3f}   MRR@{res.k} = {res.mrr:.3f}")
     for style, (n, hr, mrr) in res.by_style().items():
         print(f"   {style:<12} n={n:<3} hit@{res.k}={hr:.3f}  MRR={mrr:.3f}")
@@ -423,12 +409,16 @@ def main(argv: list[str] | None = None) -> int:
                 f"`python -m rulebook.add {domain} ...` or scripts/build_index.py)"
             )
             continue
-        res = evaluate(
-            [it for it in items if it.domain == domain],
-            k=args.k,
-            reranker=reranker,
-            candidates=args.candidates,
-        )
+        try:
+            res = evaluate(
+                [it for it in items if it.domain == domain],
+                k=args.k,
+                reranker=reranker,
+                candidates=args.candidates,
+            )
+        except EmbedderMismatchError as e:
+            print(f"\n━━ {domain} ━━  (skipped: {e})")
+            continue
         if reranker is not None:
             print(f"\n(reranked: {reranker.name}, top {args.candidates} candidates)")
         _print_domain(domain, res)
@@ -436,7 +426,11 @@ def main(argv: list[str] | None = None) -> int:
         evaluated += 1
 
     if evaluated == 0:
-        print("\nNo domains with both gold and a built index — nothing evaluated.", file=sys.stderr)
+        print(
+            "\nNothing evaluated: no domain has both gold and an index built with the "
+            "configured embedder.",
+            file=sys.stderr,
+        )
         return 1
     if evaluated > 1:
         print(

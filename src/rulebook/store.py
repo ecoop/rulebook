@@ -89,8 +89,9 @@ class Store:
             if "domain" not in m and "sport" in m:
                 m["domain"] = m["sport"]
 
-        with (self.path / MANIFEST_FILE).open() as f:
-            self.manifest = json.load(f)
+        # {} for an index written before manifests existed; retrieve.py treats
+        # that as "embedder unknown" rather than refusing to load.
+        self.manifest = read_manifest(self.path)
 
         assert len(self.metadata) == self.vectors.shape[0], (
             f"metadata rows ({len(self.metadata)}) != vector rows "
