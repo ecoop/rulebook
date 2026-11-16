@@ -66,10 +66,15 @@ PIECES = {
 
 
 class Sketch:
-    """One SVG: collects pattern definitions and unique ids while it's drawn."""
+    """One SVG: collects pattern definitions and unique ids while it's drawn.
 
-    def __init__(self, width: int, height: int, label: str):
+    ``ink`` and ``deep`` are the crayon's two pressures; they default to sanguine,
+    and diagrams.py passes its blue.
+    """
+
+    def __init__(self, width: int, height: int, label: str, ink: str = INK, deep: str = DEEP):
         self.width, self.height, self.label = width, height, label
+        self.ink, self.deep = ink, deep
         self.defs: dict[str, str] = {}
         self._n = 0
 
@@ -80,10 +85,10 @@ class Sketch:
     def hatch(self, kind: str, scale: float) -> str:
         """A hatching pattern whose spacing stays the same at any drawing scale."""
         spec = {  # spacing, angle, colour, line width, opacity
-            "light": (7, 40, INK, 1.8, 0.75),
-            "cross": (7, -35, INK, 1.6, 0.6),
-            "tight": (4, 40, DEEP, 2.0, 1.0),
-            "fine": (4, 40, INK, 1.5, 0.9),
+            "light": (7, 40, self.ink, 1.8, 0.75),
+            "cross": (7, -35, self.ink, 1.6, 0.6),
+            "tight": (4, 40, self.deep, 2.0, 1.0),
+            "fine": (4, 40, self.ink, 1.5, 0.9),
         }[kind]
         gap, angle, colour, width, opacity = spec
         pid = f"h-{kind}-{round(scale * 100)}"
@@ -109,7 +114,7 @@ class Sketch:
   </filter>
   {"".join(self.defs.values())}
 </defs>
-<g class="ink" filter="url(#crayon)" fill="none" stroke="{INK}" stroke-linecap="round" stroke-linejoin="round">
+<g class="ink" filter="url(#crayon)" fill="none" stroke="{self.ink}" stroke-linecap="round" stroke-linejoin="round">
 {body}
 </g>
 </svg>

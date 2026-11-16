@@ -122,7 +122,8 @@ jobs:
         run: uv run --no-sync python notebooks/page_template/page_links.py _site/*.html
 
       # The landing page is a static template, with its vignettes in img/
-      # (drawn by notebooks/page_template/vignettes.py).
+      # (drawn by notebooks/page_template/vignettes.py). img/ also holds the
+      # RAG flow diagrams (flow_*.svg, drawn by diagrams.py).
       - name: Landing page
         run: |
           cp notebooks/page_template/landing.html _site/index.html
