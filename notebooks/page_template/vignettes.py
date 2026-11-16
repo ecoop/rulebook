@@ -69,12 +69,21 @@ class Sketch:
     """One SVG: collects pattern definitions and unique ids while it's drawn.
 
     ``ink`` and ``deep`` are the crayon's two pressures; they default to sanguine,
-    and diagrams.py passes its blue.
+    and diagrams.py passes its blue. ``wobble`` is how far lines are nudged off true,
+    and ``tooth`` is how much paper shows through the stroke: the noise level above
+    which the crayon skips (higher skips less).
+
+    ``words``, a (wobble, tooth) pair, draws the text in a layer of its own with that
+    crayon, so labels can be crisper than the lines. diagrams.py uses it: its words
+    are read, its lines only looked at.
     """
 
-    def __init__(self, width: int, height: int, label: str, ink: str = INK, deep: str = DEEP):
+    def __init__(self, width: int, height: int, label: str, ink: str = INK, deep: str = DEEP,
+                 wobble: float = 2.2, tooth: float = 2.3,
+                 words: tuple[float, float] | None = None):
         self.width, self.height, self.label = width, height, label
         self.ink, self.deep = ink, deep
+        self.wobble, self.tooth, self.words = wobble, tooth, words
         self.defs: dict[str, str] = {}
         self._n = 0
 
@@ -101,22 +110,38 @@ class Sketch:
             )
         return f"url(#{pid})"
 
-    def render(self, body: str) -> str:
-        return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {self.width} {self.height}" role="img" aria-label="{self.label}">
-<style>.ink path, .ink rect, .ink ellipse, .ink polygon, .ink circle {{ vector-effect: non-scaling-stroke; }}</style>
-<defs>
-  <filter id="crayon" x="-5%" y="-5%" width="110%" height="110%">
+    @staticmethod
+    def _crayon(fid: str, wobble: float, tooth: float) -> str:
+        return f"""  <filter id="{fid}" x="-5%" y="-5%" width="110%" height="110%">
     <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="4" result="wob"/>
-    <feDisplacementMap in="SourceGraphic" in2="wob" scale="2.2" xChannelSelector="R" yChannelSelector="G" result="moved"/>
+    <feDisplacementMap in="SourceGraphic" in2="wob" scale="{wobble}" xChannelSelector="R" yChannelSelector="G" result="moved"/>
     <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="9" result="grain"/>
-    <feColorMatrix in="grain" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -3 0 0 0 2.3" result="tooth"/>
+    <feColorMatrix in="grain" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -3 0 0 0 {tooth}" result="tooth"/>
     <feComposite in="moved" in2="tooth" operator="in"/>
-  </filter>
+  </filter>"""
+
+    def render(self, body: str) -> str:
+        style = ".ink path, .ink rect, .ink ellipse, .ink polygon, .ink circle { vector-effect: non-scaling-stroke; }"
+        filters = self._crayon("crayon", self.wobble, self.tooth)
+
+        def group(cls: str, fid: str) -> str:
+            return (f'<g class="ink{cls}" filter="url(#{fid})" fill="none" stroke="{self.ink}" '
+                    f'stroke-linecap="round" stroke-linejoin="round">\n{body}\n</g>')
+
+        layers = group("", "crayon")
+        if self.words:
+            # The body twice: once for the lines (its text hidden), once over it for
+            # the text alone (everything else hidden), each with its own crayon.
+            style += " .lines text { display: none; } .words :not(g):not(text) { display: none; }"
+            filters += "\n" + self._crayon("crayon-words", *self.words)
+            layers = group(" lines", "crayon") + "\n" + group(" words", "crayon-words")
+        return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {self.width} {self.height}" role="img" aria-label="{self.label}">
+<style>{style}</style>
+<defs>
+{filters}
   {"".join(self.defs.values())}
 </defs>
-<g class="ink" filter="url(#crayon)" fill="none" stroke="{self.ink}" stroke-linecap="round" stroke-linejoin="round">
-{body}
-</g>
+{layers}
 </svg>
 """
 
