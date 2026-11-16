@@ -3,6 +3,7 @@
 [![CI](https://github.com/ecoop/rulebook/actions/workflows/ci.yml/badge.svg)](https://github.com/ecoop/rulebook/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.14-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+![Content license](https://img.shields.io/badge/content-CC%20BY%204.0-lightgrey)
 
 _Last updated: 2026-11-16_
 
@@ -225,7 +226,15 @@ Hosted rerankers (and Claude as a reranker, #258), streaming answers, and an aut
 
 ## License
 
-MIT — see [LICENSE](LICENSE). This covers the **code** only. The rule documents
-each domain is built from are third-party works published by their governing
-bodies (see [`rules/SOURCES.md`](rules/SOURCES.md)); they are not included in this
-repository, nor licensed by this project.
+The **code** is MIT — see [LICENSE](LICENSE). That includes the code cells in the
+notebooks, and the scripts in `notebooks/page_template/` that draw the sketches.
+
+The **teaching content** is [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/):
+the notebooks' text (their Markdown cells) and the sketches in
+[`notebooks/page_template/img/`](notebooks/page_template/img/), the games and sports
+in red and the RAG flow diagrams in blue. You may share and adapt them, commercially
+or not, as long as you credit Eric Cooper and link to this repository.
+
+The rule documents each domain is built from are third-party works published by their
+governing bodies (see [`rules/SOURCES.md`](rules/SOURCES.md)); they are not included
+in this repository, nor licensed by this project.
