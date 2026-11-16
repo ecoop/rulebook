@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.14-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-_Last updated: 2026-11-15_
+_Last updated: 2026-11-16_
 
 **Rulebook** is a RAG (retrieval-augmented generation) app that answers questions about a set of rules. Give it a rulebook (PDF, Markdown or plain text) and it starts answering questions about it: each claim cites the rule it comes from, and you see the passages it drew on. Adding a rule set is one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)); nothing in the pipeline is specific to a game or sport.
 
@@ -169,7 +169,7 @@ uv run python -m rulebook.eval --domain poker --rerank hybrid
 
 ### Chunking
 
-Rulebook cuts each rulebook at its own rule numbers, so one chunk is one citable rule ([`src/rulebook/chunking.py`](src/rulebook/chunking.py)). To compare chunkers, don't score hit@k per chunk: a bigger chunk holds more rules and hits more often. [`src/rulebook/chunk_eval.py`](src/rulebook/chunk_eval.py) gives every cut the same reading budget and reports how much of it is the cited rule.
+Rulebook cuts each rulebook at its own rule numbers, so one chunk is one citable rule ([`src/rulebook/chunking.py`](src/rulebook/chunking.py)). A rule keeps its sub-rules in the same chunk while the whole stays under `CHUNK_MERGE_CHARS` (1,000 by default), so a lead-in like "It shall be a let if:" travels with its list instead of each item becoming a fragment that never says "let". Set it to 0 for one chunk per number; either way, rebuild the index after changing it. To compare chunkers, don't score hit@k per chunk: a bigger chunk holds more rules and hits more often. [`src/rulebook/chunk_eval.py`](src/rulebook/chunk_eval.py) gives every cut the same reading budget and reports how much of it is the cited rule.
 
 `CHUNK_SECTION_HEADERS=true` puts each numbered rule's Markdown section name at the front of its chunk ("Seven-Card Stud: 3.4 ..."), which removes poker's wrong-variant misses. It's off by default and changes the embedded text, so rebuild the index after setting it. It applies to Markdown rule files with `##` section headings; PDFs don't get section headers yet. [`notebooks/chunking.ipynb`](notebooks/chunking.ipynb) measures both.
 

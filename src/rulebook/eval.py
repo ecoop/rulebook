@@ -230,7 +230,11 @@ def domain_chunks(domain: str, *, section_headers: bool | None = None) -> list[C
         c
         for d in docs
         for c in chunk_pages(
-            extract_pages(d), source=d.name, domain=domain, section_headers=section_headers
+            extract_pages(d),
+            source=d.name,
+            domain=domain,
+            section_headers=section_headers,
+            merge_chars=settings.chunk_merge_chars,
         )
     ]
 

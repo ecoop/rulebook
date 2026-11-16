@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # Put each numbered rule's Markdown section name at the front of its chunk
     # ("Seven-Card Stud: 3.4 ..."). Index-time: changing it needs a rebuild.
     chunk_section_headers: bool = False
+    # Merge a rule with its sub-rules (14 with 14.2.1 … 14.2.7) up to this many
+    # characters, so a lead-in travels with its list (chunking._merge_into_parents).
+    # 0 = one chunk per numbered rule. Index-time: changing it needs a rebuild.
+    chunk_merge_chars: int = Field(default=1000, ge=0)
     # Optional second pass over a wider candidate set (src/rulebook/rerank.py).
     # "none" (default) leaves retrieval unchanged; bm25/hybrid need nothing extra;
     # "local" is a cross-encoder and needs `uv sync --extra rerank-local`.

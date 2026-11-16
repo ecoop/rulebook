@@ -302,6 +302,7 @@ def _build_domain(
             source=src.path.name,
             domain=domain,
             section_headers=settings.chunk_section_headers,
+            merge_chars=settings.chunk_merge_chars,
         )
         print(f"[chunk ]  {domain}: {len(c)} chunks "
               f"(avg {sum(len(x.text) for x in c) // max(len(c), 1)} chars)")
@@ -349,6 +350,7 @@ def _build_domain(
         "golds": dom_records,
         "chunks_by_domain": {domain: len(chunks)},
         "section_headers": settings.chunk_section_headers,
+        "merge_chars": settings.chunk_merge_chars,
     }
     written = write_store(
         domain_index_path(settings.resolved_index_path, domain),
