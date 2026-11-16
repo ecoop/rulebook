@@ -21,6 +21,7 @@ on:
       - notebooks/evaluation.ipynb
       - notebooks/reranking.ipynb
       - notebooks/chunking.ipynb
+      - notebooks/generation.ipynb
       - notebooks/page_template/**
       - notebooks/data/**
       - src/rulebook/notebook.py
@@ -38,6 +39,7 @@ on:
       - src/rulebook/generate.py
       - src/rulebook/ingest.py
       - src/rulebook/pipeline.py
+      - src/rulebook/prompts/**
       - src/rulebook/rerank.py
       - src/rulebook/registry.py
       - src/rulebook/retrieve.py
@@ -107,6 +109,9 @@ jobs:
 
       - name: Chunking page
         run: uv run --no-sync jupyter nbconvert notebooks/chunking.ipynb $RENDER --output chunking
+
+      - name: Generation page
+        run: uv run --no-sync jupyter nbconvert notebooks/generation.ipynb $RENDER --output generation
 
       - name: RAG at a glance page
         run: uv run --no-sync jupyter nbconvert notebooks/rag_at_a_glance.ipynb $RENDER --output rag_at_a_glance

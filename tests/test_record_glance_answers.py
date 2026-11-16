@@ -53,4 +53,5 @@ def test_records_through_the_real_guardrails(monkeypatch, tmp_path):
 
     saved = json.loads(answers.read_text())
     assert saved["answers"][0]["answer"] == "Yes, forward or backward [checkers 4.2]."
+    assert (saved["answers"][0]["input_tokens"], saved["answers"][0]["output_tokens"]) == (100, 20)
     assert app_state.cost_counter is not None
