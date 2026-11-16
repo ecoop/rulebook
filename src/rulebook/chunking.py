@@ -13,6 +13,9 @@ STRATEGY
 
     2. Scan for lines that start with a rule-numbering pattern (e.g.
        "1.A.1.", "II.B.", "Rule 5.2"). Those are the CHUNK BOUNDARIES.
+       Rules written as numbered titles ("R1. SHEET") also break at their
+       clauses ("(b)" -> "R1(b)") and at unnumbered ALL-CAPS section headings
+       ("GLOSSARY OF TERMS"). Table-of-contents lines are never boundaries.
 
     3. Split the text at those boundaries. Each resulting chunk carries
        its rule id, page range, domain, and source PDF.
@@ -76,20 +79,44 @@ RULE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         re.compile(r"^\s*Rule\s+(\d+(?:\.\d+){1,3})\b", re.M | re.I),
     ),
     (
+        # "17.6.1." / "4.2". The first number has no leading zero and the rest
+        # are at most two digits, so a measurement that wraps to a line start
+        # ("44.501 m.", "0.152") isn't read as a rule.
         "dotted.digits",
-        re.compile(r"^\s*(\d+\.\d+(?:\.\d+){0,2})\.?\s", re.M),
+        re.compile(r"^\s*([1-9]\d{0,2}(?:\.\d{1,2}){1,3})\.?\s", re.M),
     ),
 ]
 MIN_ANCHORS_TO_TRUST = 5
 
 # NUMBERED-TITLE pattern — rules written as "R13. INTERRUPTED GAMES": a prefixed
-# number followed by an ALL-CAPS title (the World Curling rules). PDF extraction
-# frequently flattens these off the line start (only ~5 of 19 curling rules land
-# at ^), so — unlike every pattern above — we match ANYWHERE and lean on the caps
-# title as the low-false-positive signal. A bare cross-reference ("see R6.") is
-# followed by prose ("R6. The …"), whose second title char is lowercase, so it
-# doesn't match. Group 1 is the rule id (e.g. "R6").
-_NUMBERED_TITLE = re.compile(r"\b(R\d+)\.\s+[A-Z][A-Z]+(?:[A-Z '&/-]*[A-Z])?")
+# number followed by an ALL-CAPS title (the World Curling rules use R1–R19, then
+# C1–C10 for the Rules of Competition). PDF extraction frequently flattens these
+# off the line start (only ~5 of 19 curling rules land at ^), so — unlike every
+# pattern above — we match ANYWHERE and lean on the caps title as the
+# low-false-positive signal. A bare cross-reference ("see R6.") is followed by
+# prose ("R6. The …"), whose second title char is lowercase, so it doesn't match.
+# Group 1 is the rule id (e.g. "R6").
+_NUMBERED_TITLE = re.compile(r"\b([A-Z]\d{1,2})\.\s+[A-Z][A-Z]+(?:[A-Z '&/-]*[A-Z])?")
+
+# A numbered-title rule's clauses: "(a)", "(b)" … at a line start. They get the
+# rule's id plus the letter ("R1(b)"), the form the citation check already reads
+# as a sub-clause of R1. The roman items under a clause ("I. the tee line …")
+# stay inside it as list items.
+# A clause starts a sentence; "(i) or (ii)" at a line start is a cross-reference.
+_CLAUSE = re.compile(r"^[ \t]*\(([a-z])\)[ \t]+(?=[A-Z“\"‘'])", re.M)
+
+# The same documents have unnumbered sections, written as an ALL-CAPS line
+# ("GLOSSARY OF TERMS", "PLAY-OFF SYSTEMS"); a heading that wraps is a run of
+# them. Each becomes an anchor whose id is the heading, so a glossary isn't cited
+# as the last numbered rule before it. At least _CAPS_HEADING_LETTERS letters,
+# no period and no leading digit, which keeps out "W/L." and "6 TEAMS IN ONE
+# GROUP" (a table's caption).
+_CAPS_HEADING = re.compile(r"^[ \t]*([A-Z][A-Z0-9 &/(),'’–-]*[A-Z)])[ \t]*$", re.M)
+_CAPS_HEADING_LETTERS = 8
+
+# A table-of-contents line: dot leaders, then a page number ("R5. DELIVERY ...
+# 10"). An anchor on one is dropped, and the lines are cut from chunk text.
+_TOC_ENTRY = re.compile(r"^[^\n]*?\.{4,}[ \t]*\d{1,3}[ \t]*$", re.M)
 
 # HIERARCHICAL patterns — each level appears alone at line start on its own
 # line, and we synthesize a qualified rule id (e.g. "III.D.2") by tracking
@@ -174,7 +201,7 @@ def chunk_pages(
 
     # Optionally emit a "preamble" chunk for pre-first-anchor text.
     if anchors[0][0] > 0:
-        preamble = _strip_trailing_headings(joined[: anchors[0][0]])
+        preamble = _strip_trailing_headings(_TOC_ENTRY.sub("", joined[: anchors[0][0]]))
         if len(preamble) >= MIN_CHARS:
             page_end = _page_for(anchors[0][0] - 1, page_starts)
             for piece in _split_if_long(preamble):
@@ -192,7 +219,7 @@ def chunk_pages(
     # One chunk (or several, after _split_if_long) per anchor.
     for i, (offset, rule_id) in enumerate(anchors):
         end = anchors[i + 1][0] if i + 1 < len(anchors) else len(joined)
-        section_text = _strip_trailing_headings(joined[offset:end])
+        section_text = _strip_trailing_headings(_TOC_ENTRY.sub("", joined[offset:end]))
         page_start = _page_for(offset, page_starts)
         page_end = _page_for(max(end - 1, offset), page_starts)
         prefix = _section_for(offset, sections)
@@ -261,13 +288,18 @@ def _detect_anchors(text: str) -> list[tuple[int, str]]:
         if len(matches) >= MIN_ANCHORS_TO_TRUST:
             all_matches.extend(matches)
 
-    hierarchical = _detect_hierarchical_anchors(text)
-    if len(hierarchical) >= MIN_ANCHORS_TO_TRUST:
-        all_matches.extend(hierarchical)
-
     numbered_title = _detect_numbered_title_anchors(text)
     if len(numbered_title) >= MIN_ANCHORS_TO_TRUST:
+        # "R1. SHEET" rules with (a)/(b) clauses. Their clauses hold roman lists
+        # ("I. the tee line …") that restart in every clause; read as the
+        # hierarchical scheme's top-level sections, they become ids like "IV.I".
         all_matches.extend(numbered_title)
+        all_matches.extend(_detect_clause_anchors(text, numbered_title))
+        all_matches.extend(_detect_caps_heading_anchors(text))
+    else:
+        hierarchical = _detect_hierarchical_anchors(text)
+        if len(hierarchical) >= MIN_ANCHORS_TO_TRUST:
+            all_matches.extend(hierarchical)
 
     if not all_matches:
         return []
@@ -280,7 +312,12 @@ def _detect_anchors(text: str) -> list[tuple[int, str]]:
         if prev is None or len(rule_id) > len(prev):
             by_offset[offset] = rule_id
 
-    return sorted(by_offset.items(), key=lambda x: x[0])
+    # A table of contents lists the rules before the body does; its entries
+    # would each become a chunk holding a title and a page number.
+    return sorted(
+        ((off, rid) for off, rid in by_offset.items() if not _TOC_ENTRY.match(text, off)),
+        key=lambda x: x[0],
+    )
 
 
 def _merge_into_parents(
@@ -324,15 +361,15 @@ def _merge_into_parents(
         span = text[offset:end]
         n = len(_normalize_ws(span))
         fits = bool(kept) and size + 1 + n <= merge_chars
-        if fits and rule_id.startswith(scope + "."):
+        if fits and rule_id.startswith((scope + ".", scope + "(")):
             size += 1 + n
             continue
-        parent = rule_id.rpartition(".")[0]
+        parent = _parent_id(rule_id)
         if (
             fits
             and not widened
             and parent
-            and scope.rpartition(".")[0] == parent
+            and _parent_id(scope) == parent
             and _CONTINUES_SENTENCE.match(span)
         ):
             kept[-1] = (kept[-1][0], parent)
@@ -342,6 +379,16 @@ def _merge_into_parents(
         kept.append((offset, rule_id))
         scope, widened, size = rule_id, False, n
     return kept
+
+
+def _parent_id(rule_id: str) -> str:
+    """The id one level up: "14.2" for "14.2.7", "R1" for "R1(b)", "" for "14"."""
+    if m := _CLAUSE_ID.fullmatch(rule_id):
+        return m.group(1)
+    return rule_id.rpartition(".")[0]
+
+
+_CLAUSE_ID = re.compile(r"(.+)\([a-z]\)")
 
 
 # A list item's text after its number starts lowercase: "13.3.7. is hit twice …".
@@ -360,6 +407,39 @@ def _detect_numbered_title_anchors(text: str) -> list[tuple[int, str]]:
     for m in _NUMBERED_TITLE.finditer(text):
         seen_last[m.group(1)] = m.start()
     return sorted(((off, rid) for rid, off in seen_last.items()), key=lambda x: x[0])
+
+
+def _detect_clause_anchors(
+    text: str, rules: list[tuple[int, str]]
+) -> list[tuple[int, str]]:
+    """Each "(a)" clause after a numbered-title rule, as "<rule>(a)".
+
+    Clauses before the first rule (a preamble's own lettering) are left alone.
+    """
+    starts = [off for off, _ in rules]
+    anchors = []
+    for m in _CLAUSE.finditer(text):
+        i = bisect_right(starts, m.start()) - 1
+        if i >= 0:
+            anchors.append((m.start(), f"{rules[i][1]}({m.group(1)})"))
+    return anchors
+
+
+def _detect_caps_heading_anchors(text: str) -> list[tuple[int, str]]:
+    """Each ALL-CAPS heading line (or run of lines) as an anchor named by it."""
+    runs: list[tuple[int, int, list[str]]] = []  # (start, end, lines)
+    for m in _CAPS_HEADING.finditer(text):
+        if runs and text[runs[-1][1] : m.start()].strip() == "":
+            start, _, lines = runs[-1]
+            runs[-1] = (start, m.end(), [*lines, m.group(1)])
+        else:
+            runs.append((m.start(), m.end(), [m.group(1)]))
+    anchors = []
+    for start, _, lines in runs:
+        heading = " ".join(" ".join(lines).split())
+        if sum(ch.isalpha() for ch in heading) >= _CAPS_HEADING_LETTERS:
+            anchors.append((start, heading))
+    return anchors
 
 
 _MD_HEADING = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$", re.M)
