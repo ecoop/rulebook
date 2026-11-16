@@ -55,12 +55,59 @@ def extract_pages(source_path: Path) -> list[PageText]:
         return [PageText(page_number=1, text=cleaned)] if cleaned.strip() else []
 
     reader = PdfReader(source_path)
-    out: list[PageText] = []
-    for idx, page in enumerate(reader.pages, start=1):
-        raw = page.extract_text() or ""
-        cleaned = _clean(raw)
-        if cleaned.strip():
-            out.append(PageText(page_number=idx, text=cleaned))
+    texts = strip_running_lines([_clean(page.extract_text() or "") for page in reader.pages])
+    return [
+        PageText(page_number=idx, text=text)
+        for idx, text in enumerate(texts, start=1)
+        if text.strip()
+    ]
+
+
+# A running header or footer is the same line at the top or bottom of many pages,
+# differing only in its numbers ("Page 4 of 14", "July 2025 Page 5"). Left in, it
+# lands mid-rule in every chunk that crosses a page break and puts the same words
+# into dozens of vectors.
+_EDGE_LINES = 2          # look at the first and last two non-empty lines of a page
+_RUNNING_SHARE = 1 / 3   # on at least this share of pages (odd/even headers alternate)
+_DIGITS = re.compile(r"\d+")
+_WORD = re.compile(r"[A-Za-z]{2,}")
+
+
+def _running_key(line: str) -> str:
+    return _DIGITS.sub("#", " ".join(line.split()))
+
+
+def strip_running_lines(pages: list[str]) -> list[str]:
+    """``pages`` without their running headers and footers.
+
+    A line is running when it sits within ``_EDGE_LINES`` of the top or bottom of
+    at least three pages and ``_RUNNING_SHARE`` of all pages, comparing lines with
+    their numbers masked. It must have two words, so a bare page number (which the
+    chunker reads as a boundary between rules) and a stray word that a
+    word-per-line extraction happens to put at a page edge are left alone.
+    """
+    edges = []
+    for text in pages:
+        lines = [line for line in text.splitlines() if line.strip()]
+        edges.append({_running_key(line) for line in lines[:_EDGE_LINES] + lines[-_EDGE_LINES:]})
+    counts: dict[str, int] = {}
+    for keys in edges:
+        for key in keys:
+            counts[key] = counts.get(key, 0) + 1
+    floor = max(3, len(pages) * _RUNNING_SHARE)
+    running = {k for k, n in counts.items() if n >= floor and len(_WORD.findall(k)) >= 2}
+    if not running:
+        return pages
+
+    out = []
+    for text in pages:
+        lines = text.splitlines()
+        filled = [i for i, line in enumerate(lines) if line.strip()]
+        edge = set(filled[:_EDGE_LINES] + filled[-_EDGE_LINES:])
+        out.append("\n".join(
+            line for i, line in enumerate(lines)
+            if not (i in edge and _running_key(line) in running)
+        ).strip("\n"))
     return out
 
 
