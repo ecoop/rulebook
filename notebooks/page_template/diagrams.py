@@ -22,8 +22,11 @@ from pathlib import Path
 from vignettes import Sketch
 
 OUT = Path(__file__).parent / "img"
-INK = "#264d79"   # blue, CIELAB L* 32 (the sanguine #9c4329 is 40): darker, to be read
-DEEP = "#1a3558"  # blue, pressed harder: L* ~22
+# Ultramarine: CIELAB L* 32 (the sanguine #9c4329 is 40, so darker, to be read),
+# chroma ~50 like the sanguine's so it reads as blue crayon, not slate; hue kept
+# short of violet so the blue and the red stay apart when they meet.
+INK = "#264796"
+DEEP = "#18316d"  # pressed harder: L* ~22
 WEIGHT = 1.45     # every stroke a little heavier than the vignettes'
 WORDS = (1.4, 2.8)  # the words' crayon (wobble, tooth): steadier and more solid than the lines'
 FONT = 'font-family="Georgia, serif" font-style="italic"'
