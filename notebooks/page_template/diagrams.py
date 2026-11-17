@@ -45,9 +45,10 @@ class Diagram(Sketch):
 
 
 # --- marks -----------------------------------------------------------------------
-def label(x, y, text, size=12, anchor="middle", colour=INK) -> str:
+def label(x, y, text, size=12, anchor="middle") -> str:
+    """Words, all in one style: the same blue whether caption, arrow or heading."""
     return (f'<text x="{x}" y="{y}" text-anchor="{anchor}" {FONT} font-size="{size}" '
-            f'fill="{colour}" stroke="none">{text}</text>')
+            f'fill="{INK}" stroke="none">{text}</text>')
 
 
 def arrow(x1, y1, x2, y2, bend=0.0, width=1.6) -> str:
@@ -66,13 +67,10 @@ def arrow(x1, y1, x2, y2, bend=0.0, width=1.6) -> str:
             f'<path d="M{lx:.1f} {ly:.1f} L{x2:.1f} {y2:.1f} L{rx:.1f} {ry:.1f}" stroke-width="{width}"/>')
 
 
-def link(x1, y1, x2, y2, above, below=None, bend=-5, size=10.5) -> str:
-    """An arrow with its verb written above it and, optionally, what does it below."""
+def link(x1, y1, x2, y2, above, bend=-5, size=12) -> str:
+    """An arrow with its verb written above it."""
     mx, my = (x1 + x2) / 2, (y1 + y2) / 2
-    out = arrow(x1, y1, x2, y2, bend=bend) + label(mx, my - 9 + min(0, bend) / 2, above, size, colour=DEEP)
-    if below:
-        out += label(mx, my + 15, below, size - 1.5)
-    return out
+    return arrow(x1, y1, x2, y2, bend=bend) + label(mx, my - 10 + min(0, bend) / 2, above, size)
 
 
 def writing(x, y, length, rows, gap=9, sw=1.1, seed=0) -> str:
@@ -108,7 +106,7 @@ def pdf_stack(x, y, w=58, h=74) -> str:
         f'<rect x="{x + 8 - 4 * i}" y="{y - 8 + 4 * i}" width="{w}" height="{h}" rx="2" fill="#fff" stroke-width="1.3"/>'
         for i in range(2))
     tag = (f'<rect x="{x + 6}" y="{y + h - 20}" width="26" height="13" fill="#fff" stroke-width="1.1"/>'
-           + label(x + 19, y + h - 10, "PDF", 9, colour=DEEP))
+           + label(x + 19, y + h - 10, "PDF", 9))
     return back + page(x, y, w, h, fold=True) + tag
 
 
@@ -161,7 +159,7 @@ def bubble(x, y, w=50, h=34) -> str:
     return (f'<path d="M{x + 8} {y} H{x + w - 8} Q{x + w} {y} {x + w} {y + 8} V{y + h - 8} '
             f'Q{x + w} {y + h} {x + w - 8} {y + h} H{x + 18} L{x + 8} {y + h + 9} L{x + 10} {y + h} '
             f'H{x + 8} Q{x} {y + h} {x} {y + h - 8} V{y + 8} Q{x} {y} {x + 8} {y} Z" fill="#fff" stroke-width="1.5"/>'
-            + label(x + w / 2, y + h / 2 + 7, "?", 20, colour=DEEP))
+            + label(x + w / 2, y + h / 2 + 7, "?", 20))
 
 
 def model_box(sk: Sketch, x, y, w=62, h=46, text="Claude") -> str:
@@ -206,14 +204,14 @@ def overview() -> str:
     def carry(x0, x1, y, what=None):
         """An arrow between stages, with what it carries written above it."""
         out = arrow(x0, y, x1, y, bend=-2, width=1.4)
-        return out + (label((x0 + x1) / 2, y - 8, what, 10, colour=DEEP) if what else "")
+        return out + (label((x0 + x1) / 2, y - 8, what, 10) if what else "")
 
     # prepare
     y1 = 46
     c1 = y1 + bh / 2
     xs = [100, 222, 344]
     sx, sy, sw, sh = 472, 24, 92, 66                  # embedding space
-    out = [label(14, 18, "prepare", 13, "start", DEEP), label(70, 18, "once per rulebook", 10.5, "start"),
+    out = [label(14, 18, "prepare", 11, "start"), label(62, 18, "once per rulebook", 11, "start"),
            shrunk(18, y1 - 8, pdf_stack(0, 0)), label(40, y1 + 66, "rulebook PDFs", 11),
            carry(66, xs[0] - 4, c1)]
     out += [box(x, y1, name) for x, name in zip(xs, ["ingestion", "chunking", "embeddings"], strict=True)]
@@ -227,12 +225,12 @@ def overview() -> str:
     y2 = 184
     c2 = y2 + bh / 2
     rx = sx + sw / 2 - bw / 2
-    gx = rx + bw + 52
-    out += [label(14, 154, "answer", 13, "start", DEEP), label(66, 154, "for each question", 10.5, "start"),
+    gx = rx + bw + 60
+    out += [label(14, 154, "answer", 11, "start"), label(58, 154, "for each question", 11, "start"),
             bubble(rx - 92, y2 - 4, 42, 30), label(rx - 71, y2 + 52, "question", 11),
             carry(rx - 44, rx - 4, c2), box(rx, y2, "retrieval"),
             arrow(sx + sw / 2, sy + sh + 6, sx + sw / 2, y2 - 4, width=1.4),
-            label(sx + sw / 2 - 6, 150, "nearest chunks", 10, "end", DEEP),
+            label(sx + sw / 2 - 6, 150, "nearest chunks", 10, "end"),
             carry(rx + bw + 4, gx - 4, c2, "passages"), box(gx, y2, "generation"),
             carry(gx + bw + 4, gx + bw + 28, c2),
             shrunk(gx + bw + 34, y2 - 18, answer(0, 0)), label(gx + bw + 56, y2 + 66, "a cited answer", 11)]
@@ -266,7 +264,7 @@ def embeddings() -> str:
     sk = Diagram(360, 160, "Flow: an embedding model embeds a chunk as a vector, stored as a point in embedding space")
     return sk.render(
         slip(8, 60, 58, 26, seed=4)
-        + link(74, 73, 150, 73, "embed", "embedding model")
+        + link(74, 73, 150, 73, "embed")
         + vector(156, 34)
         + link(204, 73, 240, 73, "store", bend=-4)
         + space(sk, 248, 30, w=100)
@@ -281,10 +279,10 @@ def retrieval() -> str:
     star = (60, 32)
     callout = (f'<path d="M{sx + star[0] + 34} {sy - 18} Q {sx + star[0] + 18} {sy - 12} '
                f'{sx + star[0] + 8} {sy + star[1] - 8}" stroke="{DEEP}" stroke-width="1"/>'
-               + label(sx + star[0] + 38, sy - 16, "your question", 10, "start", DEEP))
+               + label(sx + star[0] + 38, sy - 16, "your question", 11, "start"))
     return sk.render(
         bubble(8, 56, 46, 32)
-        + link(60, 76, 126, 74, "embed", "same model")
+        + link(60, 76, 126, 74, "embed")
         + space(sk, sx, sy, star=star, ring=(star[0], star[1] - 6, 30)) + callout
         + link(246, 74, 282, 74, "top k", bend=-4)
         + slip(290, 40, 56, 20, turn=-3, seed=5) + slip(296, 66, 56, 20, turn=2, seed=6)
@@ -298,8 +296,9 @@ def generation() -> str:
     return sk.render(
         bubble(12, 18, 46, 30)
         + slip(10, 72, 52, 18, turn=-3, seed=8) + slip(14, 94, 52, 18, turn=2, seed=9)
-        + arrow(68, 42, 136, 66, bend=-4) + arrow(74, 94, 136, 80, bend=4)
-        + label(106, 72, "prompt", 10.5, colour=DEEP)
+        # the question and the passages join, and go in together: that's the prompt
+        + '<path d="M64 42 Q 86 48 96 73" stroke-width="1.6"/><path d="M70 92 Q 88 88 96 73" stroke-width="1.6"/>'
+        + link(96, 73, 140, 73, "prompt", bend=-2)
         + model_box(sk, 146, 50)
         + link(214, 74, 262, 74, "generate", bend=-4)
         + answer(268, 34)
