@@ -8,6 +8,8 @@ so callers don't have to make that decision themselves.
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from .config import settings
+from .definitions import link_definitions
 from .generate import find_unverified_citations, generate_answer
 from .retrieve import RetrievedChunk, retrieve, retrieve_across_domains
 
@@ -63,6 +65,9 @@ def ask(
         chunks = retrieve(question, domain=domain, k=k)
     else:
         chunks = retrieve_across_domains(question, domains, k_per_domain=k)
+    if settings.link_definitions:
+        # Retrieved by similarity, then the definitions those passages lean on.
+        chunks = chunks + link_definitions(question, chunks, settings.resolved_index_path)
 
     result = generate_answer(question, chunks)
     return AskResult(

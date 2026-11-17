@@ -65,7 +65,11 @@ class RetrievedChunk:
     rule_id: str
     page_start: int
     page_end: int
-    distance: float   # squared L2 on unit vectors (2 - 2·cos); smaller = more similar
+    # Squared L2 on unit vectors (2 - 2·cos); smaller = more similar. None for a
+    # passage that wasn't retrieved by similarity: a linked definition.
+    distance: float | None
+    # The term, when this passage is a definition added for one (definitions.py).
+    defines: str | None = None
 
 
 def _row_to_chunk(row: dict) -> RetrievedChunk:

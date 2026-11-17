@@ -34,7 +34,10 @@ interface Chunk {
   rule_id: string
   page_start: number
   page_end: number
-  distance: number
+  // null for a linked definition, which wasn't retrieved by similarity.
+  distance: number | null
+  // The term a linked definition defines; absent/null for a retrieved passage.
+  defines?: string | null
 }
 
 interface AskResponse {
@@ -865,6 +868,8 @@ export default function App() {
                     <span className="font-mono text-foreground">d</span> = each passage's{' '}
                     <span className="font-medium text-foreground">distance</span> from your question
                     in meaning — lower is closer (0 = identical).
+                    {result.chunks.some((c) => c.defines) &&
+                      ' A definition is added when a passage uses that defined term near your question’s words.'}
                   </p>
                   <div className="divide-y divide-border">
                     {result.chunks.map((c, i) => (
@@ -913,9 +918,18 @@ function ChunkRow({ chunk }: { chunk: Chunk }) {
         </span>
         <span className="font-mono text-foreground">{chunk.rule_id}</span>
         <span className="text-muted-foreground">{pages}</span>
-        <span className="ml-auto font-mono text-muted-foreground">
-          d={chunk.distance.toFixed(3)}
-        </span>
+        {chunk.defines ? (
+          <span
+            className="ml-auto text-muted-foreground"
+            title="Added because a retrieved passage uses this term"
+          >
+            definition of <span className="font-medium text-foreground">{chunk.defines}</span>
+          </span>
+        ) : (
+          <span className="ml-auto font-mono text-muted-foreground">
+            d={chunk.distance?.toFixed(3)}
+          </span>
+        )}
       </div>
       <div className="whitespace-pre-wrap text-xs leading-relaxed text-foreground">
         {chunk.text}

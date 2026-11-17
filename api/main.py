@@ -183,7 +183,10 @@ class RetrievedChunkOut(BaseModel):
     rule_id: str
     page_start: int
     page_end: int
-    distance: float
+    # None for a linked definition, which wasn't retrieved by similarity.
+    distance: float | None
+    # The term a linked definition defines (rulebook.definitions); None otherwise.
+    defines: str | None = None
 
 
 class AskResponse(BaseModel):
@@ -747,6 +750,7 @@ def ask_endpoint(req: AskRequest) -> AskResponse:
             page_start=c.page_start,
             page_end=c.page_end,
             distance=c.distance,
+            defines=c.defines,
         )
         for c in result.chunks
     ]

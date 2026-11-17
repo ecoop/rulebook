@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     rerank_provider: str = Field(default="none", pattern="^(none|bm25|hybrid|local)$")
     rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     rerank_candidates: int = Field(default=20, ge=1)
+    # Add the definitions of terms the retrieved passages use near the question's
+    # words (src/rulebook/definitions.py). Query-time: no rebuild either way.
+    link_definitions: bool = True
     claude_model: str = "claude-sonnet-5"
     # Effort for answer generation (output_config.effort): how much the model
     # thinks before answering. "low" measured ~17% cheaper than the model

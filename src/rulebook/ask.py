@@ -38,7 +38,8 @@ def _print_chunks(chunks) -> None:
             else f"pp.{c.page_start}-{c.page_end}"
         )
         # distance is L2 on unit vectors (0 = identical, 2 = opposite); lower is nearer.
-        print(f"  {i}. [{c.domain} {c.rule_id} — {pages}]  distance={c.distance:.3f}")
+        how = f"defines {c.defines!r}" if c.defines else f"distance={c.distance:.3f}"
+        print(f"  {i}. [{c.domain} {c.rule_id} — {pages}]  {how}")
         snippet = c.text if len(c.text) <= 160 else c.text[:157] + "..."
         print(f"       {snippet}")
 
