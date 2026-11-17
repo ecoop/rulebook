@@ -174,6 +174,10 @@ Rulebook cuts each rulebook at its own rule numbers, so one chunk is one citable
 
 `CHUNK_SECTION_HEADERS=true` puts each numbered rule's Markdown section name at the front of its chunk ("Seven-Card Stud: 3.4 ..."), which removes poker's wrong-variant misses. It's off by default and changes the embedded text, so rebuild the index after setting it. It applies to Markdown rule files with `##` section headings; PDFs don't get section headers yet. [`notebooks/chunking.ipynb`](notebooks/chunking.ipynb) measures both.
 
+### Linked definitions
+
+A rule is often written in its rule set's defined terms: curling's R2(f) says a stone must stop beyond "the hog line at the playing end", and only the glossary says the playing end is the end the stone is delivered *to*. Retrieval finds the rule, which matches the question, but not the definition, which doesn't. So after retrieval, [`src/rulebook/definitions.py`](src/rulebook/definitions.py) reads the rule set's definitions section ("3. Definitions", "GLOSSARY OF TERMS") from its index and adds the definitions of terms the question names, or that a retrieved passage uses within about a dozen words of the question's own words. One-word terms ("End", "Player") count only when the question uses them. Up to six definitions, about 1,600 characters, go to Claude as passages it can cite, and the Passages panel shows each as a "definition of …". Curling, ultimate, goaltimate and badminton have definitions sections; a rule set without one gets nothing added. It needs no rebuild; `LINK_DEFINITIONS=false` turns it off.
+
 ## Adding a domain
 
 1. Create `rules/<slug>/` and drop the rule doc(s) in (see [`rules/SOURCES.md`](rules/SOURCES.md) for the source/copyright policy — copyrighted docs stay untracked).
