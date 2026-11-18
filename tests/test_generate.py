@@ -67,6 +67,14 @@ def test_prompt_refuses_domains_absent_from_context():
     assert "[domain rule_id]" in low
 
 
+def test_prompt_asks_for_defined_terms_in_plain_words():
+    # Linked definitions (#315) reached the model, but answers still quoted "the
+    # hog line at the playing end" without saying which line that is.
+    low = build_system_prompt(["curling"]).lower()
+    assert "a term the context defines" in low
+    assert "in plain words" in low
+
+
 def test_prompt_allows_relaying_in_context_mentions_of_other_games():
     # Finer line: fabricating rules for an absent game is forbidden, but if an
     # available rule set's own excerpt mentions another game (e.g. Hearts noting
