@@ -8,7 +8,7 @@ those links should stay on the site, so after rendering:
 
     uv run --no-sync python notebooks/page_template/page_links.py _site/*.html
 
-rewrites them to the sibling page (embeddings.ipynb -> embeddings.html). A link
+rewrites them to the sibling page (chunking.ipynb -> chunking.html). A link
 whose text says Colab ("run it in Colab") is meant to open Colab, and is kept.
 """
 

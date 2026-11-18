@@ -17,7 +17,7 @@ on:
     branches: [main]
     paths:
       - notebooks/rag_at_a_glance.ipynb
-      - notebooks/embeddings.ipynb
+      - notebooks/embeddings_retrieval.ipynb
       - notebooks/evaluation.ipynb
       - notebooks/reranking.ipynb
       - notebooks/chunking.ipynb
@@ -98,8 +98,8 @@ jobs:
           restore-keys: hf-
 
       # No API key is set in any step, so these builds prove every notebook is key-free.
-      - name: Embeddings page
-        run: uv run --no-sync jupyter nbconvert notebooks/embeddings.ipynb $RENDER --output embeddings
+      - name: Embeddings and Retrieval page
+        run: uv run --no-sync jupyter nbconvert notebooks/embeddings_retrieval.ipynb $RENDER --output embeddings_retrieval
 
       - name: Evaluation page
         run: uv run --no-sync jupyter nbconvert notebooks/evaluation.ipynb $RENDER --output evaluation
@@ -127,6 +127,7 @@ jobs:
       - name: Landing page
         run: |
           cp notebooks/page_template/landing.html _site/index.html
+          cp notebooks/page_template/embeddings.html _site/embeddings.html  # old URL, forwards to embeddings_retrieval.html
           cp -r notebooks/page_template/img _site/img
 
       - uses: actions/upload-pages-artifact@v3
