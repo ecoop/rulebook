@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Content license](https://img.shields.io/badge/content-CC%20BY%204.0-lightgrey)
 
-_Last updated: 2026-11-16_
+_Last updated: 2026-11-18_
 
 **Rulebook** is a RAG (retrieval-augmented generation) app that answers questions about a set of rules. Give it a rulebook (PDF, Markdown or plain text) and it starts answering questions about it: each claim cites the rule it comes from, and you see the passages it drew on. Adding a rule set is one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)); nothing in the pipeline is specific to a game or sport.
 
@@ -18,7 +18,7 @@ It started as a hands-on way to **learn RAG** and has grown into a small gated p
 The notebooks run real questions through Rulebook's own pipeline, one stage at a time. Start at the [notebooks page](https://ecoop.github.io/rulebook/), which lists them in reading order. You can read each one with every result filled in, no install needed, or run it yourself in Colab:
 
 - [**RAG at a glance**](https://ecoop.github.io/rulebook/rag_at_a_glance.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb).
-- **Go further:** [**A closer look at Embeddings**](https://ecoop.github.io/rulebook/embeddings.html): what an embedding is, how retrieval uses it, and what changes when you swap the model. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb).
+- **Go further:** [**A closer look at Embeddings and Retrieval**](https://ecoop.github.io/rulebook/embeddings.html): what an embedding is, how retrieval uses it, and what changes when you swap the model. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb).
 - **Go further:** [**A closer look at Evaluation**](https://ecoop.github.io/rulebook/evaluation.html): how to measure retrieval. Write the right answers down once, then score any setup against them, on checkers and then on poker. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/evaluation.ipynb).
 - **Go further:** [**A closer look at Reranking**](https://ecoop.github.io/rulebook/reranking.html): why retrieval finds passages *about* the question rather than ones that *answer* it, and a second stage that fixes the order: BM25, hybrid, and a cross-encoder, scored on poker and checkers. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/reranking.ipynb).
 - **Go further:** [**A closer look at Chunking**](https://ecoop.github.io/rulebook/chunking.html): how a rulebook is cut into chunks, how to compare ways of cutting fairly (the same reading budget for each), a chunking bug the gold set found, and section headers, a one-line fix for poker's wrong-variant misses. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/chunking.ipynb).
