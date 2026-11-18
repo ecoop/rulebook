@@ -331,7 +331,7 @@ def glance() -> str:
     )
 
 
-def embeddings() -> str:
+def embeddings_retrieval() -> str:
     sk = Sketch(320, 170, "Sketch of a checkerboard with checkers")
     return sk.render(board(sk, 160, 158, 1.1, GAME, front=125, back=78, depth=92, edge=7))
 
@@ -444,7 +444,7 @@ def generation() -> str:
     return sk.render(page + king)
 
 
-VIGNETTES = {"rag_at_a_glance": glance, "embeddings": embeddings, "evaluation": evaluation,
+VIGNETTES = {"rag_at_a_glance": glance, "embeddings_retrieval": embeddings_retrieval, "evaluation": evaluation,
              "reranking": reranking, "chunking": chunking,
              "generation": generation}
 

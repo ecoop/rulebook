@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Content license](https://img.shields.io/badge/content-CC%20BY%204.0-lightgrey)
 
-_Last updated: 2026-11-16_
+_Last updated: 2026-11-18_
 
 **Rulebook** is a RAG (retrieval-augmented generation) app that answers questions about a set of rules. Give it a rulebook (PDF, Markdown or plain text) and it starts answering questions about it: each claim cites the rule it comes from, and you see the passages it drew on. Adding a rule set is one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)); nothing in the pipeline is specific to a game or sport.
 
@@ -18,7 +18,7 @@ It started as a hands-on way to **learn RAG** and has grown into a small gated p
 The notebooks run real questions through Rulebook's own pipeline, one stage at a time. Start at the [notebooks page](https://ecoop.github.io/rulebook/), which lists them in reading order. You can read each one with every result filled in, no install needed, or run it yourself in Colab:
 
 - [**RAG at a glance**](https://ecoop.github.io/rulebook/rag_at_a_glance.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb).
-- **Go further:** [**A closer look at Embeddings**](https://ecoop.github.io/rulebook/embeddings.html): what an embedding is, how retrieval uses it, and what changes when you swap the model. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb).
+- **Go further:** [**A closer look at Embeddings and Retrieval**](https://ecoop.github.io/rulebook/embeddings_retrieval.html): what an embedding is, how retrieval uses it, and what changes when you swap the model. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_retrieval.ipynb).
 - **Go further:** [**A closer look at Evaluation**](https://ecoop.github.io/rulebook/evaluation.html): how to measure retrieval. Write the right answers down once, then score any setup against them, on checkers and then on poker. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/evaluation.ipynb).
 - **Go further:** [**A closer look at Reranking**](https://ecoop.github.io/rulebook/reranking.html): why retrieval finds passages *about* the question rather than ones that *answer* it, and a second stage that fixes the order: BM25, hybrid, and a cross-encoder, scored on poker and checkers. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/reranking.ipynb).
 - **Go further:** [**A closer look at Chunking**](https://ecoop.github.io/rulebook/chunking.html): how a rulebook is cut into chunks, how to compare ways of cutting fairly (the same reading budget for each), a chunking bug the gold set found, and section headers, a one-line fix for poker's wrong-variant misses. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/chunking.ipynb).
@@ -62,7 +62,7 @@ rulebook/
 ├── scripts/build_index.py     # ingest every rules/<domain>/ → the vector index
 ├── eval/gold/<domain>.jsonl   # citation golds (question → cited rules) for retrieval eval
 ├── notebooks/rag_at_a_glance.ipynb # start here: a short tour of the RAG pipeline
-├── notebooks/embeddings.ipynb # go further: what an embedding is, swapping the embedder
+├── notebooks/embeddings_retrieval.ipynb # go further: what an embedding is, retrieval, swapping the embedder
 ├── notebooks/evaluation.ipynb # go further: golds + hit@k/MRR, checkers then poker
 ├── notebooks/reranking.ipynb  # go further: BM25, hybrid, cross-encoder reranking
 ├── notebooks/chunking.ipynb   # go further: ways of cutting, section headers
@@ -122,10 +122,10 @@ See [`rules/SOURCES.md`](rules/SOURCES.md) for a menu of recognizable rulesets a
 
 ### Learning RAG
 
-New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_glance.ipynb) ([results page](https://ecoop.github.io/rulebook/rag_at_a_glance.html)), a short tour that runs a question through every stage (ingestion → chunking → embeddings → retrieval → generation → evaluation) on the sample domains. Each stage points to a *Go further* notebook. They are [`notebooks/embeddings.ipynb`](notebooks/embeddings.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings.html)), on what an embedding is, and [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb) ([results page](https://ecoop.github.io/rulebook/evaluation.html)), on how to *measure* retrieval (hit@k/MRR, checkers then poker, local vs Voyage), and [`notebooks/reranking.ipynb`](notebooks/reranking.ipynb) ([results page](https://ecoop.github.io/rulebook/reranking.html)), on reordering what retrieval found, and [`notebooks/chunking.ipynb`](notebooks/chunking.ipynb) ([results page](https://ecoop.github.io/rulebook/chunking.html)), on how the rules are cut into chunks, and [`notebooks/generation.ipynb`](notebooks/generation.ipynb) ([results page](https://ecoop.github.io/rulebook/generation.html)), on what Claude is sent and how its citations are checked. Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
+New to RAG? Start with [`notebooks/rag_at_a_glance.ipynb`](notebooks/rag_at_a_glance.ipynb) ([results page](https://ecoop.github.io/rulebook/rag_at_a_glance.html)), a short tour that runs a question through every stage (ingestion → chunking → embeddings → retrieval → generation → evaluation) on the sample domains. Each stage points to a *Go further* notebook. They are [`notebooks/embeddings_retrieval.ipynb`](notebooks/embeddings_retrieval.ipynb) ([results page](https://ecoop.github.io/rulebook/embeddings_retrieval.html)), on what an embedding is, and [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb) ([results page](https://ecoop.github.io/rulebook/evaluation.html)), on how to *measure* retrieval (hit@k/MRR, checkers then poker, local vs Voyage), and [`notebooks/reranking.ipynb`](notebooks/reranking.ipynb) ([results page](https://ecoop.github.io/rulebook/reranking.html)), on reordering what retrieval found, and [`notebooks/chunking.ipynb`](notebooks/chunking.ipynb) ([results page](https://ecoop.github.io/rulebook/chunking.html)), on how the rules are cut into chunks, and [`notebooks/generation.ipynb`](notebooks/generation.ipynb) ([results page](https://ecoop.github.io/rulebook/generation.html)), on what Claude is sent and how its citations are checked. Then read the six core modules in order: `ingest` → `chunking` → `embeddings` → `store` → `retrieve` → `generate`. Everything else in `src/rulebook/` (auth, roles, cost governance, GCS sync) is production scaffolding you can skip on a first pass.
 
 **No install? Run it in your browser.**
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_retrieval.ipynb)
 opens the Embeddings notebook on Google's free machines (key-free; its first cell installs the repo). Every notebook has a results page, linked above and from the [notebooks landing page](https://ecoop.github.io/rulebook/), showing it after a fresh run, with a Run it in Colab link at the top; CI rebuilds them whenever the code they use changes ([`notebook-page.yml`](.github/workflows/notebook-page.yml)).
 
 > The notebooks are committed with outputs stripped ([`.gitattributes`](.gitattributes) + nbstripout) — they're meant to be run. After cloning, run `uv run nbstripout --install` once so your commits stay clean too.
@@ -156,7 +156,7 @@ done
 
 A useful surprise from running this: a *bigger, retrieval-tuned* model (`potion-retrieval-32M`) does **not** reliably beat a plain base model (`potion-base-8M`) here — only the tiniest (`potion-base-2M`) clearly lags. "Fancier embedder = better" is a hypothesis to **measure**, not assume; that's the whole point of the harness.
 
-For a cell-by-cell version of all this (golds, hit@k/MRR, the poker misses, and the local-vs-Voyage comparison), see [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb); for what an embedding is, [`notebooks/embeddings.ipynb`](notebooks/embeddings.ipynb).
+For a cell-by-cell version of all this (golds, hit@k/MRR, the poker misses, and the local-vs-Voyage comparison), see [`notebooks/evaluation.ipynb`](notebooks/evaluation.ipynb); for what an embedding is, [`notebooks/embeddings_retrieval.ipynb`](notebooks/embeddings_retrieval.ipynb).
 
 ### Reranking
 
