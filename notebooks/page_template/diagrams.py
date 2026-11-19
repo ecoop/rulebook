@@ -213,7 +213,7 @@ def overview() -> str:
     xs = [100, 222, 344]
     sx, sy, sw, sh = 472, 24, 92, 66                  # embedding space
     out = [label(14, 18, "prepare", 11, "start"), label(62, 18, "once per rulebook", 11, "start"),
-           shrunk(18, y1 - 8, pdf_stack(0, 0, tag=False)), label(40, y1 + 66, "corpus", 11),
+           shrunk(18, y1 - 8, pdf_stack(0, 0, tag=False)), label(38, y1 + 66, "corpus", 11),
            carry(66, xs[0] - 4, c1)]
     out += [box(x, y1, name) for x, name in zip(xs, ["ingestion", "chunking", "embeddings"], strict=True)]
     out += [carry(xs[0] + bw + 4, xs[1] - 4, c1, "text"), carry(xs[1] + bw + 4, xs[2] - 4, c1, "chunks"),
