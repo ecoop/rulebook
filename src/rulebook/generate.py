@@ -142,6 +142,7 @@ def find_unverified_citations(answer: str, chunks: list[RetrievedChunk]) -> list
 
 
 _DOMAIN_PREFIX_RE = re.compile(r"([a-z][a-z0-9_-]*)\s+(\S.*)")
+_PAGE_SUFFIX_RE = re.compile(r"\s*(?:—\s*)?pp?\.\s?\d+(?:\s*[-–]\s*\d+)?\s*$")
 
 
 def _bracket_citations(domain: str, rest: str) -> list[tuple[str, str]]:
@@ -158,8 +159,9 @@ def _bracket_citations(domain: str, rest: str) -> list[tuple[str, str]]:
         else:
             item_domain = domain
         # Drop a trailing page suffix the model may copy from the context header
-        # (" — p.3" / " — pp.3-4"); citations key on the bare rule_id.
-        rule_id = item.split(" — ")[0].strip()
+        # (" — p.3" / " — pp.3-4", sometimes without the dash); citations key on
+        # the bare rule_id.
+        rule_id = _PAGE_SUFFIX_RE.sub("", item.split(" — ")[0]).strip()
         if rule_id:
             pairs.append((item_domain, rule_id))
     return pairs

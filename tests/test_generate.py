@@ -182,6 +182,15 @@ def test_several_rules_in_one_bracket_are_each_checked():
     assert find_unverified_citations("[tennis 5.3, 5.9]", chunks) == ["tennis 5.9"]
 
 
+def test_a_page_suffix_without_the_dash_is_ignored():
+    # The context header reads "[curling GLOSSARY OF TERMS — pp.65-70]"; answers
+    # sometimes copy it without the dash. The pages aren't part of the rule id.
+    chunks = [_chunk("curling", "GLOSSARY OF TERMS")]
+    for cite in ("[curling GLOSSARY OF TERMS pp.65-70]", "[curling GLOSSARY OF TERMS — pp.65-70]",
+                 "[curling GLOSSARY OF TERMS p.66]"):
+        assert find_unverified_citations(f"Beyond the far hog line {cite}.", chunks) == []
+
+
 def test_ignores_markdown_links():
     answer = "See the [official rules](https://example.com/rules) for details."
     assert find_unverified_citations(answer, _CHUNKS) == []

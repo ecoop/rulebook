@@ -21,6 +21,7 @@ import { HowItWorks } from './HowItWorks'
 import { HowRolesWork } from './HowRolesWork'
 import { levelInfo } from './levels'
 import { type IssueTag, TAG_LABELS, TAGS } from './tags'
+import { excerpt, footnoteCitations, pagesLabel } from './citations'
 
 // -----------------------------------------------------------------------------
 // Types mirroring the FastAPI response shape. Kept inline (rather than in a
@@ -170,6 +171,13 @@ export default function App() {
   // restricts retrieval to exactly those domains.
   const [selectedDomains, setSelectedDomains] = useState<Set<string>>(() => new Set())
   const [loading, setLoading] = useState(false)
+  // Stop: cancels the request in the browser. The server finishes the Claude
+  // call anyway (the answer isn't streamed), so the question is still billed
+  // and logged; `stopped` says so.
+  const askAbort = useRef<AbortController | null>(null)
+  const [stopped, setStopped] = useState(false)
+  // The passage a footnote opened, outlined briefly in the Passages panel.
+  const [flashPassage, setFlashPassage] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AskResponse | null>(restoredSession.result ?? null)
   const [meta, setMeta] = useState<Meta | null>(null)
@@ -385,6 +393,7 @@ export default function App() {
     if (!question.trim() || loading) return
     setLoading(true)
     setError(null)
+    setStopped(false)
     setResult(null)
     setRating(null)
     setTags(new Set())
@@ -394,9 +403,12 @@ export default function App() {
     setGold('')
     setSavedGold('')
     setGoldError(null)
+    const abort = new AbortController()
+    askAbort.current = abort
     try {
       const resp = await fetch('/ask', {
         method: 'POST',
+        signal: abort.signal,
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           question,
@@ -421,10 +433,26 @@ export default function App() {
       // the eye; no need to flag it from here.
       void refreshWidgetData()
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (abort.signal.aborted) setStopped(true)
+      else setError(err instanceof Error ? err.message : String(err))
     } finally {
+      askAbort.current = null
       setLoading(false)
     }
+  }
+
+  function stopAsking() {
+    askAbort.current?.abort()
+  }
+
+  // A footnote's source opens the Passages panel at that passage.
+  function openPassage(i: number) {
+    setSourcesOpen(true)
+    setFlashPassage(i)
+    requestAnimationFrame(() =>
+      document.getElementById(`passage-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+    )
+    window.setTimeout(() => setFlashPassage((cur) => (cur === i ? null : cur)), 1600)
   }
 
   // Widget context — the bundle of live state passed to each widget's
@@ -649,15 +677,34 @@ export default function App() {
                 ⌘/Ctrl+Enter to submit
               </span>
             </div>
-            <button
-              type="submit"
-              disabled={loading || !question.trim()}
-              className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-            >
-              {loading ? 'Thinking…' : 'Ask'}
-            </button>
+            {loading ? (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground">Thinking…</span>
+                <button
+                  type="button"
+                  onClick={stopAsking}
+                  className="rounded-md border border-input bg-card px-4 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-accent"
+                >
+                  Stop
+                </button>
+              </div>
+            ) : (
+              <button
+                type="submit"
+                disabled={!question.trim()}
+                className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+              >
+                Ask
+              </button>
+            )}
           </div>
         </form>
+
+        {stopped && (
+          <p className="text-sm text-muted-foreground">
+            Stopped. The server still finishes this answer, so it counts toward usage.
+          </p>
+        )}
 
         {error && (
           <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
@@ -693,9 +740,7 @@ export default function App() {
                   may be incomplete.
                 </div>
               )}
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {result.answer}
-              </div>
+              <FootnotedAnswer result={result} onOpenPassage={openPassage} />
               {result.unverified_citations && result.unverified_citations.length > 0 && (
                 <div
                   className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"
@@ -873,7 +918,7 @@ export default function App() {
                   </p>
                   <div className="divide-y divide-border">
                     {result.chunks.map((c, i) => (
-                      <ChunkRow key={i} chunk={c} />
+                      <ChunkRow key={i} id={`passage-${i}`} chunk={c} flash={flashPassage === i} />
                     ))}
                   </div>
                 </div>
@@ -901,17 +946,98 @@ export default function App() {
   )
 }
 
-function ChunkRow({ chunk }: { chunk: Chunk }) {
-  // Gold chunks have no meaningful page (both 0); hide the pages label
-  // rather than showing "p.0", matching the backend citation formatter.
-  const pages =
-    chunk.page_start === 0 && chunk.page_end === 0
-      ? ''
-      : chunk.page_start === chunk.page_end
-        ? `p.${chunk.page_start}`
-        : `pp.${chunk.page_start}-${chunk.page_end}`
+// The answer with its [domain rule_id] citations as numbered footnotes, and the
+// cited sources listed once underneath: each with its rule, pages and the
+// passage's opening words. A source opens its passage in the Passages panel.
+function FootnotedAnswer({
+  result,
+  onOpenPassage,
+}: {
+  result: AskResponse
+  onOpenPassage: (i: number) => void
+}) {
+  const { segments, sources } = useMemo(
+    () => footnoteCitations(result.answer, result.chunks, result.unverified_citations),
+    [result],
+  )
+  const [hovered, setHovered] = useState<number | null>(null)
   return (
-    <div className="p-4">
+    <>
+      <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+        {segments.map((s, i) =>
+          s.kind === 'text' ? (
+            <span key={i}>{s.text}</span>
+          ) : (
+            <sup key={i} className="ml-px text-[0.7rem] text-muted-foreground">
+              {s.ns.map((n, j) => (
+                <span key={n}>
+                  {j > 0 && ', '}
+                  <a
+                    href={`#source-${n}`}
+                    onMouseEnter={() => setHovered(n)}
+                    onMouseLeave={() => setHovered(null)}
+                    className="hover:text-foreground"
+                  >
+                    {n}
+                  </a>
+                </span>
+              ))}
+            </sup>
+          ),
+        )}
+      </div>
+      {sources.length > 0 && (
+        <ol className="mt-3 space-y-0.5 border-t border-border pt-2 text-xs text-muted-foreground">
+          {sources.map((src) => {
+            const chunk = src.chunkIndex == null ? null : result.chunks[src.chunkIndex]
+            return (
+              <li
+                key={src.n}
+                id={`source-${src.n}`}
+                className={
+                  'flex min-w-0 items-baseline gap-2 rounded px-1 py-0.5 ' +
+                  (hovered === src.n ? 'bg-accent' : '')
+                }
+              >
+                <span className="w-4 shrink-0 text-right">{src.n}</span>
+                <span className="shrink-0 rounded bg-secondary px-1.5 font-mono text-secondary-foreground">
+                  {src.domain}
+                </span>
+                {chunk ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenPassage(src.chunkIndex!)}
+                    title="Show this passage"
+                    className="flex min-w-0 items-baseline gap-2 text-left hover:text-foreground"
+                  >
+                    <span className="shrink-0 font-mono text-foreground">{src.ruleId}</span>
+                    <span className="shrink-0">{pagesLabel(chunk)}</span>
+                    <span className="truncate">· {excerpt(chunk)}</span>
+                  </button>
+                ) : (
+                  <>
+                    <span className="shrink-0 font-mono text-foreground">{src.ruleId}</span>
+                    <span className="text-amber-700">not in the retrieved passages</span>
+                  </>
+                )}
+              </li>
+            )
+          })}
+        </ol>
+      )}
+    </>
+  )
+}
+
+function ChunkRow({ chunk, id, flash }: { chunk: Chunk; id?: string; flash?: boolean }) {
+  // Gold chunks have no meaningful page (both 0); pagesLabel hides it rather
+  // than showing "p.0", matching the backend citation formatter.
+  const pages = pagesLabel(chunk)
+  return (
+    <div
+      id={id}
+      className={'p-4 transition-colors duration-700 ' + (flash ? 'bg-accent' : '')}
+    >
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
         <span className="rounded bg-secondary px-2 py-0.5 font-mono text-secondary-foreground">
           {chunk.domain}
