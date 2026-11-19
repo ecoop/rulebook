@@ -101,13 +101,14 @@ def page(x, y, w, h, turn=0.0, fold=False) -> str:
     return f'<g transform="rotate({turn} {x + w / 2} {y + h / 2})">{body}</g>'
 
 
-def pdf_stack(x, y, w=58, h=74) -> str:
+def pdf_stack(x, y, w=58, h=74, tag=True) -> str:
     back = "".join(
         f'<rect x="{x + 8 - 4 * i}" y="{y - 8 + 4 * i}" width="{w}" height="{h}" rx="2" fill="#fff" stroke-width="1.3"/>'
         for i in range(2))
-    tag = (f'<rect x="{x + 6}" y="{y + h - 20}" width="38" height="13" fill="#fff" stroke-width="1.1"/>'
-           + label(x + 25, y + h - 10, "corpus", 9))
-    return back + page(x, y, w, h, fold=True) + tag
+    # The "corpus" tag only where the stack is drawn large enough to read it.
+    mark = (f'<rect x="{x + 6}" y="{y + h - 20}" width="38" height="13" fill="#fff" stroke-width="1.1"/>'
+            + label(x + 25, y + h - 10, "corpus", 9)) if tag else ""
+    return back + page(x, y, w, h, fold=True) + mark
 
 
 def slip(x, y, w=46, h=20, turn=0.0, seed=0) -> str:
@@ -212,7 +213,7 @@ def overview() -> str:
     xs = [100, 222, 344]
     sx, sy, sw, sh = 472, 24, 92, 66                  # embedding space
     out = [label(14, 18, "prepare", 11, "start"), label(62, 18, "once per rulebook", 11, "start"),
-           shrunk(18, y1 - 8, pdf_stack(0, 0)), label(40, y1 + 66, "rulebook corpus", 11),
+           shrunk(18, y1 - 8, pdf_stack(0, 0, tag=False)), label(40, y1 + 66, "corpus", 11),
            carry(66, xs[0] - 4, c1)]
     out += [box(x, y1, name) for x, name in zip(xs, ["ingestion", "chunking", "embeddings"], strict=True)]
     out += [carry(xs[0] + bw + 4, xs[1] - 4, c1, "text"), carry(xs[1] + bw + 4, xs[2] - 4, c1, "chunks"),
