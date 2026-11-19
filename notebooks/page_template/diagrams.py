@@ -192,7 +192,7 @@ def shrunk(x, y, inner: str, s=0.62) -> str:
 def overview() -> str:
     """The pipeline in two parts: prepare the rulebook once, then answer each question.
     Embedding space is the hinge: built by the first part, searched by the second."""
-    sk = Diagram(800, 252, "Flow in two parts. Prepare, once per rulebook: rulebook PDFs through ingestion, "
+    sk = Diagram(800, 252, "Flow in two parts. Prepare, once per rulebook: a rulebook corpus through ingestion, "
                            "chunking and embeddings into embedding space. Answer, for each question: retrieval "
                            "searches that space, and generation writes a cited answer")
     bw, bh = 74, 32
@@ -212,7 +212,7 @@ def overview() -> str:
     xs = [100, 222, 344]
     sx, sy, sw, sh = 472, 24, 92, 66                  # embedding space
     out = [label(14, 18, "prepare", 11, "start"), label(62, 18, "once per rulebook", 11, "start"),
-           shrunk(18, y1 - 8, pdf_stack(0, 0)), label(40, y1 + 66, "rulebook PDFs", 11),
+           shrunk(18, y1 - 8, pdf_stack(0, 0)), label(40, y1 + 66, "rulebook corpus", 11),
            carry(66, xs[0] - 4, c1)]
     out += [box(x, y1, name) for x, name in zip(xs, ["ingestion", "chunking", "embeddings"], strict=True)]
     out += [carry(xs[0] + bw + 4, xs[1] - 4, c1, "text"), carry(xs[1] + bw + 4, xs[2] - 4, c1, "chunks"),
