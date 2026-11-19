@@ -105,8 +105,8 @@ def pdf_stack(x, y, w=58, h=74) -> str:
     back = "".join(
         f'<rect x="{x + 8 - 4 * i}" y="{y - 8 + 4 * i}" width="{w}" height="{h}" rx="2" fill="#fff" stroke-width="1.3"/>'
         for i in range(2))
-    tag = (f'<rect x="{x + 6}" y="{y + h - 20}" width="26" height="13" fill="#fff" stroke-width="1.1"/>'
-           + label(x + 19, y + h - 10, "PDF", 9))
+    tag = (f'<rect x="{x + 6}" y="{y + h - 20}" width="38" height="13" fill="#fff" stroke-width="1.1"/>'
+           + label(x + 25, y + h - 10, "corpus", 9))
     return back + page(x, y, w, h, fold=True) + tag
 
 
@@ -238,12 +238,12 @@ def overview() -> str:
 
 
 def ingestion() -> str:
-    sk = Diagram(360, 160, "Flow: rulebook PDFs, extracted to plain text")
+    sk = Diagram(360, 160, "Flow: rulebook corpora, extracted to plain text")
     return sk.render(
         pdf_stack(52, 36)
         + link(132, 78, 216, 78, "extract")
         + page(234, 28, 70, 92, turn=2)
-        + label(84, 142, "rulebook PDFs") + label(270, 142, "plain text, by page")
+        + label(84, 142, "rulebook corpus") + label(270, 142, "plain text, by page")
     )
 
 
