@@ -45,10 +45,11 @@ class Diagram(Sketch):
 
 
 # --- marks -----------------------------------------------------------------------
-def label(x, y, text, size=12, anchor="middle") -> str:
-    """Words, all in one style: the same blue whether caption, arrow or heading."""
+def label(x, y, text, size=12, anchor="middle", colour=INK) -> str:
+    """Words, all in one style: the same blue whether caption or arrow. Only the
+    overview's two headings (prepare, answer) are pressed harder, in ``DEEP``."""
     return (f'<text x="{x}" y="{y}" text-anchor="{anchor}" {FONT} font-size="{size}" '
-            f'fill="{INK}" stroke="none">{text}</text>')
+            f'fill="{colour}" stroke="none">{text}</text>')
 
 
 def arrow(x1, y1, x2, y2, bend=0.0, width=1.6) -> str:
@@ -212,7 +213,7 @@ def overview() -> str:
     c1 = y1 + bh / 2
     xs = [100, 222, 344]
     sx, sy, sw, sh = 472, 24, 92, 66                  # embedding space
-    out = [label(14, 18, "prepare", 11, "start"), label(62, 18, "once per rulebook", 11, "start"),
+    out = [label(14, 18, "prepare", 14, "start", DEEP), label(72, 18, "once per rulebook", 12, "start"),
            shrunk(18, y1 - 8, pdf_stack(0, 0, tag=False)), label(38, y1 + 66, "corpus", 11),
            carry(66, xs[0] - 4, c1)]
     out += [box(x, y1, name) for x, name in zip(xs, ["ingestion", "chunking", "embeddings"], strict=True)]
@@ -227,7 +228,7 @@ def overview() -> str:
     c2 = y2 + bh / 2
     rx = sx + sw / 2 - bw / 2
     gx = rx + bw + 60
-    out += [label(14, 154, "answer", 11, "start"), label(58, 154, "for each question", 11, "start"),
+    out += [label(14, 154, "answer", 14, "start", DEEP), label(68, 154, "for each question", 12, "start"),
             bubble(rx - 92, y2 - 4, 42, 30), label(rx - 71, y2 + 52, "question", 11),
             carry(rx - 44, rx - 4, c2), box(rx, y2, "retrieval"),
             arrow(sx + sw / 2, sy + sh + 6, sx + sw / 2, y2 - 4, width=1.4),
