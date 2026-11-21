@@ -235,7 +235,7 @@ def overview() -> str:
             label(sx + sw / 2 - 6, 150, "nearest chunks", 10, "end"),
             carry(rx + bw + 4, gx - 4, c2, "passages"), box(gx, y2, "generation"),
             carry(gx + bw + 4, gx + bw + 28, c2),
-            shrunk(gx + bw + 34, y2 - 18, answer(0, 0)), label(gx + bw + 56, y2 + 66, "a cited answer", 11)]
+            shrunk(gx + bw + 34, y2 - 18, answer(0, 0)), label(gx + bw + 56, y2 + 66, "cited answer", 11)]
     return sk.render("".join(out))
 
 
@@ -270,8 +270,8 @@ def embeddings() -> str:
         + vector(156, 34)
         + link(204, 73, 240, 73, "store", bend=-4)
         + space(sk, 248, 30, w=100)
-        + label(37, 116, "a chunk") + label(176, 130, "a vector")
-        + label(298, 130, "a point in") + label(298, 144, "embedding space")
+        + label(37, 116, "chunk") + label(176, 130, "embedding")
+        + label(298, 130, "point in") + label(298, 144, "embedding space")
     )
 
 
@@ -305,7 +305,7 @@ def generation() -> str:
         + link(214, 74, 262, 74, "generate", bend=-4)
         + answer(268, 34)
         + label(40, 138, "question") + label(40, 151, "+ passages")
-        + label(178, 138, "language model") + label(304, 138, "a cited answer")
+        + label(178, 138, "language model") + label(304, 138, "cited answer")
     )
 
 
