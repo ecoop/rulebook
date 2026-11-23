@@ -524,7 +524,7 @@ export default function App() {
                 </button>
               </div>
               <p className="text-sm text-muted-foreground">
-                Ask about the rules of ultimate and goaltimate. Answers cite the actual rule numbers.
+                Ask a question about the rules. Answers cite the actual rule numbers.
               </p>
               {me?.demo_mode && (
                 <button
@@ -622,7 +622,7 @@ export default function App() {
           <textarea
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Is double-teaming allowed?"
+            placeholder="Ask a rules question"
             rows={3}
             className="w-full resize-y rounded-md border border-input bg-card p-3 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
             onKeyDown={(e) => {
