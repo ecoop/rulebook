@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Content license](https://img.shields.io/badge/content-CC%20BY%204.0-lightgrey)
 
-_Last updated: 2026-11-18_
+_Last updated: 2026-11-23_
 
 **Rulebook** is a RAG (retrieval-augmented generation) app that answers questions about a set of rules. Give it a rulebook (PDF, Markdown or plain text) and it starts answering questions about it: each claim cites the rule it comes from, and you see the passages it drew on. Adding a rule set is one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)); nothing in the pipeline is specific to a game or sport.
 
@@ -226,7 +226,7 @@ uv run pytest
 
 ## Not done (yet)
 
-Hosted rerankers (and Claude as a reranker, #258), streaming answers, and an automated eval harness — each left as a clear next step.
+Hosted rerankers (and Claude as a reranker, #258), streaming answers, and automated scoring of the answers themselves (retrieval is scored; generation isn't yet) — each left as a clear next step.
 
 ## License
 

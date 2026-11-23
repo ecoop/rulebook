@@ -109,6 +109,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/rulebook"]
 
+[tool.uv]
+# `uv sync` installs both groups, so the README's `uv run pytest` works from a
+# fresh clone. CI is unaffected: it runs `uv sync --no-dev --group test`.
+default-groups = ["dev", "test"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
