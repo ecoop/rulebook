@@ -130,10 +130,36 @@ export function footnoteCitations(
   return { segments, sources }
 }
 
-// A passage's opening words, about one line: the rule id it starts with is
-// dropped (the row already shows it) and the cut falls at a word boundary.
+// The answer back as Markdown, each footnote marker as a link to "#cite-1-2"
+// for the renderer to draw as a superscript. The answer is Markdown already
+// (lists, bold); only the [domain rule_id] brackets change.
+export const CITE_HREF_PREFIX = '#cite-'
+
+export function citedMarkdown(segments: Segment[]): string {
+  let md = ''
+  for (const s of segments) {
+    if (s.kind === 'text') {
+      md += s.text
+    } else {
+      // "!" right before a link would make it an image.
+      if (md.endsWith('!')) md = md.slice(0, -1) + '\\!'
+      md += `[${s.ns.join(', ')}](${CITE_HREF_PREFIX}${s.ns.join('-')})`
+    }
+  }
+  return md
+}
+
+export function citeNumbers(href: string | undefined): number[] | null {
+  if (!href?.startsWith(CITE_HREF_PREFIX)) return null
+  const ns = href.slice(CITE_HREF_PREFIX.length).split('-').map(Number)
+  return ns.length > 0 && ns.every((n) => Number.isInteger(n) && n > 0) ? ns : null
+}
+
+// A passage's opening words, about one line: a Markdown heading mark and the
+// rule id it starts with are dropped (the row already shows the id) and the cut
+// falls at a word boundary.
 export function excerpt(chunk: CitableChunk, max = 70): string {
-  let text = chunk.text.replace(/\s+/g, ' ').trim()
+  let text = chunk.text.replace(/\s+/g, ' ').trim().replace(/^#{1,6}\s+/, '')
   const id = chunk.rule_id.trim()
   if (text.startsWith(id)) text = text.slice(id.length).replace(/^[.:\s]+/, '')
   if (text.length <= max) return text

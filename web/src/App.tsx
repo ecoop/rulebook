@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Info } from 'lucide-react'
 import {
   FloatingWidgetStack,
@@ -18,10 +18,12 @@ import {
   type DiagnosticsSnapshot,
 } from './widgets/Diagnostics'
 import { HowItWorks } from './HowItWorks'
+
+const AnswerMarkdown = lazy(() => import('./AnswerMarkdown'))
 import { HowRolesWork } from './HowRolesWork'
 import { levelInfo } from './levels'
 import { type IssueTag, TAG_LABELS, TAGS } from './tags'
-import { excerpt, footnoteCitations, pagesLabel } from './citations'
+import { citedMarkdown, excerpt, footnoteCitations, pagesLabel } from './citations'
 
 // -----------------------------------------------------------------------------
 // Types mirroring the FastAPI response shape. Kept inline (rather than in a
@@ -487,6 +489,13 @@ export default function App() {
   // (level 1+) — everyone signed-in gets a personal, self-scoped activity page.
   const gatingActive = !!me && me.demo_mode
   const canEvaluate = !gatingActive || (me != null && me.capabilities.includes('gold.author'))
+  // The rule sets the answer cites, for the gold hint: a gold that covers more
+  // than one is split by `## <Rule set>` headings (gold_domains.py).
+  const answerDomains = useMemo(() => {
+    if (!result) return []
+    const { sources } = footnoteCitations(result.answer, result.chunks, result.unverified_citations)
+    return [...new Set(sources.map((s) => s.domain))].sort()
+  }, [result])
   const showActivityLink = !!me && (!me.demo_mode || me.capabilities.includes('activity.view'))
 
   if (meForbidden) {
@@ -851,11 +860,20 @@ export default function App() {
                 <label className="flex flex-wrap items-baseline gap-2 text-xs">
                   <span className="text-muted-foreground">Gold answer</span>
                   <span className="text-muted-foreground">
-                    — edit the answer above into what a knowledgeable human would give.
-                    Use <span className="font-mono">## Ultimate</span> /{' '}
-                    <span className="font-mono">## Goaltimate</span> headings so each
-                    section retrieves under its domain. Included in the index on the
-                    next rebuild.
+                    — edit the answer above into what a knowledgeable human would give.{' '}
+                    {answerDomains.length > 1 && (
+                      <>
+                        Use{' '}
+                        {answerDomains.map((d, i) => (
+                          <span key={d}>
+                            {i > 0 && ' / '}
+                            <span className="font-mono">## {d.charAt(0).toUpperCase() + d.slice(1)}</span>
+                          </span>
+                        ))}{' '}
+                        headings so each section retrieves under its rule set.{' '}
+                      </>
+                    )}
+                    Included in the index on the next rebuild.
                   </span>
                 </label>
                 <textarea
@@ -961,30 +979,13 @@ function FootnotedAnswer({
     [result],
   )
   const [hovered, setHovered] = useState<number | null>(null)
+  const markdown = useMemo(() => citedMarkdown(segments), [segments])
   return (
     <>
-      <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-        {segments.map((s, i) =>
-          s.kind === 'text' ? (
-            <span key={i}>{s.text}</span>
-          ) : (
-            <sup key={i} className="ml-px text-[0.7rem] text-muted-foreground">
-              {s.ns.map((n, j) => (
-                <span key={n}>
-                  {j > 0 && ', '}
-                  <a
-                    href={`#source-${n}`}
-                    onMouseEnter={() => setHovered(n)}
-                    onMouseLeave={() => setHovered(null)}
-                    className="hover:text-foreground"
-                  >
-                    {n}
-                  </a>
-                </span>
-              ))}
-            </sup>
-          ),
-        )}
+      <div className="text-sm leading-relaxed text-foreground">
+        <Suspense fallback={<div className="whitespace-pre-wrap">{result.answer}</div>}>
+          <AnswerMarkdown markdown={markdown} onHover={setHovered} />
+        </Suspense>
       </div>
       {sources.length > 0 && (
         <ol className="mt-3 space-y-0.5 border-t border-border pt-2 text-xs text-muted-foreground">
