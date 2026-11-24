@@ -235,6 +235,34 @@ class Settings(BaseSettings):
         validation_alias="RULEBOOK_GOLD_LEGACY_DOMAINS",
     )
 
+    # --- Join requests (#337, see rulebook.join_requests) ------------------
+    # One JSON object per request under this prefix in the state bucket, so a
+    # purge is a real delete and two requests never contend for one object.
+    join_requests_prefix: str = Field(
+        default="join_requests/",
+        validation_alias="RULEBOOK_JOIN_REQUESTS_PREFIX",
+    )
+    # The live join settings (switch, cap, approval defaults): a whole-object
+    # JSON snapshot like invite_tokens.json, edited from the Users tab.
+    join_settings_object: str = Field(
+        default="join_settings.json",
+        validation_alias="RULEBOOK_JOIN_SETTINGS_OBJECT",
+    )
+
+    # --- Email (rulebook.notify) --------------------------------------------
+    # Outgoing mail over SMTP with STARTTLS; Gmail by default. Unset user or
+    # password = email off (logged and skipped, never an error). On Cloud Run
+    # the password comes from Secret Manager (a Gmail app password).
+    smtp_host: str = Field(default="smtp.gmail.com", validation_alias="RULEBOOK_SMTP_HOST")
+    smtp_port: int = Field(default=587, validation_alias="RULEBOOK_SMTP_PORT")
+    smtp_user: str | None = Field(default=None, validation_alias="RULEBOOK_SMTP_USER")
+    smtp_password: str | None = Field(default=None, validation_alias="RULEBOOK_SMTP_PASSWORD")
+    # Who is told about a new join request; defaults to smtp_user.
+    notify_email: str | None = Field(default=None, validation_alias="RULEBOOK_NOTIFY_EMAIL")
+    # The site's public address, for links in emails (e.g. https://example.org).
+    # Optional: without it the email carries no link.
+    public_url: str | None = Field(default=None, validation_alias="RULEBOOK_PUBLIC_URL")
+
     @property
     def repo_root(self) -> Path:
         # Anchor relative paths to the repo root, not the shell's cwd, so

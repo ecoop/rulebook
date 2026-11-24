@@ -95,6 +95,11 @@ CAP_USERS_REMOVE = "users.remove"             # hard-delete an invite
 CAP_USERS_RENAME = "users.rename"             # rename a user's label
 CAP_ROLES_MANAGE = "roles.manage"             # edit the RBAC config itself (no endpoint yet)
 CAP_DOMAINS_UNSCOPED = "domains.unscoped"     # see/act across ALL domains, bypassing allowed_domains scoping
+# Join requests (#337): people without an invite ask; the operator decides.
+CAP_REQUESTS_VIEW = "requests.view"           # see the Requests list and the join settings
+CAP_REQUESTS_DECIDE = "requests.decide"       # approve (creates the user) or decline a request
+CAP_REQUESTS_CONFIGURE = "requests.configure" # the switch, the cap, the approval defaults
+CAP_REQUESTS_PURGE = "requests.purge"         # permanently delete declined requests
 
 # The full closed set — every capability a role may be granted.
 CAPABILITIES: frozenset[str] = frozenset({
@@ -107,6 +112,7 @@ CAPABILITIES: frozenset[str] = frozenset({
     CAP_ATTRIBUTION_VIEW, CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE, CAP_USERS_ADD,
     CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE,
     CAP_DOMAINS_UNSCOPED,
+    CAP_REQUESTS_VIEW, CAP_REQUESTS_DECIDE, CAP_REQUESTS_CONFIGURE, CAP_REQUESTS_PURGE,
 })
 
 # The eight rungs, cumulative (each = the previous ∪ its additions). See §4.
@@ -130,13 +136,19 @@ _R6 = _R5 | {                                                    # operator
     CAP_GOLDS_CURATE, CAP_GOLDS_CLONE, CAP_SOURCES_CURATE,
     CAP_INDEX_REBUILD, CAP_ATTRIBUTION_VIEW,
 }
-_R7 = _R6 | {CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE, CAP_USERS_ADD, CAP_DOMAINS_UNSCOPED}  # admin (unscoped across domains)
-_R8 = _R7 | {CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE}  # superuser
+_R7 = _R6 | {                                                    # admin (unscoped across domains)
+    CAP_USERS_VIEW, CAP_USERS_CHANGE_ROLE, CAP_USERS_ADD, CAP_DOMAINS_UNSCOPED,
+    CAP_REQUESTS_VIEW, CAP_REQUESTS_DECIDE, CAP_REQUESTS_CONFIGURE,
+}
+_R8 = _R7 | {                                                    # superuser
+    CAP_USERS_REMOVE, CAP_USERS_RENAME, CAP_ROLES_MANAGE,
+    CAP_REQUESTS_PURGE,
+}
 
 # Role → capability bundle, keyed by level (§4). Policy encoded here: admin
-# manages users — view, change role, add invitees; superuser holds the
-# destructive ops (remove/rename) plus the future RBAC-config editor
-# (roles.manage).
+# manages users — view, change role, add invitees, decide join requests;
+# superuser holds the destructive ops (remove/rename, purging declined
+# requests) plus the future RBAC-config editor (roles.manage).
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "suspended":   frozenset(),  # no access
     "beginner":    _R1,          # casual player

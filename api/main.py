@@ -71,6 +71,7 @@ sync_rules_from_gcs()
 
 from jsonl_log import utc_now_iso  # noqa: E402
 
+from rulebook import join_requests as jr  # noqa: E402
 from rulebook.interaction_log import (  # noqa: E402
     count_comments_by_author,
     count_golds_by_author,
@@ -89,6 +90,7 @@ from rulebook.interaction_log import (  # noqa: E402
     read_qa_entries,
     read_qa_questions,
 )
+from rulebook.notify import email_configured, notify_recipient, send_email  # noqa: E402
 from rulebook.pipeline import DEFAULT_DOMAINS, ask  # noqa: E402
 from rulebook.registry import display_labels, domain_sources, visible_domains  # noqa: E402
 from rulebook.roles import (  # noqa: E402
@@ -108,6 +110,10 @@ from rulebook.roles import (  # noqa: E402
     CAP_INDEX_REBUILD,
     CAP_QUESTIONS_VIEW_ALL,
     CAP_RATE,
+    CAP_REQUESTS_CONFIGURE,
+    CAP_REQUESTS_DECIDE,
+    CAP_REQUESTS_PURGE,
+    CAP_REQUESTS_VIEW,
     CAP_SOURCES_CURATE,
     CAP_SOURCES_VIEW,
     CAP_USERS_ADD,
@@ -535,6 +541,68 @@ class RemoveInviteTokenResponse(BaseModel):
 
 class RenameInviteTokenRequest(BaseModel):
     label: str = Field(..., min_length=1, description="New recipient label for an existing token.")
+
+
+class JoinRequestOut(BaseModel):
+    id: str
+    name: str
+    email: str
+    heard_about: str = Field(..., description='Answer to "How did you hear about Rulebook?".')
+    created_at: str
+    source: str = Field(..., description='"web" | "ios" | "referral".')
+    referred_by: str | None = None
+    status: str = Field(..., description='"pending" | "approved" | "declined".')
+    decided_at: str | None = None
+    decided_by: str | None = None
+    invite_token: str | None = Field(default=None, description="The user created on approval.")
+    granted_role: str | None = None
+    granted_domains: list[str] | None = None
+
+
+class JoinSettingsOut(BaseModel):
+    mode: str = Field(..., description='"closed" | "referral-only" | "open".')
+    pending_cap: int = Field(..., description="Public requests stop being accepted at this many pending.")
+    default_role: str = Field(..., description="Role pre-filled on approval.")
+    default_domains: list[str] = Field(..., description="Domains pre-filled on approval.")
+    updated_at: str | None = None
+    updated_by: str | None = None
+    modes: list[str] = Field(default_factory=lambda: list(jr.MODES))
+    accepting_public: bool = Field(..., description="Whether a public (web) request would be accepted now.")
+    email_configured: bool = Field(..., description="Whether new-request emails can be sent.")
+
+
+class JoinRequestsResponse(BaseModel):
+    requests: list[JoinRequestOut]
+    pending: int
+    settings: JoinSettingsOut
+
+
+class JoinSettingsUpdate(BaseModel):
+    mode: str
+    pending_cap: int
+    default_role: str
+    default_domains: list[str] = Field(..., min_length=1)
+
+
+class ApproveJoinRequest(BaseModel):
+    label: str | None = Field(default=None, description="User label; defaults to the request's name.")
+    role: str | None = Field(default=None, description="Defaults to the join settings' default_role.")
+    domains: list[str] | None = Field(default=None, description="Defaults to the join settings' default_domains.")
+
+
+class ApproveJoinResponse(BaseModel):
+    request: JoinRequestOut
+    token: str
+    label: str
+
+
+class PurgeJoinResponse(BaseModel):
+    purged: int
+
+
+class TestEmailResponse(BaseModel):
+    ok: bool = True
+    to: str
 
 
 class MetaResponse(BaseModel):
@@ -1218,23 +1286,43 @@ def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse
     instance (cache is dropped on write), within ~30s elsewhere.
     """
     bucket, obj = _require_gcs_for_invite_tokens()
-    tokens = read_tokens_object(bucket, obj)
-    token = req.token or mint_token()
-    if token in tokens:
-        raise HTTPException(status_code=409, detail=f"token already exists ({tokens[token]!r}).")
+    if req.token and req.token in read_tokens_object(bucket, obj):
+        raise HTTPException(status_code=409, detail="token already exists.")
     # Assign domain access at creation (#112) — an EXPLICIT grant, not a
     # reliance on the resolver's default, so the new user's access is recorded
     # from day one. Default to the configured set; the creator can override.
     domains = req.domains if req.domains is not None else list(settings.default_allowed_domains)
+    _check_grantable(domains)
+    token = req.token or mint_token()
+    _create_user(token, req.label, domains, note="assigned at user creation")
+    _audit(CAP_USERS_ADD, target=token, detail={"label": req.label, "domains": domains})
+    return AddInviteTokenResponse(token=token, label=req.label, domains=domains)
+
+
+def _check_grantable(domains: list[str]) -> None:
+    """422 unless every domain is available to grant (#128)."""
     all_domains = set(available_domains())  # grantable = available, not just built (#128)
     unknown = [s for s in domains if s not in all_domains]
     if unknown:
         raise HTTPException(
             status_code=422, detail=f"unknown domain(s) {unknown}; one of {sorted(all_domains)}"
         )
-    tokens[token] = req.label
+
+
+def _create_user(token: str, label: str, domains: list[str], *, note: str, role: str | None = None) -> None:
+    """The one way to create a user: allowlist entry + explicit domain grant (+ role).
+
+    Used by add-user and by approving a join request (#337). Callers validate
+    first (`_check_grantable`, role validity) and audit after.
+    """
+    bucket, obj = _require_gcs_for_invite_tokens()
+    tokens = read_tokens_object(bucket, obj)
+    if token in tokens:
+        raise HTTPException(status_code=409, detail="token already exists.")
+    tokens[token] = label
     write_tokens_object(bucket, obj, tokens)
     guest = get_current_guest()
+    changed_by = guest.recipient if guest else None
     append_allowed_domains_row(
         bucket,
         settings.allowed_domains_object,
@@ -1243,12 +1331,23 @@ def admin_add_invite_token(req: AddInviteTokenRequest) -> AddInviteTokenResponse
             "timestamp": utc_now_iso(),
             "token": token,
             "domains": domains,
-            "changed_by": (guest.recipient if guest else None),
-            "note": "assigned at user creation",
+            "changed_by": changed_by,
+            "note": note,
         },
     )
-    _audit(CAP_USERS_ADD, target=token, detail={"label": req.label, "domains": domains})
-    return AddInviteTokenResponse(token=token, label=req.label, domains=domains)
+    if role is not None:
+        append_role_row(
+            bucket,
+            settings.roles_object,
+            {
+                "v": 1,
+                "timestamp": utc_now_iso(),
+                "token": token,
+                "role": role,
+                "changed_by": changed_by,
+                "note": note,
+            },
+        )
 
 
 @app.delete(
@@ -1293,6 +1392,227 @@ def admin_rename_invite_token(token: str, req: RenameInviteTokenRequest) -> Invi
     write_tokens_object(bucket, obj, tokens)
     _audit(CAP_USERS_RENAME, target=token, detail={"label": req.label})
     return InviteTokenOut(token=token, label=req.label)
+
+
+# ── Join requests (#337) ──────────────────────────────────────────────────────
+# Admin side only. The public side (GET /join/status, POST /join) waits for
+# guest-auth's public paths; its rules live in rulebook.join_requests already.
+
+
+def _join_store() -> jr.JoinStore:
+    if settings.state_backend_kind != "gcs" or not settings.gcs_state_bucket:
+        raise HTTPException(
+            status_code=400,
+            detail="join requests require the gcs state backend (RULEBOOK_STATE_BACKEND=gcs).",
+        )
+    return jr.GcsJoinStore(
+        settings.gcs_state_bucket, settings.join_requests_prefix, settings.join_settings_object
+    )
+
+
+def _join_settings_out(js: jr.JoinSettings, pending: int) -> JoinSettingsOut:
+    return JoinSettingsOut(
+        mode=js.mode,
+        pending_cap=js.pending_cap,
+        default_role=js.default_role,
+        default_domains=js.default_domains,
+        updated_at=js.updated_at,
+        updated_by=js.updated_by,
+        accepting_public=jr.accepting(js, pending, jr.SOURCE_WEB),
+        email_configured=email_configured(),
+    )
+
+
+def _check_approval_role(role: str) -> None:
+    if not is_valid_role(role) or role == "suspended":
+        raise HTTPException(
+            status_code=422,
+            detail=f"invalid role '{role}'; one of {[r for r in ordered_roles() if r != 'suspended']}",
+        )
+
+
+@app.get(
+    "/advanced/join-requests",
+    response_model=JoinRequestsResponse,
+    dependencies=[Depends(require_capability(CAP_REQUESTS_VIEW))],
+)
+def admin_list_join_requests() -> JoinRequestsResponse:
+    """Every request (pending first, newest first) plus the live join settings."""
+    store = _join_store()
+    rows = jr.list_requests(store)
+    pending = sum(1 for r in rows if r.get("status") == jr.STATUS_PENDING)
+    js = jr.JoinSettings.from_raw(store.read_settings())
+    return JoinRequestsResponse(
+        requests=[JoinRequestOut(**r) for r in rows],
+        pending=pending,
+        settings=_join_settings_out(js, pending),
+    )
+
+
+@app.post(
+    "/advanced/join-requests/purge",
+    response_model=PurgeJoinResponse,
+    dependencies=[Depends(require_capability(CAP_REQUESTS_PURGE))],
+)
+def admin_purge_join_requests() -> PurgeJoinResponse:
+    """Permanently delete every DECLINED request, and the emails they hold.
+
+    Approved and pending requests are untouched. Can't be undone; the audit
+    row records only how many went, not who.
+    """
+    purged = jr.purge_declined(_join_store())
+    _audit(CAP_REQUESTS_PURGE, detail={"purged": purged})
+    return PurgeJoinResponse(purged=purged)
+
+
+@app.post(
+    "/advanced/join-requests/{request_id}/approve",
+    response_model=ApproveJoinResponse,
+    dependencies=[Depends(require_capability(CAP_REQUESTS_DECIDE))],
+)
+def admin_approve_join_request(request_id: str, req: ApproveJoinRequest) -> ApproveJoinResponse:
+    """Approve: create the user (token + role + domains) and mark the request approved.
+
+    Role and domains default to the join settings. The request is claimed
+    first (a versioned write), so two approvals of one request can't both
+    create a user; if creating the user then fails, the claim is undone.
+    """
+    store = _join_store()
+    try:
+        record, version = jr.claim_pending(store, request_id)
+    except jr.NotFound:
+        raise HTTPException(status_code=404, detail="join request not found.") from None
+    except jr.NotPending as exc:
+        raise HTTPException(status_code=409, detail=f"join request already {exc}.") from None
+    js = jr.JoinSettings.from_raw(store.read_settings())
+    role = req.role or js.default_role
+    domains = req.domains if req.domains is not None else list(js.default_domains)
+    label = " ".join((req.label or record["name"]).split())
+    if not label:
+        raise HTTPException(status_code=422, detail="label is required.")
+    _check_approval_role(role)
+    _check_grantable(domains)
+    bucket, obj = _require_gcs_for_invite_tokens()
+    if label in read_tokens_object(bucket, obj).values():
+        raise HTTPException(status_code=409, detail=f"a user labelled {label!r} already exists; pick another label.")
+
+    guest = get_current_guest()
+    token = mint_token()
+    try:
+        approved, new_version = jr.decide(
+            store, record, version,
+            status=jr.STATUS_APPROVED,
+            decided_by=(guest.recipient if guest else None),
+            invite_token=token, granted_role=role, granted_domains=domains,
+        )
+    except jr.Conflict:
+        raise HTTPException(status_code=409, detail="join request changed; reload and try again.") from None
+    try:
+        _create_user(token, label, domains, role=role, note=f"approved join request {request_id}")
+    except Exception:
+        try:  # undo the claim so the request can be approved again
+            store.put(record, version=new_version)
+        except Exception:  # noqa: BLE001 — report the original failure, not this one
+            log.exception("join: failed to revert request %s to pending", request_id)
+        raise
+    _audit(
+        CAP_REQUESTS_DECIDE,
+        target=request_id,
+        detail={"decision": "approved", "token": token, "label": label, "role": role, "domains": domains},
+    )
+    return ApproveJoinResponse(request=JoinRequestOut(**approved), token=token, label=label)
+
+
+@app.post(
+    "/advanced/join-requests/{request_id}/decline",
+    response_model=JoinRequestOut,
+    dependencies=[Depends(require_capability(CAP_REQUESTS_DECIDE))],
+)
+def admin_decline_join_request(request_id: str) -> JoinRequestOut:
+    """Decline: the record is kept (audit) until a purge removes it."""
+    store = _join_store()
+    guest = get_current_guest()
+    try:
+        record, version = jr.claim_pending(store, request_id)
+        declined, _ = jr.decide(
+            store, record, version,
+            status=jr.STATUS_DECLINED,
+            decided_by=(guest.recipient if guest else None),
+        )
+    except jr.NotFound:
+        raise HTTPException(status_code=404, detail="join request not found.") from None
+    except jr.NotPending as exc:
+        raise HTTPException(status_code=409, detail=f"join request already {exc}.") from None
+    except jr.Conflict:
+        raise HTTPException(status_code=409, detail="join request changed; reload and try again.") from None
+    _audit(CAP_REQUESTS_DECIDE, target=request_id, detail={"decision": "declined"})
+    return JoinRequestOut(**declined)
+
+
+@app.get(
+    "/advanced/join-settings",
+    response_model=JoinSettingsOut,
+    dependencies=[Depends(require_capability(CAP_REQUESTS_VIEW))],
+)
+def admin_get_join_settings() -> JoinSettingsOut:
+    store = _join_store()
+    return _join_settings_out(jr.JoinSettings.from_raw(store.read_settings()), jr.count_pending(store))
+
+
+@app.put(
+    "/advanced/join-settings",
+    response_model=JoinSettingsOut,
+    dependencies=[Depends(require_capability(CAP_REQUESTS_CONFIGURE))],
+)
+def admin_set_join_settings(req: JoinSettingsUpdate) -> JoinSettingsOut:
+    """Replace the live join settings. Reaches every instance on its next read."""
+    try:
+        jr.validate_settings(req.mode, req.pending_cap)
+    except jr.JoinRequestError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    _check_approval_role(req.default_role)
+    _check_grantable(req.default_domains)
+    store = _join_store()
+    guest = get_current_guest()
+    js = jr.JoinSettings(
+        mode=req.mode,
+        pending_cap=req.pending_cap,
+        default_role=req.default_role,
+        default_domains=list(req.default_domains),
+        updated_at=utc_now_iso(),
+        updated_by=(guest.recipient if guest else None),
+    )
+    store.write_settings(js.to_raw())
+    _audit(
+        CAP_REQUESTS_CONFIGURE,
+        detail={k: v for k, v in js.to_raw().items() if k not in ("updated_at", "updated_by")},
+    )
+    return _join_settings_out(js, jr.count_pending(store))
+
+
+@app.post(
+    "/advanced/join-settings/test-email",
+    response_model=TestEmailResponse,
+    dependencies=[Depends(require_capability(CAP_REQUESTS_CONFIGURE))],
+)
+def admin_test_email() -> TestEmailResponse:
+    """Send a test message to the new-request recipient, to check the SMTP setup."""
+    to = notify_recipient()
+    if not email_configured() or not to:
+        raise HTTPException(
+            status_code=400,
+            detail="email is not configured (RULEBOOK_SMTP_USER / RULEBOOK_SMTP_PASSWORD).",
+        )
+    try:
+        send_email(
+            to=to,
+            subject="Rulebook test email",
+            body="This is a test from Rulebook's Users tab. New join requests will be emailed here.\n",
+        )
+    except Exception as exc:  # noqa: BLE001 — surface the SMTP error to the operator
+        log.exception("test email failed")
+        raise HTTPException(status_code=502, detail=f"sending failed: {type(exc).__name__}: {exc}") from None
+    return TestEmailResponse(to=to)
 
 
 def _view_scope(view_all_cap: str) -> tuple[bool, str | None]:
