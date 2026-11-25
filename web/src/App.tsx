@@ -8,7 +8,7 @@ import {
 } from '@nobadeer/floating-widgets'
 import { CLIENT_BUILD, CLIENT_BUILD_KNOWN, CLIENT_SHA } from './buildInfo'
 import { WidgetControls } from './WidgetControls'
-import { usePersistentDraft } from './useDraft'
+import { ownedKey, usePersistentDraft } from './useDraft'
 import { useWidgetVisibility } from './widgetVisibility'
 
 import { UsageBody, UsageSummaryLine, type UsageSnapshot } from './widgets/Usage'
@@ -61,6 +61,8 @@ type Rating = 1 | 2 | 3 | 4 | 5
 // in-progress scoring (rating/tags/comment/gold) — persisted to localStorage so
 // a reload (a version update, an accidental refresh, a browser restart) doesn't
 // drop scoring work. The question box is persisted separately (usePersistentDraft).
+// Saved per signed-in user (ownedKey), so on a shared browser one person's
+// answer and unsaved scoring never appear for the next.
 const ASK_SESSION_KEY = 'rulebook.session.ask'
 
 interface AskSession {
@@ -73,9 +75,10 @@ interface AskSession {
   savedGold: string
 }
 
-function loadAskSession(): Partial<AskSession> {
+function loadAskSession(owner: string): Partial<AskSession> {
   try {
-    return JSON.parse(localStorage.getItem(ASK_SESSION_KEY) || '{}')
+    localStorage.removeItem(ASK_SESSION_KEY) // the shared key used before sessions had owners
+    return JSON.parse(localStorage.getItem(ownedKey(ASK_SESSION_KEY, owner)) || '{}')
   } catch {
     return {}
   }
@@ -165,10 +168,13 @@ function formatStartedAt(iso: string): string {
 export default function App() {
   // #176: persist the question box so a reload (a version update, an accidental
   // refresh, a browser restart) doesn't drop what you were typing.
-  const [question, setQuestion] = usePersistentDraft('question')
-  // #176 follow-on: the answer session persisted last time, read once so the
-  // state initializers below can rehydrate the answer + in-progress scoring.
-  const [restoredSession] = useState(loadAskSession)
+  // Current guest's effective role (UI gating) + suspended flag. Its recipient
+  // also owns what this browser saves: nothing is restored until /me says who
+  // is signed in ('' when there are no identities).
+  const [me, setMe] = useState<Me | null>(null)
+  const [meForbidden, setMeForbidden] = useState(false)
+  const owner = me ? (me.recipient ?? '') : undefined
+  const [question, setQuestion] = usePersistentDraft('question', owner)
   // Empty set = "All" (compare across every domain). Any non-empty subset
   // restricts retrieval to exactly those domains.
   const [selectedDomains, setSelectedDomains] = useState<Set<string>>(() => new Set())
@@ -181,33 +187,30 @@ export default function App() {
   // The passage a footnote opened, outlined briefly in the Passages panel.
   const [flashPassage, setFlashPassage] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<AskResponse | null>(restoredSession.result ?? null)
+  const [result, setResult] = useState<AskResponse | null>(null)
   const [meta, setMeta] = useState<Meta | null>(null)
   // Start collapsed — the answer is the headline; passages are opt-in detail.
   const [sourcesOpen, setSourcesOpen] = useState(false)
   // Rating + tags + comment state is scoped to the *current* result — clearing
   // on new submissions so a prior vote never bleeds onto a new answer.
-  const [rating, setRating] = useState<Rating | null>(restoredSession.rating ?? null)
-  const [tags, setTags] = useState<Set<IssueTag>>(() => new Set(restoredSession.tags ?? []))
-  const [comment, setComment] = useState(restoredSession.comment ?? '')
+  const [rating, setRating] = useState<Rating | null>(null)
+  const [tags, setTags] = useState<Set<IssueTag>>(() => new Set())
+  const [comment, setComment] = useState('')
   // The comment "state" we last successfully sent. Used to compute whether
   // there are unsent edits so the Save-note button can hide when there's
   // nothing to save.
-  const [savedComment, setSavedComment] = useState(restoredSession.savedComment ?? '')
+  const [savedComment, setSavedComment] = useState('')
   const [ratingError, setRatingError] = useState<string | null>(null)
   // Gold answer state — pre-populated with the model's original answer, so
   // the user's task is "edit what's wrong" rather than "author from scratch".
-  const [gold, setGold] = useState(restoredSession.gold ?? '')
-  const [savedGold, setSavedGold] = useState(restoredSession.savedGold ?? '')
+  const [gold, setGold] = useState('')
+  const [savedGold, setSavedGold] = useState('')
   const [goldError, setGoldError] = useState<string | null>(null)
   const [goldSaving, setGoldSaving] = useState(false)
   // Widget snapshots. Fetched on mount, refreshed after every /ask so
   // Usage and Diagnostics reflect live state without a page reload.
   const [usage, setUsage] = useState<UsageSnapshot | null>(null)
   const [diag, setDiag] = useState<DiagnosticsSnapshot | null>(null)
-  // Current guest's effective role (UI gating) + suspended flag.
-  const [me, setMe] = useState<Me | null>(null)
-  const [meForbidden, setMeForbidden] = useState(false)
   const [showHowItWorks, setShowHowItWorks] = useState(false)
   const [showVersion, setShowVersion] = useState(false)
   const [showRoles, setShowRoles] = useState(false)
@@ -265,11 +268,32 @@ export default function App() {
     }
   }, [refreshMeta])
 
-  // #176 follow-on: persist the answer session (answer + in-progress scoring) so
-  // a reload doesn't drop it. Written only while there's an answer; cleared
-  // otherwise (a fresh state, or the moment before a new answer arrives). The
-  // server already holds anything submitted; this just keeps the UI in sync.
+  // #176 follow-on: restore the signed-in user's answer session (answer +
+  // in-progress scoring) once /me says who that is. Done during render, like
+  // usePersistentDraft, so the save effect below never runs for an owner whose
+  // session isn't loaded yet. An answer that arrived first is kept.
+  const [sessionOwner, setSessionOwner] = useState<string | undefined>(undefined)
+  if (owner !== undefined && owner !== sessionOwner) {
+    setSessionOwner(owner)
+    const restored = loadAskSession(owner)
+    if (!result && restored.result) {
+      setResult(restored.result)
+      setRating(restored.rating ?? null)
+      setTags(new Set(restored.tags ?? []))
+      setComment(restored.comment ?? '')
+      setSavedComment(restored.savedComment ?? '')
+      setGold(restored.gold ?? '')
+      setSavedGold(restored.savedGold ?? '')
+    }
+  }
+
+  // #176 follow-on: persist the answer session so a reload doesn't drop it.
+  // Written only while there's an answer; cleared otherwise (a fresh state, or
+  // the moment before a new answer arrives). The server already holds anything
+  // submitted; this just keeps the UI in sync.
   useEffect(() => {
+    if (sessionOwner === undefined) return
+    const key = ownedKey(ASK_SESSION_KEY, sessionOwner)
     try {
       if (result) {
         const session: AskSession = {
@@ -281,14 +305,14 @@ export default function App() {
           gold,
           savedGold,
         }
-        localStorage.setItem(ASK_SESSION_KEY, JSON.stringify(session))
+        localStorage.setItem(key, JSON.stringify(session))
       } else {
-        localStorage.removeItem(ASK_SESSION_KEY)
+        localStorage.removeItem(key)
       }
     } catch {
       // best-effort — private mode / quota
     }
-  }, [result, rating, tags, comment, savedComment, gold, savedGold])
+  }, [sessionOwner, result, rating, tags, comment, savedComment, gold, savedGold])
 
   async function refreshMe() {
     // /me is gated at beginner, so a 403 means the guest is suspended — render
