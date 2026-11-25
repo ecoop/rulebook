@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Info } from 'lucide-react'
 import {
   FloatingWidgetStack,
@@ -19,11 +19,11 @@ import {
 } from './widgets/Diagnostics'
 import { HowItWorks } from './HowItWorks'
 
-const AnswerMarkdown = lazy(() => import('./AnswerMarkdown'))
 import { HowRolesWork } from './HowRolesWork'
 import { levelInfo } from './levels'
 import { type IssueTag, TAG_LABELS, TAGS } from './tags'
-import { citedMarkdown, excerpt, footnoteCitations, pagesLabel } from './citations'
+import { footnoteCitations, pagesLabel, passageText } from './citations'
+import { FootnotedAnswer } from './FootnotedAnswer'
 
 // -----------------------------------------------------------------------------
 // Types mirroring the FastAPI response shape. Kept inline (rather than in a
@@ -773,7 +773,12 @@ export default function App() {
                   may be incomplete.
                 </div>
               )}
-              <FootnotedAnswer result={result} onOpenPassage={openPassage} />
+              <FootnotedAnswer
+                answer={result.answer}
+                chunks={result.chunks}
+                unverified={result.unverified_citations}
+                onOpenPassage={openPassage}
+              />
               {result.unverified_citations && result.unverified_citations.length > 0 && (
                 <div
                   className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"
@@ -988,72 +993,6 @@ export default function App() {
   )
 }
 
-// The answer with its [domain rule_id] citations as numbered footnotes, and the
-// cited sources listed once underneath: each with its rule, pages and the
-// passage's opening words. A source opens its passage in the Passages panel.
-function FootnotedAnswer({
-  result,
-  onOpenPassage,
-}: {
-  result: AskResponse
-  onOpenPassage: (i: number) => void
-}) {
-  const { segments, sources } = useMemo(
-    () => footnoteCitations(result.answer, result.chunks, result.unverified_citations),
-    [result],
-  )
-  const [hovered, setHovered] = useState<number | null>(null)
-  const markdown = useMemo(() => citedMarkdown(segments), [segments])
-  return (
-    <>
-      <div className="text-sm leading-relaxed text-foreground">
-        <Suspense fallback={<div className="whitespace-pre-wrap">{result.answer}</div>}>
-          <AnswerMarkdown markdown={markdown} onHover={setHovered} />
-        </Suspense>
-      </div>
-      {sources.length > 0 && (
-        <ol className="mt-3 space-y-0.5 border-t border-border pt-2 text-xs text-muted-foreground">
-          {sources.map((src) => {
-            const chunk = src.chunkIndex == null ? null : result.chunks[src.chunkIndex]
-            return (
-              <li
-                key={src.n}
-                id={`source-${src.n}`}
-                className={
-                  'flex min-w-0 items-baseline gap-2 rounded px-1 py-0.5 ' +
-                  (hovered === src.n ? 'bg-accent' : '')
-                }
-              >
-                <span className="w-4 shrink-0 text-right">{src.n}</span>
-                <span className="shrink-0 rounded bg-secondary px-1.5 font-mono text-secondary-foreground">
-                  {src.domain}
-                </span>
-                {chunk ? (
-                  <button
-                    type="button"
-                    onClick={() => onOpenPassage(src.chunkIndex!)}
-                    title="Show this passage"
-                    className="flex min-w-0 items-baseline gap-2 text-left hover:text-foreground"
-                  >
-                    <span className="shrink-0 font-mono text-foreground">{src.ruleId}</span>
-                    <span className="shrink-0">{pagesLabel(chunk)}</span>
-                    <span className="truncate">· {excerpt(chunk)}</span>
-                  </button>
-                ) : (
-                  <>
-                    <span className="shrink-0 font-mono text-foreground">{src.ruleId}</span>
-                    <span className="text-amber-700">not in the retrieved passages</span>
-                  </>
-                )}
-              </li>
-            )
-          })}
-        </ol>
-      )}
-    </>
-  )
-}
-
 function ChunkRow({ chunk, id, flash }: { chunk: Chunk; id?: string; flash?: boolean }) {
   // Gold chunks have no meaningful page (both 0); pagesLabel hides it rather
   // than showing "p.0", matching the backend citation formatter.
@@ -1083,7 +1022,7 @@ function ChunkRow({ chunk, id, flash }: { chunk: Chunk; id?: string; flash?: boo
         )}
       </div>
       <div className="whitespace-pre-wrap text-xs leading-relaxed text-foreground">
-        {chunk.text}
+        {passageText(chunk.text)}
       </div>
     </div>
   )

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
+import { FootnotedAnswer } from './FootnotedAnswer'
 import { LevelBadge, levelInfo } from './levels'
 import { type IssueTag, TAG_LABELS, TAGS } from './tags'
 import { WidgetControls } from './WidgetControls'
@@ -1597,11 +1598,15 @@ export default function ActivityApp() {
                       {open && (
                         <tr className="bg-muted/30">
                           <td colSpan={can('questions.view.all') ? 6 : 5} className="px-3 py-3">
-                            <div className="whitespace-pre-wrap text-sm text-foreground">
-                              {q.answer || (
-                                <span className="italic text-muted-foreground">(no stored answer)</span>
-                              )}
-                            </div>
+                            {q.answer ? (
+                              <FootnotedAnswer
+                                answer={q.answer}
+                                domains={q.domains.length ? q.domains : q.domain ? [q.domain] : []}
+                                idPrefix={`${q.qa_id}-`}
+                              />
+                            ) : (
+                              <div className="text-sm italic text-muted-foreground">(no stored answer)</div>
+                            )}
                             {q.is_own && can('rate') && q.rating == null && rateQa !== q.qa_id && (
                               <button
                                 type="button"

@@ -76,12 +76,15 @@ export function matchChunk(domain: string, ruleId: string, chunks: CitableChunk[
   return best
 }
 
+// `domains`: rule sets that count as in play besides those of `chunks`, for an
+// answer shown without its passages (Your activity).
 export function footnoteCitations(
   answer: string,
   chunks: CitableChunk[],
   unverified: string[] = [],
+  domains: string[] = [],
 ): FootnotedAnswer {
-  const domains = new Set(chunks.map((c) => c.domain))
+  const inPlay = new Set([...chunks.map((c) => c.domain), ...domains])
   const flagged = new Set(unverified)
   const sources: Source[] = []
   const byLabel = new Map<string, number>()
@@ -107,7 +110,7 @@ export function footnoteCitations(
     // Only brackets that name a domain in play, or that the backend flagged,
     // are citations; anything else ("[sic]") stays as written.
     const isCitation = pairs.some(
-      ([d, r]) => domains.has(d) || flagged.has(`${d} ${r}`),
+      ([d, r]) => inPlay.has(d) || flagged.has(`${d} ${r}`),
     )
     if (!isCitation) continue
     const ns = pairs.map(([d, r]) => number(d, r))
@@ -155,11 +158,17 @@ export function citeNumbers(href: string | undefined): number[] | null {
   return ns.length > 0 && ns.every((n) => Number.isInteger(n) && n > 0) ? ns : null
 }
 
-// A passage's opening words, about one line: a Markdown heading mark and the
-// rule id it starts with are dropped (the row already shows the id) and the cut
-// falls at a word boundary.
+// A passage's text for display: whitespace collapsed and without the Markdown
+// heading mark ("## ") that a section-headed passage starts with.
+export function passageText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().replace(/^#{1,6}\s+/, '')
+}
+
+// A passage's opening words, about one line: the heading mark and the rule id it
+// starts with are dropped (the row already shows the id) and the cut falls at a
+// word boundary.
 export function excerpt(chunk: CitableChunk, max = 70): string {
-  let text = chunk.text.replace(/\s+/g, ' ').trim().replace(/^#{1,6}\s+/, '')
+  let text = passageText(chunk.text)
   const id = chunk.rule_id.trim()
   if (text.startsWith(id)) text = text.slice(id.length).replace(/^[.:\s]+/, '')
   if (text.length <= max) return text
