@@ -5,27 +5,59 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Content license](https://img.shields.io/badge/content-CC%20BY%204.0-lightgrey)
 
-_Last updated: 2026-11-23_
+_Last updated: 2026-11-24_
 
-**Rulebook** is a RAG (retrieval-augmented generation) app that answers questions about a set of rules. Give it a rulebook (PDF, Markdown or plain text) and it starts answering questions about it: each claim cites the rule it comes from, and you see the passages it drew on. Adding a rule set is one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)); nothing in the pipeline is specific to a game or sport.
+**Rulebook** answers questions about rulebooks. Ask it something, and it answers from the rules themselves: every claim carries a footnote to the rule it comes from, and the passages it read are one click away. It runs at [rulebook.cooper.nu](https://rulebook.cooper.nu) for a weekly goaltimate pickup group, with ultimate, goaltimate, badminton, curling, hearts and backgammon loaded. Access is by invitation.
 
-This repo comes with three sample rule sets, ready as soon as you clone, with nothing to download: **checkers**, **tennis** and **poker**. The notebooks use all three; poker's five variants use nearly the same wording, which makes it a harder test for retrieval. From there, add the rulebooks you want to ask about. (The invite-only hosted demo carries ultimate, goaltimate, badminton, curling, hearts and backgammon.)
+![An answer to "how does passing work?" in hearts: a bulleted answer with footnote markers, and the cited rule listed under it](docs/img/answer.png)
 
-It started as a hands-on way to **learn RAG** and has grown into a small gated product: per-user invite auth, capability-based roles (RBAC), a human-in-the-loop review loop (rate answers, author "gold" answers, curate sources, rebuild the index), and cost governance. Each pipeline stage still lives in its own small, commented module.
+<sub>An answer about hearts with its footnote. Hearts rules: [Wikibooks](https://en.wikibooks.org/wiki/Card_Games/Hearts/Rules), CC BY-SA 4.0.</sub>
+
+## What it does
+
+- **Cited answers.** Each claim is footnoted to its rule; each footnote shows the rule, its pages and the passage's opening words, and opens that passage. A citation that matches nothing the model was given is flagged.
+- **Any rulebook.** Give it a PDF, Markdown or plain text and it answers questions about it: one command (`python -m rulebook.add <name> <file>`, see [Adding a domain](#adding-a-domain)). Nothing in the pipeline is specific to a game or sport.
+- **Several rule sets at once.** Ask about one rule set, or compare two or more in the same question.
+- **Defined terms.** When a rule is written in its rulebook's defined terms ("the playing end"), the glossary's definitions are fetched with it, so the answer can say what the term means ([Linked definitions](#linked-definitions)).
+- **People improve the answers.** Signed-in users rate answers, tag problems, comment and suggest "gold" answers; curators choose which golds count, include or exclude sources and rebuild the index, all from the app ([Human-in-the-loop](#human-in-the-loop)).
+- **Invite-only, with roles.** Invitations, roles and each person's rule sets are managed live from the app's Users tab, with no redeploy. Roles are sets of capabilities, not hard-coded checks ([`docs/roles.md`](docs/roles.md)).
+- **Cost limits.** Every model call is priced and counted against hourly and daily caps, and the app refuses to start on a model it can't price ([`docs/defensive-by-design.md`](docs/defensive-by-design.md)).
+
+<details>
+<summary>More screenshots: rating and gold answers, your activity, retrieved passages</summary>
+
+![The 1–5 rating buttons and the gold-answer editor, seeded with the model's answer](docs/img/review.png)
+
+<sub>Rating the answer and editing it into a gold answer.</sub>
+
+![Your activity: the question, its rule set, rating and gold columns, and the answer expanded](docs/img/activity.png)
+
+<sub>Your activity: each question you asked, with its answer, rating and gold.</sub>
+
+![Retrieved passages: five hearts passages, each with its rule, page and distance from the question](docs/img/passages.png)
+
+<sub>The passages the answer drew on, closest first.</sub>
+
+</details>
+
+## Try it
+
+The hosted app is invite-only. To run your own, clone the repo: it comes with three sample rule sets, **checkers**, **tennis** and **poker**, ready with nothing to download, and with no key at all you can build the index and see what retrieval finds. An Anthropic key adds the answers. See [Setup (local)](#setup-local).
+
+## How it works, briefly
+
+1. **Ingest** — pull text from each rule doc, keeping page numbers; image-only pages are transcribed by Claude vision.
+2. **Chunk** — split on rule numbering / headings so citations map to real rules, not mid-clause fragments.
+3. **Embed** — each chunk → a vector. The default is a small local model (no key needed); Voyage AI and OpenAI are options.
+4. **Store** — vectors + metadata in `data/index/<domain>/` (a `.npy` matrix + a `.jsonl` of chunk records). At query time it all loads into memory; the corpus is small enough that a brute-force numpy dot product handles retrieval without a dedicated vector database.
+5. **Retrieve** — embed the question, pull top-_k_ nearest chunks; for cross-domain questions, top-_k_ per domain.
+6. **Generate** — Claude answers using only the retrieved chunks, forced to cite each claim as `[domain rule_id]` and to refuse rules not in context.
+
+The `/ask` response returns the retrieved passages alongside the answer, so the UI shows exactly what the model was given. In the app, the **How it works** button opens a plain-language version of these steps.
 
 ## Learn RAG with the notebooks
 
-The notebooks run real questions through Rulebook's own pipeline, one stage at a time. Start at the [notebooks page](https://ecoop.github.io/rulebook/), which lists them in reading order. You can read each one with every result filled in, no install needed, or run it yourself in Colab:
-
-- [**RAG at a glance**](https://ecoop.github.io/rulebook/rag_at_a_glance.html): start here. A quick tour of the whole pipeline, from chunking to Claude's cited answer. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/rag_at_a_glance.ipynb).
-- **Go further:** [**A closer look at Embeddings and Retrieval**](https://ecoop.github.io/rulebook/embeddings_retrieval.html): what an embedding is, how retrieval uses it, and what changes when you swap the model. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/embeddings_retrieval.ipynb).
-- **Go further:** [**A closer look at Evaluation**](https://ecoop.github.io/rulebook/evaluation.html): how to measure retrieval. Write the right answers down once, then score any setup against them, on checkers and then on poker. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/evaluation.ipynb).
-- **Go further:** [**A closer look at Reranking**](https://ecoop.github.io/rulebook/reranking.html): why retrieval finds passages *about* the question rather than ones that *answer* it, and a second stage that fixes the order: BM25, hybrid, and a cross-encoder, scored on poker and checkers. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/reranking.ipynb).
-- **Go further:** [**A closer look at Chunking**](https://ecoop.github.io/rulebook/chunking.html): how a rulebook is cut into chunks, how to compare ways of cutting fairly (the same reading budget for each), a chunking bug the gold set found, and section headers, a one-line fix for poker's wrong-variant misses. No key needed; [run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/chunking.ipynb).
-
-- **Go further:** [**A closer look at Generation**](https://ecoop.github.io/rulebook/generation.html): what Claude is sent with each question, why the system prompt says what it does (each rule and the failure that added it), and what the citation check catches and misses. No key needed to read it or run most of it; the last section asks Claude live with your own key. [Run it in Colab](https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/generation.ipynb).
-
-To run them on your own machine, and for what to read after them, see [Learning RAG](#learning-rag).
+Rulebook started as a way to learn RAG, and each pipeline stage still lives in its own small, commented module. Six notebooks run real questions through that pipeline on the sample rule sets, one stage at a time: [**RAG at a glance**](https://ecoop.github.io/rulebook/rag_at_a_glance.html), a short tour of the whole thing, then closer looks at [embeddings and retrieval](https://ecoop.github.io/rulebook/embeddings_retrieval.html), [evaluation](https://ecoop.github.io/rulebook/evaluation.html), [reranking](https://ecoop.github.io/rulebook/reranking.html), [chunking](https://ecoop.github.io/rulebook/chunking.html) and [generation](https://ecoop.github.io/rulebook/generation.html). Each can be read with its results filled in, with no install, or run in Colab; the [notebooks page](https://ecoop.github.io/rulebook/) lists them in order. Poker's five variants use nearly the same wording, which makes it the hard test for retrieval. For running them locally and what to read after, see [Learning RAG](#learning-rag).
 
 ## What's in here
 
@@ -71,17 +103,6 @@ rulebook/
 ├── web/                       # React 19 + TypeScript + Tailwind v4 (Vite) — Ask + "Your activity"
 └── docs/                      # deploy, RBAC, roles, sources… (see Documentation)
 ```
-
-## How it works, briefly
-
-1. **Ingest** — pull text from each rule doc, keeping page numbers; image-only pages are transcribed by Claude vision.
-2. **Chunk** — split on rule numbering / headings so citations map to real rules, not mid-clause fragments.
-3. **Embed** — each chunk → a vector. The default is a small local model (no key needed); Voyage AI and OpenAI are options.
-4. **Store** — vectors + metadata in `data/index/<domain>/` (a `.npy` matrix + a `.jsonl` of chunk records). At query time it all loads into memory; the corpus is small enough that a brute-force numpy dot product handles retrieval without a dedicated vector database.
-5. **Retrieve** — embed the question, pull top-_k_ nearest chunks; for cross-domain questions, top-_k_ per domain.
-6. **Generate** — Claude answers using only the retrieved chunks, forced to cite each claim as `[domain rule_id]` and to refuse rules not in context.
-
-The `/ask` response returns the retrieved passages alongside the answer, so the UI shows exactly what the model was given. In the app, the **How it works** button opens a plain-language version of these steps.
 
 ## Setup (local)
 
@@ -242,3 +263,7 @@ or not, as long as you credit Eric Cooper and link to this repository.
 The rule documents each domain is built from are third-party works published by their
 governing bodies (see [`rules/SOURCES.md`](rules/SOURCES.md)); they are not included
 in this repository, nor licensed by this project.
+
+The app screenshots in [`docs/img/`](docs/img/) show text from Wikibooks'
+[Hearts rules](https://en.wikibooks.org/wiki/Card_Games/Hearts/Rules) and are shared
+under the same license, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
