@@ -9,9 +9,11 @@ import { citeNumbers } from './citations'
 export default function AnswerMarkdown({
   markdown,
   onHover,
+  idPrefix = '',
 }: {
   markdown: string
   onHover: (n: number | null) => void
+  idPrefix?: string
 }) {
   const components = useMemo<Components>(
     () => ({
@@ -30,7 +32,16 @@ export default function AnswerMarkdown({
               <span key={n}>
                 {j > 0 && ', '}
                 <a
-                  href={`#source-${n}`}
+                  href={`#${idPrefix}source-${n}`}
+                  // Scroll to the source without putting it in the URL: the
+                  // app routes on the hash (#/activity), so changing it would
+                  // leave the page.
+                  onClick={(e) => {
+                    e.preventDefault()
+                    document
+                      .getElementById(`${idPrefix}source-${n}`)
+                      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+                  }}
                   onMouseEnter={() => onHover(n)}
                   onMouseLeave={() => onHover(null)}
                   className="hover:text-foreground"
@@ -55,7 +66,7 @@ export default function AnswerMarkdown({
         <code className="rounded bg-secondary px-1 font-mono text-[0.8rem]">{children}</code>
       ),
     }),
-    [onHover],
+    [onHover, idPrefix],
   )
   return <Markdown components={components}>{markdown}</Markdown>
 }
