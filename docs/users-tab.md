@@ -50,8 +50,9 @@ allowed_domains, demo_mode}`; the UI gates on **capabilities** (e.g.
 
 ## Join requests (#337)
 
-People without an invite ask to join; an admin approves or declines. A request
-is only a record (`join_requests/<id>.json` in the state bucket): no user exists
+People without an invite ask to join; an admin approves or declines them in the
+**Requests** tab, beside Users (`web/src/RequestsTab.tsx`; its label shows the
+waiting count). A request is only a record (`join_requests/<id>.json` in the state bucket): no user exists
 until it's approved.
 
 - **Approve** creates the user through the same path as add-user: a minted
