@@ -36,6 +36,13 @@
   .page-bar a { color: #1976d2; text-decoration: none; }
   .page-bar a:hover { text-decoration: underline; }
   .page-bar .colab { font-weight: 600; }
+  /* Under the bar: the notebooks take apart a working app; point at it. */
+  .app-note {
+    background: #eef3f8; border-radius: 8px; padding: 12px 16px; margin: 0 0 22px;
+    font: 15px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .app-note a { color: #1976d2; text-decoration: none; font-weight: 600; }
+  .app-note a:hover { text-decoration: underline; }
   /* The notebook's vignette (img/, drawn by vignettes.py), beside the title. */
   .vignette { float: right; width: 220px; height: auto; margin: 4px 0 12px 28px; }
   @media (max-width: 560px) {
@@ -55,7 +62,10 @@
 {%- endblock any_cell -%}
 
 {#- The page's own chrome (not in the notebook, so Colab doesn't show it): a bar
-    back to the notebooks page and to this notebook in Colab, then the vignette.
+    back to the notebooks page and to this notebook in Colab, a note pointing at the
+    app the notebooks take apart (the README's top shows it), then the vignette.
+    Each notebook's note says where its stage shows in the app (app_notes, keyed
+    like the vignettes); any other notebook gets the general one.
     Vignette names match VIGNETTES in vignettes.py; a notebook without one gets no image. -#}
 {%- block body_header -%}
 {{ super() }}
@@ -64,6 +74,16 @@
   <a href="./">&larr; Learn RAG with Rulebook: all notebooks</a>
   <a class="colab" href="https://colab.research.google.com/github/ecoop/rulebook/blob/main/notebooks/{{ name }}.ipynb">Run it in Colab</a>
 </nav>
+{%- set app_notes = {
+  'rag_at_a_glance': '<strong>Rulebook</strong> runs this pipeline as a working app, on real rulebooks (ultimate, goaltimate, curling, hearts and more): every claim in an answer is footnoted to its rule, and the people who use it rate and correct the answers.',
+  'embeddings_retrieval': '<strong>Rulebook</strong>, the app this code comes from, shows the passages retrieval found for every answer, each with its distance from the question.',
+  'evaluation': '<strong>Rulebook</strong>, the app this code comes from, also gathers judgments from the people who use it: they rate each answer, tag what went wrong and write corrected answers.',
+  'reranking': '<strong>Rulebook</strong>, the app this code comes from, lists the passages behind every answer, so you can see when retrieval brought back passages about the question rather than ones that answer it.',
+  'chunking': '<strong>Rulebook</strong>, the app this code comes from, footnotes each claim with the rule its passage came from, because each rulebook is cut on its own rule numbers and headings.',
+  'generation': '<strong>Rulebook</strong>, the app this code comes from, sends Claude the prompt built here and runs the same citation check on every answer, flagging any citation that matches none of the passages it was given.',
+} %}
+<div class="app-note">{{ app_notes.get(name, 'These notebooks take apart <strong>Rulebook</strong>, a working app that answers questions about real rulebooks, with every claim cited to its rule.') }}
+  <a href="https://github.com/ecoop/rulebook#readme">See the app &rarr;</a></div>
 {%- if name in ['rag_at_a_glance', 'embeddings_retrieval', 'evaluation', 'reranking', 'chunking'] %}
 <img class="vignette" src="img/{{ name }}.svg" alt="">
 {%- endif %}
