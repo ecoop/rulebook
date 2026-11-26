@@ -37,6 +37,9 @@
   p { margin: 0 0 0.8em; }
   .lead { font-size: 17px; color: var(--text); max-width: 720px; }
   .section-note { color: var(--muted); margin-bottom: 16px; }
+  /* The app the notebooks take apart, and a way to it (the README's top shows it). */
+  .app-note { background: var(--tag); border-radius: 8px; padding: 12px 16px; margin: 0 0 22px; }
+  .app-note a { font-weight: 600; }
 
   .cards { display: grid; gap: 16px; }
   .card {
@@ -82,10 +85,12 @@
 
 <h1>Learn RAG with Rulebook</h1>
 <p class="lead">
-  <a href="https://github.com/ecoop/rulebook">Rulebook</a> answers questions about a rulebook, citing
-  the rule behind every claim. These notebooks run real questions through its own pipeline, one stage
-  at a time, on three small sample rule sets: checkers, tennis and poker.
+  These notebooks run real questions through Rulebook's own pipeline, one stage at a time, on three
+  small sample rule sets: checkers, tennis and poker.
 </p>
+<div class="app-note"><strong>Rulebook</strong> is a working app that answers questions about real
+  rulebooks (ultimate, goaltimate, curling, hearts and more), with every claim cited to its rule.
+  People who use it rate and correct its answers. <a href="https://github.com/ecoop/rulebook#readme">See the app &rarr;</a></div>
 <p class="section-note">
   Each page below shows a fresh run with every result filled in, so you can read it without installing
   anything. Every notebook also runs in Colab, free with a Google account.
