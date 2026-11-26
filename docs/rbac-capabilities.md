@@ -1,6 +1,6 @@
 # RBAC — capabilities and the eight rungs
 
-_Last updated: 2026-09-06_
+_Last updated: 2026-11-23_
 
 Authorization is **capability-based**: every endpoint gates on a named capability
 (`require_capability(cap)`), and a role is a bundle of capabilities. `/me` returns
@@ -81,6 +81,10 @@ the operator extras layered on top.
 | `users.remove` | hard-delete an invite |
 | `users.rename` | rename a user's label |
 | `roles.manage` | edit the RBAC config itself (future — see the permission-model roadmap) |
+| `requests.view` | Users tab → Requests: see join requests and the join settings (#337) |
+| `requests.decide` | approve a join request (creates the user) or decline it |
+| `requests.configure` | the join settings: the switch, the cap on waiting requests, the approval defaults |
+| `requests.purge` | permanently delete declined join requests |
 
 Note there is no `golds.edit.any`: nobody edits another person's gold **in place** —
 you **clone** it (§4). You **may** edit **your own** feedback (re-rate, edit the comment)
@@ -105,8 +109,8 @@ table lists only **what each level adds**.
 | **4** | + the retrieval machinery — self, read-mostly | `advanced.view`, `passages.view`, `sources.view` |
 | **5** | read all (with authors), write own | `feedback.view.all`, `golds.view.all`, `questions.view.all` |
 | **6** | operator | `golds.curate`, `golds.clone`, `sources.curate`, `index.rebuild`, `attribution.view` |
-| **7** | admin | `users.view`, `users.change_role`, `users.add` |
-| **8** | superuser | `users.remove`, `users.rename`, `roles.manage` |
+| **7** | admin | `users.view`, `users.change_role`, `users.add`, `requests.view`, `requests.decide`, `requests.configure` |
+| **8** | superuser | `users.remove`, `users.rename`, `roles.manage`, `requests.purge` |
 
 Role ids are descriptive (`suspended` … `superuser`). The legacy `level0`…`level8` (and `novice` / `evaluator`) ids were migrated out of the seed and overrides and are no longer accepted — an old id now resolves to no capabilities (fail-closed), same as any unknown role (#199).
 
@@ -124,7 +128,9 @@ Reference matrix (✓ = has it; columns are cumulative left→right, by level):
 | `sources.curate` · `index.rebuild` | | | | | | ✓ | ✓ | ✓ |
 | `attribution.view` | | | | | | ✓ | ✓ | ✓ |
 | `users.view` · `users.change_role` · `users.add` | | | | | | | ✓ | ✓ |
+| `requests.view` · `requests.decide` · `requests.configure` | | | | | | | ✓ | ✓ |
 | `users.remove` · `users.rename` · `roles.manage` | | | | | | | | ✓ |
+| `requests.purge` | | | | | | | | ✓ |
 
 What each boundary means, in one line:
 - **1–3** is *your own work*: everyone gets the **Your activity** page (`activity.view`)

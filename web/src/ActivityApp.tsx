@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useState } from 'react'
 import { FootnotedAnswer } from './FootnotedAnswer'
 import { LevelBadge, levelInfo } from './levels'
+import { RequestsTab, type JoinRequestsResponse } from './RequestsTab'
 import { type IssueTag, TAG_LABELS, TAGS } from './tags'
+import { fmtRelative, inviteLinkFor } from './userFormat'
 import { WidgetControls } from './WidgetControls'
 
 // Multi-select issue-tag chips, shared by the rate and feedback-edit editors.
@@ -214,7 +216,7 @@ interface UserRow {
   golds: number
 }
 
-type AdminTab = 'questions' | 'feedback' | 'golds' | 'sources' | 'indices' | 'users' | 'audit'
+type AdminTab = 'questions' | 'feedback' | 'golds' | 'sources' | 'indices' | 'users' | 'requests' | 'audit'
 
 type SortDir = 'asc' | 'desc'
 type QuestionSortCol = 'rating' | 'has_gold' | 'author' | 'timestamp'
@@ -244,7 +246,7 @@ function loadUserSort(): { col: UserSortCol; dir: SortDir } {
 
 const ACTIVITY_TAB_KEY = 'rulebook.activityTab'
 const ACTIVITY_TABS: readonly AdminTab[] = [
-  'questions', 'feedback', 'golds', 'sources', 'indices', 'users', 'audit',
+  'questions', 'feedback', 'golds', 'sources', 'indices', 'users', 'requests', 'audit',
 ]
 
 // Restore the last-viewed Activity tab so a reload lands you back where you
@@ -258,22 +260,6 @@ function loadActivityTab(): AdminTab {
     /* no/invalid stored value — use the default */
   }
   return 'questions'
-}
-
-// Compact "3d ago" style for the Users tab's last-seen column.
-function fmtRelative(iso: string | null): string {
-  if (!iso) return '—'
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return '—'
-  const secs = Math.max(0, (Date.now() - then) / 1000)
-  if (secs < 60) return 'now'
-  const mins = secs / 60
-  if (mins < 60) return `${Math.floor(mins)}m`
-  const hrs = mins / 60
-  if (hrs < 24) return `${Math.floor(hrs)}h`
-  const days = hrs / 24
-  if (days < 30) return `${Math.floor(days)}d`
-  return `${Math.floor(days / 30)}mo`
 }
 
 function fmtMoney(n: number): string {
@@ -294,12 +280,6 @@ function fmtEngagement(usd: number, tokens: number): string {
   return `${fmtMoney(usd)} · ${fmtTokens(tokens)} tok`
 }
 
-// The shareable invite URL for a token — what an admin actually wants to copy.
-// The `name` param is ignored by the server (only `token` is read); it's a
-// sanity check so the sender can eyeball whose link they're about to send.
-function inviteLinkFor(token: string, label: string): string {
-  return `${window.location.origin}/?token=${token}&name=${encodeURIComponent(label)}`
-}
 
 // Logical role ordering (low→high) — descriptive ids (docs/rbac-capabilities.md
 // §4), a fallback when the backend ladder from GET /advanced/roles hasn't loaded.
@@ -530,6 +510,9 @@ export default function ActivityApp() {
   // being renamed; `editName` is the working buffer.
   const [editingToken, setEditingToken] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  // Requests tab (#337). Fetched here, not in the tab, so the tab label can
+  // show the waiting count before the tab is opened.
+  const [joinData, setJoinData] = useState<JoinRequestsResponse | null>(null)
 
   // Everything is gated by CAPABILITY, not rank (docs/rbac-capabilities.md §6):
   // the UI renders a control iff /me's capability bundle grants it, and the
@@ -564,6 +547,7 @@ export default function ActivityApp() {
       ...(has('golds.view') ? (['golds'] as AdminTab[]) : []),
       ...(has('sources.view') ? (['sources'] as AdminTab[]) : []),
       ...(has('users.view') ? (['users'] as AdminTab[]) : []),
+      ...(has('requests.view') ? (['requests'] as AdminTab[]) : []),
       ...(has('index.rebuild') ? (['indices'] as AdminTab[]) : []),
       ...(has('attribution.view') ? (['audit'] as AdminTab[]) : []),
     ]
@@ -585,6 +569,7 @@ export default function ActivityApp() {
     if (can('sources.view')) void refreshSources()
     if (can('feedback.view')) void refreshFeedback()
     if (can('users.view')) void refreshUsers()
+    if (can('requests.view')) void refreshJoin()
     if (can('attribution.view')) void refreshAudit()
     if (can('index.rebuild')) {
       void refreshIndexBuilds()
@@ -737,6 +722,16 @@ export default function ActivityApp() {
       setAllDomains(a.all_domains)
       setBuiltDomains(a.built_domains)
       setDefaultDomains(a.default_domains)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function refreshJoin() {
+    try {
+      const resp = await fetch('/advanced/join-requests')
+      if (!resp.ok) throw new Error(`join-requests ${resp.status}: ${await resp.text()}`)
+      setJoinData(await resp.json())
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -1419,6 +1414,7 @@ export default function ActivityApp() {
             ...(can('golds.view') ? (['golds'] as AdminTab[]) : []),
             ...(can('sources.view') ? (['sources'] as AdminTab[]) : []),
             ...(showUsersTab ? (['users'] as AdminTab[]) : []),
+            ...(can('requests.view') ? (['requests'] as AdminTab[]) : []),
             ...(can('index.rebuild') ? (['indices'] as AdminTab[]) : []),
             ...(can('attribution.view') ? (['audit'] as AdminTab[]) : []),
           ] as AdminTab[]).map((t) => {
@@ -1436,6 +1432,8 @@ export default function ActivityApp() {
                       ? `Audit${audit ? ` (${audit.length})` : ''}`
                       : t === 'indices'
                         ? 'Indices'
+                        : t === 'requests'
+                          ? `Requests${joinData ? ` (${joinData.pending})` : ''}`
                         : canManageUsers
                           ? `Users (${userRows.length})`
                           : 'Users'
@@ -2248,6 +2246,18 @@ export default function ActivityApp() {
               </tbody>
             </table>
           </section>
+        )}
+
+        {activeTab === 'requests' && can('requests.view') && (
+          <RequestsTab
+            data={joinData}
+            can={can}
+            ladder={roleOrder}
+            allDomains={allDomains}
+            builtDomains={builtDomains}
+            refresh={refreshJoin}
+            onUsersChanged={() => void refreshUsers()}
+          />
         )}
 
         {activeTab === 'users' && !canManageUsers && (
