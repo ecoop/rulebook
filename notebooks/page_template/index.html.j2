@@ -76,11 +76,11 @@
 </nav>
 {%- set app_notes = {
   'rag_at_a_glance': '<strong>Rulebook</strong> runs this pipeline as a working app, on real rulebooks (ultimate, goaltimate, curling, hearts and more): every claim in an answer is footnoted to its rule, and the people who use it rate and correct the answers.',
-  'embeddings_retrieval': '<strong>Rulebook</strong>, the app this code comes from, shows the passages retrieval found for every answer, each with its distance from the question.',
-  'evaluation': '<strong>Rulebook</strong>, the app this code comes from, also gathers judgments from the people who use it: they rate each answer, tag what went wrong and write corrected answers.',
-  'reranking': '<strong>Rulebook</strong>, the app this code comes from, lists the passages behind every answer, so you can see when retrieval brought back passages about the question rather than ones that answer it.',
-  'chunking': '<strong>Rulebook</strong>, the app this code comes from, footnotes each claim with the rule its passage came from, because each rulebook is cut on its own rule numbers and headings.',
-  'generation': '<strong>Rulebook</strong>, the app this code comes from, sends Claude the prompt built here and runs the same citation check on every answer, flagging any citation that matches none of the passages it was given.',
+  'embeddings_retrieval': 'Ask <strong>Rulebook</strong> a question and you can open the passages <strong>retrieval</strong> found, each with its distance from the question.',
+  'evaluation': 'People who use <strong>Rulebook</strong> judge its answers too: they rate each one, tag what went wrong and write corrected answers.',
+  'reranking': '<strong>Rulebook</strong> lists the passages behind every answer, so you can spot the misses reranking is for: passages about the question rather than ones that answer it.',
+  'chunking': '<strong>Rulebook</strong> cuts each rulebook on its own rule numbers and headings, so every claim in an answer is footnoted to its rule.',
+  'generation': 'The prompt built here is the one <strong>Rulebook</strong> sends Claude, and the app runs the same citation check on every answer, flagging any citation that matches none of the passages it was given.',
 } %}
 <div class="app-note">{{ app_notes.get(name, 'These notebooks take apart <strong>Rulebook</strong>, a working app that answers questions about real rulebooks, with every claim cited to its rule.') }}
   <a href="https://github.com/ecoop/rulebook#readme">See the app &rarr;</a></div>
